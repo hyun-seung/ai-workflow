@@ -1,0 +1,11 @@
+# Optional local-only files; prefer a directory outside this repository
+/local/
+/private/
+*.local.md
+
+# Environment files can contain secrets
+.env
+.env.*
+!.env.example
+
+.DS_Store
