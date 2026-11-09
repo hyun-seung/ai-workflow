@@ -8,16 +8,16 @@
 
 | 역할 | 기본 모델 | 기본 effort | 조정 조건 |
 | --- | --- | --- | --- |
-| 조율자 | GPT-6.1 Terra | Low | 작업 분리·예산 재계획·최종 통합 판단은 Medium, 복잡한 충돌은 High |
+| 조율자 | GPT-6.1 Sol | Low~Medium | 상태 취합·전달은 Low, 작업 분리·예산 재계획·최종 통합 판단은 Medium. 복잡한 충돌은 High 검토 |
 | 설계자 | GPT-6 Astra | High | 작은 변경은 Medium, 중요한 신규 설계·복잡한 대안 비교는 Extra High |
-| 디자이너 | GPT-6.1 Terra | High | 기존 규칙을 적용하는 단순 수정은 Medium |
-| 백엔드 개발자 | GPT-6.1 Terra | High | 명확한 소규모 수정은 Medium, 어려운 문제는 상위 모델과 비교 |
-| 프론트엔드 개발자 | GPT-6.1 Terra | High | 단순 문구·스타일 수정은 Medium |
-| 검증자 | GPT-6.1 Terra | High | 영향이 큰 설계·보안·동시성 검토에는 Astra를 선택적으로 사용 |
+| 디자이너 | GPT-6.1 Terra | Medium~High | 시안·화면 검토를 중심으로 사용하고, 복잡한 흐름·대안 비교는 High |
+| 백엔드 개발자 | GPT-6.1 Sol | Medium | 복잡한 동시성·트랜잭션·장애 분석은 High. 범위가 명확한 작은 수정은 Terra와 비교 |
+| 프론트엔드 개발자 | GPT-6.1 Sol | Medium | 기능·상태·API 연동을 중심으로 사용하고, 단순 화면 수정은 Terra와 비교 |
+| 검증자 | GPT-6.1 Sol | Medium~High | 코드·요구사항·연동 검토에 사용. 화면 중심 확인은 Terra, 중요한 설계·보안·동시성 검토는 Astra를 선택적으로 사용 |
 
-모델 식별자는 Terra가 `gpt-6.1-terra`, Astra가 `gpt-6-astra`다. API·CLI에서 지원하는 경우 Low/Medium/High/Extra High를 각각 `low`/`medium`/`high`/`xhigh`로 지정한다. 도구별 지원 범위와 실제 적용값을 확인한다.
+모델 식별자는 Sol이 `gpt-6.1-sol`, Terra가 `gpt-6.1-terra`, Astra가 `gpt-6-astra`다. API·CLI에서 지원하는 경우 Low/Medium/High/Extra High를 각각 `low`/`medium`/`high`/`xhigh`로 지정한다. 범위로 표시한 항목은 작업에 맞는 단일 값을 선택한다. 도구별 지원 범위와 실제 적용값을 확인한다.
 
-이 표는 공급자의 역할별 성능 보장이나 검증된 최적 설정이 아니다. 개발은 대표 작업에서 Terra와 필요시 Sol·Astra를 비교한다. 디자이너에는 참고 화면·디자인 규칙·실제 구현 화면을 제공하며, 높은 effort만으로 시각 검토를 대신하지 않는다.
+이 표는 공급자의 역할별 성능 보장이나 검증된 최적 설정이 아니다. 개발은 Sol을 시작점으로 사용하고 대표 작업에서 Terra와 필요시 Astra를 비교한다. 디자이너에는 참고 화면·디자인 규칙·실제 구현 화면을 제공하며, 높은 effort만으로 시각 검토를 대신하지 않는다.
 
 ## 상향과 하향
 
