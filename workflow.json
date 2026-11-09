@@ -1,0 +1,44 @@
+{
+  "$schema": "schema/workflow.schema.json",
+  "version": 1,
+  "adapter": "codex",
+  "instructions": ["AGENTS.md", "principles/privacy.md"],
+  "roles": {
+    "coordinator": {
+      "model": "gpt-6.1-sol",
+      "effort": "low",
+      "sandbox": "read-only",
+      "instructions": ["roles/coordinator.md"]
+    },
+    "architect": {
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "sandbox": "read-only",
+      "instructions": ["roles/architect.md"]
+    },
+    "designer": {
+      "model": "gpt-6.1-terra",
+      "effort": "medium",
+      "sandbox": "read-only",
+      "instructions": ["roles/designer.md"]
+    },
+    "backend": {
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "sandbox": "workspace-write",
+      "instructions": ["roles/backend-developer.md"]
+    },
+    "frontend": {
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "sandbox": "workspace-write",
+      "instructions": ["roles/frontend-developer.md"]
+    },
+    "verifier": {
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "sandbox": "read-only",
+      "instructions": ["roles/verifier.md"]
+    }
+  }
+}

@@ -9,3 +9,8 @@
 !.env.example
 
 .DS_Store
+
+# Local runtime overrides and Python caches
+/.ai-workflow.local.json
+__pycache__/
+*.py[cod]

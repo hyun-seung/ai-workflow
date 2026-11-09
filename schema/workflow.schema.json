@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Workflow configuration v1",
+  "description": "Template or project/local override. The runner requires complete role settings after merging.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "version": {"const": 1, "type": "integer"},
+    "adapter": {"const": "codex"},
+    "instructions": {"$ref": "#/$defs/instructions"},
+    "roles": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_-]*$"},
+      "additionalProperties": {"$ref": "#/$defs/role"}
+    }
+  },
+  "$defs": {
+    "instructions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Relative Markdown path inside the directory containing this config. Paths escaping that directory, including symlinks, are rejected."
+      }
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "model": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]*$"},
+        "effort": {"enum": ["low", "medium", "high", "xhigh", "max"]},
+        "sandbox": {"enum": ["read-only", "workspace-write"]},
+        "instructions": {"$ref": "#/$defs/instructions"}
+      }
+    }
+  }
+}
