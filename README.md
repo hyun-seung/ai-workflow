@@ -14,7 +14,8 @@
 | [templates/project.workflow.json](templates/project.workflow.json) | 대상 프로젝트의 `.ai-workflow.json`으로 사용할 설정 양식 |
 | [schema/workflow.schema.json](schema/workflow.schema.json) | 설정 파일의 필드·타입·허용값 |
 | [scripts/workflow.py](scripts/workflow.py) | 설정 검증, 적용값 확인, Codex 실행 |
-| [templates/task-report.md](templates/task-report.md) | 결과·의사결정·검증·사용량을 기록할 선택적 양식 |
+| [templates/](templates/README.md) | 작업 입력·담당자 결과·전체 보고의 공통 양식 |
+| [examples/task-contract.md](examples/task-contract.md) | 개발·글쓰기 작업의 가상 입력과 결과 |
 
 ## 사용하기
 
@@ -69,6 +70,7 @@ python3 scripts/workflow.py run --project ../my-project --role backend --task "�
 - 조율자의 자동 업무 분배, 역할 간 인계, 결과 보고서 자동 생성, 토큰 집계·예산 강제는 아직 구현하지 않았습니다. 조율자도 현재는 한 역할의 실행이며, 필요한 다음 작업을 제안합니다.
 - `check`와 `--dry-run`은 설정만 확인합니다. 모델 접근 권한·effort 지원 여부·응답 품질은 실제 실행 시 확인해야 합니다.
 - 기본 read-only 역할에서 파일을 생성하는 테스트나 시안 작업이 필요하면 프로젝트 설정에서 해당 역할의 sandbox를 `workspace-write`로 명시합니다.
+- [작업 입출력 양식](templates/README.md)은 현재 Markdown 기반의 권장 계약입니다. 작업 요청과 함께 전달할 수 있지만, 실행기가 필드·완료 상태·예산을 자동 검증하지는 않습니다.
 
 ## 비공개 정보와 기록
 
