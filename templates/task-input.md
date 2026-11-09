@@ -21,9 +21,14 @@
 
 - parent_task_id: <상위 작업 ID>
 - task_type: <development / research / design-review / writing 등>
-- depends_on: <선행 작업 ID와 인계에 필요한 결과·상태>
-- context: <필요한 파일·문서·결정의 참조와 관련 부분, 필요한 경우 버전>
+- depends_on: <선행 작업 ID, 필요한 결과·계약과 인계 가능 상태>
+- context: <필요한 경우 아래 내용만 간결히 작성>
+  - 먼저 확인할 참조와 이유: <관련 파일·함수·문서 위치, 계약·근거>
+  - 확인 범위와 사실: <앞선 담당자가 실제 확인한 내용과 출처>
+  - 미확인·다음 확인: <추정, 확인하지 않은 범위와 필요한 후속 조사>
+  - 기준 상태: <확인한 버전. Git 작업이면 기준 커밋과 관련 미커밋 변경 여부·범위>
 - constraints: <기술·디자인·호환성·허용 환경 등>
+- escalation: <계약 변경 등 담당 범위를 벗어나는 판단이 필요할 때 전달할 내용과 대상>
 - deliverables: <산출물 형태와 합의된 전달·보관 위치>
 - budget:
   - 예상 범위·단위·근거·불확실성: <정보가 없으면 미정>
@@ -32,4 +37,4 @@
 
 ## 결과 요청
 
-동일한 `task_id`로 `status`, `summary`, `artifacts`, 완료 기준별 `checks`, `remaining`, `usage`를 반환한다. `status`는 `completed / partial / blocked`, `checks`는 `pass / fail / unverified`를 사용한다. 모든 완료 기준이 통과한 경우에만 `completed`로 보고한다. 미측정 사용량은 `unavailable`로 표시한다. 중요한 결정이나 다른 역할의 작업이 필요하면 해당 내용만 추가한다. 함께 전달된 결과 양식이 있으면 그 형식을 따른다.
+동일한 `task_id`로 `status`, `summary`, `artifacts`, 완료 기준별 `checks`, `remaining`, `usage`를 반환한다. `status`는 `completed / partial / blocked`, `checks`는 `pass / fail / unverified`를 사용한다. 모든 완료 기준이 통과한 경우에만 `completed`로 보고한다. `blocked`이면 `blocker`에 원인·시도한 내용·필요한 조치와 담당자를 적는다. 미측정 사용량은 `unavailable`로 표시한다. 중요한 결정이나 다른 역할의 작업이 필요하면 해당 내용만 추가한다. 함께 전달된 결과 양식이 있으면 그 형식을 따른다.
