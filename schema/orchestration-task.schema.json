@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Fixed backend-verifier workflow input v1 (design; runtime not implemented)",
+  "description": "Standalone Codex prototype design only; implementation deferred by runtime/architecture.md. Not a mandatory Orca/Paseo common protocol. Structural contract only. ID uniqueness, path boundaries, capability compatibility and other state-dependent gates require the runtime semantic validator.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "workflow_id",
+    "project",
+    "local_config",
+    "goal",
+    "scope",
+    "acceptance",
+    "stages",
+    "records_dir",
+    "artifacts_dir"
+  ],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer"
+    },
+    "workflow_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1
+    },
+    "local_config": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "write_paths",
+        "required_artifacts"
+      ],
+      "properties": {
+        "write_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "required_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "criteria",
+          "verification"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "criteria": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "verification": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "description",
+              "test_ids",
+              "artifact_paths"
+            ],
+            "properties": {
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "test_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(backend|verifier):[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+                },
+                "uniqueItems": true
+              },
+              "artifact_paths": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              }
+            }
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend",
+        "verifier"
+      ],
+      "properties": {
+        "backend": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "task_id",
+            "timeout_seconds",
+            "capabilities",
+            "tests",
+            "context"
+          ],
+          "properties": {
+            "task_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            "timeout_seconds": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "capabilities": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "needs_temporary_write"
+              ],
+              "properties": {
+                "needs_temporary_write": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "tests": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "argv"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+                  },
+                  "argv": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "minItems": 1
+                  }
+                }
+              },
+              "minItems": 1
+            },
+            "context": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 0,
+              "uniqueItems": true
+            }
+          }
+        },
+        "verifier": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "task_id",
+            "timeout_seconds",
+            "capabilities",
+            "tests",
+            "context"
+          ],
+          "properties": {
+            "task_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            "timeout_seconds": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "capabilities": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "needs_temporary_write"
+              ],
+              "properties": {
+                "needs_temporary_write": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "tests": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "argv"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+                  },
+                  "argv": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "\\S"
+                    },
+                    "minItems": 1
+                  }
+                }
+              },
+              "minItems": 1
+            },
+            "context": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "minItems": 0,
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    },
+    "records_dir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifacts_dir": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

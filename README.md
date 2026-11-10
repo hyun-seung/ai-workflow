@@ -1,25 +1,43 @@
 # ai-workflow
 
-**설정 파일과 역할 문서를 조합해 프로젝트마다 적용하는 AI 작업 템플릿입니다.**
+**공통 작업 규칙·실행 환경 연결·프로젝트 지침을 분리해 재사용하는 AI 작업 체계입니다.**
 
-역할별 모델·effort·권한·지침 파일을 `workflow.json`에서 정하고, 프로젝트에서는 필요한 값만 덮어씁니다. 실행기는 이 설정과 역할 문서를 읽어 선택한 역할을 Codex CLI로 실행합니다. 현재 버전은 한 번에 한 역할을 실행하며, 전체 업무의 자동 분배는 후속 범위입니다.
+작업 분리·역할·완료 기준·검증·결과 보고는 공통 규칙으로 유지합니다. 에이전트 생성·전달·상태·결과 수신은 선택한 Orca/Paseo 환경의 기능을 사용하고, 개발 규칙과 테스트는 대상 프로젝트에서 적용합니다. 환경과 AI 공급자·모델은 별개입니다. [설계 결정과 기존 계획의 변경](runtime/architecture.md)을 참고하세요.
+
+현재는 **환경 가이드 선택·연결 확인의 최소 구성**과 기존 단일 Codex 역할 실행·기록·집계 도구를 제공합니다. 양쪽 환경의 실제 네이티브 위임·완료 수신과 복수 저장소 통합은 후속 검증 대상입니다.
 
 ## 무엇을 바꾸면 되나요?
 
 | 경로 | 용도 |
 | --- | --- |
-| [workflow.json](workflow.json) | 공통 실행값: 역할별 모델, effort, sandbox, 역할 문서 경로 |
+| [workflow.json](workflow.json) | 기존 단독 Codex 실행값: 역할별 모델, effort, sandbox, 역할 문서 경로 |
+| [runtime/architecture.md](runtime/architecture.md) | 공통 규칙·환경·프로젝트 책임 경계와 계획 변경 |
+| [runtime/environments/](runtime/environments/README.md), [scripts/startup.py](scripts/startup.py) | 세션 근거·연결 확인 후 Orca/Paseo 가이드 선택 |
+| [projects/](projects/README.md), [templates/project.startup.json](templates/project.startup.json) | 상위 폴더와 자식 저장소의 프로젝트 지침 연결 |
 | [roles/](roles/README.md) | 각 역할의 책임·결과물·검증 기준 |
 | [AGENTS.md](AGENTS.md), [principles/privacy.md](principles/privacy.md) | 모든 역할에 전달하는 공통 원칙 |
 | [templates/project.workflow.json](templates/project.workflow.json) | 대상 프로젝트의 `.ai-workflow.json`으로 사용할 설정 양식 |
 | [schema/workflow.schema.json](schema/workflow.schema.json) | 설정 파일의 필드·타입·허용값 |
 | [scripts/workflow.py](scripts/workflow.py) | 설정 검증, 적용값 확인, Codex 실행, 로컬 기록 집계 |
 | [runtime/execution-records.md](runtime/execution-records.md) | 실제 사용량·진단 수집, 비공개 기록, 자료 전달, 집계 |
+| [runtime/orchestration-contract.md](runtime/orchestration-contract.md) | 보존한 단독 Codex 자동 조율 프로토타입 설계. 구현 보류 |
 | [experiments/](experiments/README.md) | 토큰 효율 개선 절차와 공개용 실험 요약·재현 방법 |
 | [templates/](templates/README.md) | 작업 입력·담당자 결과·전체 보고의 공통 양식 |
 | [examples/task-contract.md](examples/task-contract.md) | 개발·글쓰기 작업의 가상 입력과 결과 |
 
 ## 사용하기
+
+먼저 프로젝트를 명시하고 환경 가이드를 선택합니다. 이 명령은 모델을 호출하거나 앱을 시작하지 않습니다.
+
+```sh
+python3 scripts/startup.py --project /path/to/project
+```
+
+세션 정보가 없거나 충돌하면 `--environment orca` 또는 `--environment paseo`로 명시합니다. 선택한 환경의 연결 실패는 중단하며 다른 앱으로 fallback하지 않습니다. [시작 설정·확인 수준·실패 처리](runtime/environments/README.md)를 읽은 뒤 반환된 환경 가이드와 프로젝트 지침을 적용하세요. 앱이 이 파일들을 자동으로 읽거나 현재 프로젝트에 바인딩됐다고 가정하지 않습니다.
+
+### 기존 단독 Codex 실행 도구
+
+아래는 명시적으로 선택하는 단독 CLI 경로입니다. Orca/Paseo 연결이 실패했을 때 자동 대체하는 경로가 아닙니다. 역할별 모델·effort·권한·지침을 `workflow.json`에서 정하고 필요한 값을 프로젝트 설정에서 덮어씁니다.
 
 Python 3.10 이상이 필요하며 추가 Python 패키지는 없습니다. 실제 실행에는 사용할 모델에 접근 가능한 Codex CLI와 해당 CLI의 로그인 설정이 필요합니다. 실행 옵션은 Codex CLI 0.167.0에서 확인했습니다.
 
@@ -60,7 +78,6 @@ python3 scripts/workflow.py run --project ../my-project --role backend --task "�
 
 [컨텍스트 전달 최적화 실험 001](experiments/001-context-delivery.md)에는 파일 참조와 직접 전달을 비교한 관측 결과와 재현 절차를 정리했습니다. 전체 토큰·비캐시 입력·시간을 구분하고, 품질 확인과 캐시·감사 한계를 함께 기록합니다.
 
-
 ## 설정 적용 순서
 
 1. 템플릿의 `workflow.json`
@@ -73,6 +90,7 @@ python3 scripts/workflow.py run --project ../my-project --role backend --task "�
 
 ## 현재 동작 범위
 
+- 세션 근거 또는 명시적 설정과 연결 조회로 Orca/Paseo 가이드를 선택합니다. 프로젝트 상위·자식 저장소의 지침 경로를 반환하며, 실제 네이티브 에이전트 실행이나 프로젝트 바인딩 완료를 뜻하지 않습니다.
 - 설정 파일 검증, 모델·effort·sandbox 전달, 지침 파일 로딩, 단일 역할 실행을 제공합니다.
 - 실행별 실제 토큰 사용량 수집, 선택적 JSON 기록, 상위 작업·작업 유형 연결, 선택적 실행 시간 제한을 제공합니다. 실패·중단·시간 초과와 미측정을 구분합니다.
 - 저장된 기록의 역할·요청 모델·effort별 집계와 작업 ID 필터를 제공합니다. 입력 문자 수와 완료된 도구 작업 수를 본문 없이 기록합니다. 모델 호출 횟수나 파일 읽기 횟수는 측정하지 않습니다.

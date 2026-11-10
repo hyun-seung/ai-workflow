@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "workflow_id": "DEMO-001",
+  "project": ".",
+  "local_config": "/path/to/private/verifier-local.json",
+  "goal": "가상 프로젝트의 입력 검증을 보완하고 독립 검증한다.",
+  "scope": {
+    "write_paths": [
+      "src/task.py",
+      "tests/test_task.py"
+    ],
+    "required_artifacts": [
+      "src/task.py",
+      "tests/test_task.py"
+    ]
+  },
+  "acceptance": [
+    {
+      "id": "AC-01",
+      "criteria": "잘못된 입력을 명시적으로 거부하고 유효 입력 동작을 유지한다.",
+      "verification": {
+        "description": "가상 입력 회귀 테스트와 변경 코드 검토",
+        "test_ids": [
+          "backend:T-01",
+          "verifier:T-01"
+        ],
+        "artifact_paths": [
+          "src/task.py",
+          "tests/test_task.py"
+        ]
+      }
+    }
+  ],
+  "stages": {
+    "backend": {
+      "task_id": "DEMO-001-DEV",
+      "timeout_seconds": 180,
+      "capabilities": {
+        "needs_temporary_write": true
+      },
+      "tests": [
+        {
+          "id": "T-01",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "context": [
+        "src/task.py",
+        "tests/test_task.py"
+      ]
+    },
+    "verifier": {
+      "task_id": "DEMO-001-VERIFY",
+      "timeout_seconds": 180,
+      "capabilities": {
+        "needs_temporary_write": true
+      },
+      "tests": [
+        {
+          "id": "T-01",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tests"
+          ]
+        }
+      ],
+      "context": [
+        "src/task.py",
+        "tests/test_task.py"
+      ]
+    }
+  },
+  "records_dir": "/path/to/private/runs",
+  "artifacts_dir": "/path/to/private/reports/DEMO-001"
+}

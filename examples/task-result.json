@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "task_id": "DEMO-001-DEV",
+  "role": "backend",
+  "status": "completed",
+  "summary": "가상 예시: 잘못된 입력 거부와 기존 동작을 검증했다.",
+  "artifacts": [
+    "src/task.py",
+    "tests/test_task.py"
+  ],
+  "checks": [
+    {
+      "id": "AC-01",
+      "status": "pass",
+      "evidence": "가상 예시: 무효·유효 입력 회귀 테스트 통과와 구현 대조."
+    }
+  ],
+  "tests": [
+    {
+      "command_id": "T-01",
+      "status": "pass",
+      "evidence": "가상 예시: 미리 지정된 T-01 실행 종료 0."
+    }
+  ],
+  "remaining": [],
+  "usage": "unavailable",
+  "blocker": null
+}

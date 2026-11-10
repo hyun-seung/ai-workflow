@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "environment": "auto",
+  "agent": {
+    "provider": "codex",
+    "model": null
+  },
+  "project_instructions": [
+    "AGENTS.md"
+  ],
+  "repositories": {
+    "backend": {
+      "path": "backend",
+      "project_instructions": [
+        "AGENTS.md"
+      ]
+    },
+    "mobile": {
+      "path": "mobile",
+      "project_instructions": [
+        "AGENTS.md"
+      ]
+    }
+  }
+}

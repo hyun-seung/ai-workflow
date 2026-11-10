@@ -1,5 +1,6 @@
 # 실행 설정
 
+이 문서는 기존 단독 Codex 실행기의 설정이다. Orca/Paseo 환경 선택은 [시작 가이드](environments/README.md)에서 처리하며, 환경이 제공하는 profile·provider·model 설정과 자동 호환된다고 가정하지 않는다. 역할 책임은 공통으로 재사용한다.
 
 역할별 실행값은 [workflow.json](../workflow.json)에서 관리한다. [실행기](../scripts/workflow.py)는 공통 설정, 대상 프로젝트의 `.ai-workflow.json`, `--local-config`로 지정한 설정 순서로 읽는다. 역할의 책임은 [역할 문서](../roles/README.md)에 둔다.
 
