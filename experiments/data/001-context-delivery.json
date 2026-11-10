@@ -1,0 +1,171 @@
+{
+  "experiment": "context-delivery-001",
+  "date": "2026-11-10",
+  "data_kind": "Actual measured summaries; synthetic data are used only inside the reviewed example record.",
+  "requested": {
+    "model": "gpt-6.1-sol",
+    "effort": "medium",
+    "sandbox": "read-only"
+  },
+  "observed": {
+    "model": null,
+    "effort": null
+  },
+  "cli_version": "codex-cli 0.167.0",
+  "order": [
+    "A1",
+    "B1",
+    "B2",
+    "A2"
+  ],
+  "usage_source": "codex.exec.json.turn.completed",
+  "usage_scope": "single_turn",
+  "usage_status": "measured",
+  "rows": [
+    {
+      "label": "A1",
+      "input": 56168,
+      "output": 412,
+      "total": 56580,
+      "cached_input": 38656,
+      "uncached_input": 17512,
+      "duration_ms": 20518,
+      "tool_items": 3
+    },
+    {
+      "label": "B1",
+      "input": 29571,
+      "output": 371,
+      "total": 29942,
+      "cached_input": 13440,
+      "uncached_input": 16131,
+      "duration_ms": 15660,
+      "tool_items": 0
+    },
+    {
+      "label": "B2",
+      "input": 29571,
+      "output": 400,
+      "total": 29971,
+      "cached_input": 13440,
+      "uncached_input": 16131,
+      "duration_ms": 17063,
+      "tool_items": 0
+    },
+    {
+      "label": "A2",
+      "input": 56261,
+      "output": 485,
+      "total": 56746,
+      "cached_input": 38656,
+      "uncached_input": 17605,
+      "duration_ms": 21265,
+      "tool_items": 3
+    }
+  ],
+  "means": {
+    "A": {
+      "input": 56214.5,
+      "output": 448.5,
+      "total": 56663,
+      "cached_input": 38656,
+      "uncached_input": 17558.5,
+      "duration_ms": 20891.5,
+      "tool_items": 3
+    },
+    "B": {
+      "input": 29571,
+      "output": 385.5,
+      "total": 29956.5,
+      "cached_input": 13440,
+      "uncached_input": 16131,
+      "duration_ms": 16361.5,
+      "tool_items": 0
+    }
+  },
+  "differences": {
+    "input": {
+      "B_minus_A": -26643.5,
+      "relative_percent": -47.39613444929689
+    },
+    "output": {
+      "B_minus_A": -63.0,
+      "relative_percent": -14.046822742474916
+    },
+    "total": {
+      "B_minus_A": -26706.5,
+      "relative_percent": -47.13216737553606
+    },
+    "cached_input": {
+      "B_minus_A": -25216,
+      "relative_percent": -65.23178807947019
+    },
+    "uncached_input": {
+      "B_minus_A": -1427.5,
+      "relative_percent": -8.129965543753737
+    },
+    "duration_ms": {
+      "B_minus_A": -4530.0,
+      "relative_percent": -21.683459780293422
+    },
+    "tool_items": {
+      "B_minus_A": -3,
+      "relative_percent": -100.0
+    }
+  },
+  "pairs": [
+    {
+      "pair": "1",
+      "B_minus_A": {
+        "input": -26597,
+        "output": -41,
+        "total": -26638,
+        "cached_input": -25216,
+        "uncached_input": -1381,
+        "duration_ms": -4858,
+        "tool_items": -3
+      }
+    },
+    {
+      "pair": "2",
+      "B_minus_A": {
+        "input": -26690,
+        "output": -85,
+        "total": -26775,
+        "cached_input": -25216,
+        "uncached_input": -1474,
+        "duration_ms": -4202,
+        "tool_items": -3
+      }
+    }
+  ],
+  "comparison_total_tokens": 173239,
+  "planning_and_preparation_tokens": 58854,
+  "prompt_characters": {
+    "A": 6961,
+    "B": 22905
+  },
+  "quality": "All three static criteria passed; final coordinator manually checked evidence. No independent adjudicator.",
+  "scope_compliance": "unverified",
+  "source_files_sha256": {
+    "scripts/workflow.py": "12bdea7aa2b1310b588327f87934a2e84e75734cbcca8620ed82c38d718247ba",
+    "scripts/codex_runner.py": "8597973b9412f3f6cc94d80f523a033457b3d1399f4bc006f47a44b54385cfcf",
+    "scripts/context_input.py": "5c58987b15b08edd866a522ad445b5b85c6c3df0d5797c0cdd48633aed2aa536",
+    "scripts/run_records.py": "fc70763db72fd44e29e758cefefaf323fd528ba275e2bbd35a08b9904f81ecea",
+    "scripts/run_diagnostics.py": "126348da5dd82edd14c80df492d5eac3c60c67b6a1a6def633dbcb0cc8245b62",
+    "workflow.json": "ce01c8f232a4369263d6a2601279719b9684e81f0e6f717ffb328a302c5404a7",
+    "AGENTS.md": "121f06ec3ff3d6f52277e21e5a9a9d4f215ec7e8bbb9ef1389e2357d29182ba7",
+    "principles/privacy.md": "17d7c8b5b9041fdbaadb841cda9a8f4af647152cee0a13a0d795421e71642bf7",
+    "roles/verifier.md": "240b53ae66c1d0eef587f155ae5779a2258580270bfd11ce71086c4253100101",
+    "examples/run-record.json": "cce1f72481fcca42acdc69e3edb3dee7bec647e8432d63a7d82a72bfdd4d9925",
+    "schema/run-record.schema.json": "7b94788962eeee90f898fc171875955d3a5eead8f13548fb875869e4dd692e06"
+  },
+  "limitations": [
+    "n=2 per condition; no significance/generalization",
+    "cache/order/backend revision/account conditions uncontrolled",
+    "command bodies unavailable; scope compliance unverified",
+    "no monetary cost calculation",
+    "Original working tree included uncommitted changes; hashes identify relevant source bytes, not a reproducible full account or backend environment.",
+    "Current-chat coordination/review/reporting is unmeasured; public-document writing is excluded from comparison totals."
+  ]
+}

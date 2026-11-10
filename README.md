@@ -15,6 +15,7 @@
 | [schema/workflow.schema.json](schema/workflow.schema.json) | 설정 파일의 필드·타입·허용값 |
 | [scripts/workflow.py](scripts/workflow.py) | 설정 검증, 적용값 확인, Codex 실행, 로컬 기록 집계 |
 | [runtime/execution-records.md](runtime/execution-records.md) | 실제 사용량·진단 수집, 비공개 기록, 자료 전달, 집계 |
+| [experiments/](experiments/README.md) | 토큰 효율 개선 절차와 공개용 실험 요약·재현 방법 |
 | [templates/](templates/README.md) | 작업 입력·담당자 결과·전체 보고의 공통 양식 |
 | [examples/task-contract.md](examples/task-contract.md) | 개발·글쓰기 작업의 가상 입력과 결과 |
 
@@ -56,6 +57,8 @@ python3 scripts/workflow.py run --project ../my-project --role backend --task "�
 역할 ID는 `coordinator`, `architect`, `designer`, `backend`, `frontend`, `verifier`입니다. 역할 추가는 `workflow.json`에서, 기존 역할의 프로젝트별 변경은 `.ai-workflow.json`에서 합니다.
 
 작업에 필요한 작은 파일이나 줄 범위가 이미 정해졌다면 `--context-file src/example.py:10:40`으로 내용을 함께 전달할 수 있습니다. 경로는 대상 프로젝트 기준이며 자동 탐색하지 않습니다. 충분한 자료가 전달되면 중복 읽기를 줄이도록 지시하지만, 토큰 절감은 실제 사용량과 검증 결과로 확인해야 합니다. [범위·제한과 비교 방법](runtime/execution-records.md)을 참고하세요.
+
+[컨텍스트 전달 최적화 실험 001](experiments/001-context-delivery.md)에는 파일 참조와 직접 전달을 비교한 관측 결과와 재현 절차를 정리했습니다. 전체 토큰·비캐시 입력·시간을 구분하고, 품질 확인과 캐시·감사 한계를 함께 기록합니다.
 
 
 ## 설정 적용 순서
