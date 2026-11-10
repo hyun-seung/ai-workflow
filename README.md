@@ -21,6 +21,8 @@
 | [scripts/workflow.py](scripts/workflow.py) | 설정 검증, 적용값 확인, Codex 실행, 로컬 기록 집계 |
 | [runtime/execution-records.md](runtime/execution-records.md) | 실제 사용량·진단 수집, 비공개 기록, 자료 전달, 집계 |
 | [runtime/harness.md](runtime/harness.md), [scripts/prepare_handoff.py](scripts/prepare_handoff.py) | 작업 크기에 맞는 조율, 중복 대기 처리 규칙, 명시 입력 파일의 인계 준비 |
+| [runtime/approval-waits.md](runtime/approval-waits.md), [scripts/approval_wait.py](scripts/approval_wait.py) | 승인·질문 대기 관측, 확인된 요청의 중복 억제, 알림 전달 확인과 단발성 Orca 조회 |
+| [runtime/permission-policy.md](runtime/permission-policy.md), [권한 인계 양식](templates/execution-permissions.md) | 공식 운영 사례, 사전 허용 범위·예외 승인·실제 적용 확인. 권한을 자동 부여하는 설정 파일은 아님 |
 | [runtime/storage-options.md](runtime/storage-options.md) | Markdown·JSON/JSONL·SQLite·MongoDB·PostgreSQL의 역할과 선택 기준 |
 | [runtime/orchestration-contract.md](runtime/orchestration-contract.md) | 보존한 단독 Codex 자동 조율 프로토타입 설계. 구현 보류 |
 | [experiments/](experiments/README.md) | 토큰 효율 개선 절차와 공개용 실험 요약·재현 방법 |
@@ -126,3 +128,5 @@ python3 -m unittest discover -s tests -v
 ```
 
 설정 우선순위, 경로 경계, dry-run, 대체 Codex 프로세스의 명령·입력·종료 코드 전달과 사용량 수집을 확인합니다. 정상·실패·중단·시간 초과·중복·저장 오류 외에 집계의 미측정 처리, 충돌 기록 제외, 자료 전달 범위와 민감한 본문 제외를 검증합니다. 실제 모델 호출과 업무 품질 검증은 이 테스트에 포함하지 않습니다.
+
+- [요청 실행 기록 DB·로컬 화면](runtime/trace-viewer.md): 명시적 bundle/Orca snapshot 수입과 읽기 전용 조회.

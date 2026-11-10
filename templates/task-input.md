@@ -30,6 +30,7 @@
   - 미확인·다음 확인: <추정, 확인하지 않은 범위와 필요한 후속 조사>
   - 기준 상태: <확인한 버전. Git 작업이면 기준 커밋과 관련 미커밋 변경 여부·범위>
 - constraints: <기술·디자인·호환성·허용 환경 등>
+- execution_permissions: <필요할 때 [권한 인계 양식](execution-permissions.md)의 허용 범위·실제 설정·준비 근거·남은 차이를 첨부. 권한 부여 설정이 아님>
 - escalation: <계약 변경 등 담당 범위를 벗어나는 판단이 필요할 때 전달할 내용과 대상>
 - deliverables: <산출물 형태와 합의된 전달·보관 위치>
 - additional_checks: <이번 acceptance에 포함하지 않는 선택적 확인과 이유. 미수행을 숨기지 않음>

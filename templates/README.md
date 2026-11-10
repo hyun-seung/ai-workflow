@@ -39,6 +39,7 @@
 | --- | --- | --- |
 | 입력 | `parent_task_id`, `task_type`, `depends_on` | 작업을 분리하거나 선행 작업의 필요한 결과·상태를 전달할 때 |
 | 입력 | `context`, `constraints`, `deliverables` | 관련 자료, 기술·디자인 제약, 산출물 형태를 전달할 때 |
+| 입력 | `execution_permissions` | [권한 인계 양식](execution-permissions.md)으로 허용 범위·유효 설정·준비 근거와 미해결 권한을 전달할 때. 자동 권한 설정은 아님 |
 | 입력 | `escalation` | 계약 변경 등 담당 범위를 벗어나는 판단의 인계 조건을 정할 때 |
 | 입력 | `budget` | 예상 범위·배정 예산·중단 조건이 정해졌을 때 |
 | 결과 | `decisions` | 대안 사이의 중요한 선택이 있었을 때 |

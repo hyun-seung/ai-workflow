@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "requests": [
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-request",
+      "title": "가상 요청: 코드 검토",
+      "sample": true,
+      "status": "running"
+    }
+  ],
+  "actors": [
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-coordinator",
+      "request_id": "sample-request",
+      "role": "coordinator",
+      "environment": "orca",
+      "provider": "example",
+      "requested": {
+        "model": "example-model",
+        "effort": "high"
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-worker",
+      "request_id": "sample-request",
+      "role": "developer",
+      "parent_id": "sample-coordinator",
+      "environment": "orca",
+      "provider": "example"
+    }
+  ],
+  "events": [
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-0",
+      "request_id": "sample-request",
+      "actor_id": "sample-coordinator",
+      "kind": "user_request",
+      "detail": "가상 요청입니다."
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-1",
+      "request_id": "sample-request",
+      "actor_id": "sample-coordinator",
+      "kind": "decision",
+      "detail": {
+        "summary": "작은 변경이므로 단일 담당자에게 배정",
+        "recorded_retrospectively": true
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-2",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "instruction",
+      "detail": {
+        "text": "요구사항을 검토하고 결과를 설명하세요.",
+        "basis": "sample-request"
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-3",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "tool_call",
+      "detail": {
+        "name": "shell",
+        "input": {
+          "cmd": "echo \"<script>alert(1)</script>\""
+        },
+        "state": "running"
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>요청 실행 기록</title>
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+<header><h1>요청 실행 기록</h1><p>명시적으로 수입한 로컬 기록 · 읽기 전용</p></header>
+<div class="layout">
+<aside aria-label="요청 탐색">
+<details id="request-browser" open>
+<summary id="browser-label">요청 목록</summary>
+<form id="search"><label for="query">요청 검색</label><div class="search-row"><input id="query" maxlength="200" type="search"><button>검색</button></div></form>
+<p id="list-state" role="status"></p>
+<div id="list-actions"></div>
+<p id="selection-note"></p>
+<nav id="requests" aria-label="기록 선택"></nav>
+</details>
+</aside>
+<main id="main" tabindex="-1" aria-busy="false">
+<div id="status" role="status">요청을 선택하면 실행 기록을 볼 수 있습니다.</div>
+<section id="summary" aria-label="요청 요약"></section>
+<section id="metadata" aria-label="기록 근거"></section>
+<section id="filters" aria-label="사건 필터" hidden>
+<p id="context"></p>
+<div class="filter-grid">
+<div><label for="role">역할</label><select id="role"><option value="">모든 역할</option></select></div>
+<div><label for="kind">이벤트 종류</label><select id="kind"><option value="">모든 이벤트</option></select></div>
+<div class="filter-count"><span id="event-count" role="status"></span><button id="reset" type="button">필터 초기화</button></div>
+</div>
+</section>
+<ol id="timeline" aria-label="API 순서 사건 타임라인"></ol>
+</main>
+</div>
+</body>
+</html>

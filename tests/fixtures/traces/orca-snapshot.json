@@ -1,0 +1,74 @@
+{
+  "ok": true,
+  "result": {
+    "dispatchId": "sample-dispatch",
+    "provider": "example",
+    "source": "transcript",
+    "sourceIdentity": "synthetic-session",
+    "cursor": "cursor-start",
+    "status": {
+      "worker": "running",
+      "terminal": "unknown",
+      "liveness": "live"
+    },
+    "warnings": [
+      "Synthetic partial snapshot; output may be truncated"
+    ],
+    "transcript": {
+      "limited": true,
+      "nextCursor": "cursor-next",
+      "returnedMessageCount": 3,
+      "messages": [
+        {
+          "id": "m1",
+          "timestamp": 1767225600000,
+          "role": "user",
+          "source": "synthetic",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "가상 전달 지시"
+            }
+          ]
+        },
+        {
+          "id": "m2",
+          "timestamp": 1767225601000,
+          "role": "assistant",
+          "blocks": [
+            {
+              "type": "tool-call",
+              "name": "shell",
+              "input": {
+                "cmd": "echo sample"
+              },
+              "state": "running",
+              "callId": "c1"
+            },
+            {
+              "type": "tool-result",
+              "output": "sample (truncated example)",
+              "callId": "c1",
+              "isError": false
+            },
+            {
+              "type": "analysis",
+              "text": "SECRET_REASONING"
+            }
+          ]
+        },
+        {
+          "id": "m3",
+          "timestamp": 1767225602000,
+          "role": "system",
+          "blocks": [
+            {
+              "type": "text",
+              "text": "Run a command? echo sample"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
