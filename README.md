@@ -20,6 +20,8 @@
 | [schema/workflow.schema.json](schema/workflow.schema.json) | 설정 파일의 필드·타입·허용값 |
 | [scripts/workflow.py](scripts/workflow.py) | 설정 검증, 적용값 확인, Codex 실행, 로컬 기록 집계 |
 | [runtime/execution-records.md](runtime/execution-records.md) | 실제 사용량·진단 수집, 비공개 기록, 자료 전달, 집계 |
+| [runtime/harness.md](runtime/harness.md), [scripts/prepare_handoff.py](scripts/prepare_handoff.py) | 작업 크기에 맞는 조율, 중복 대기 처리 규칙, 명시 입력 파일의 인계 준비 |
+| [runtime/storage-options.md](runtime/storage-options.md) | Markdown·JSON/JSONL·SQLite·MongoDB·PostgreSQL의 역할과 선택 기준 |
 | [runtime/orchestration-contract.md](runtime/orchestration-contract.md) | 보존한 단독 Codex 자동 조율 프로토타입 설계. 구현 보류 |
 | [experiments/](experiments/README.md) | 토큰 효율 개선 절차와 공개용 실험 요약·재현 방법 |
 | [templates/](templates/README.md) | 작업 입력·담당자 결과·전체 보고의 공통 양식 |
