@@ -72,4 +72,4 @@ ack는 **알림 전달 확인**이다. 승인 버튼을 대신 누르거나 도�
 
 검증은 `python3 -m unittest discover -s tests -p test_approval_wait.py -v`로 수행한다. 가상 pending/clear/unknown 입력으로 중복·내용 변경·재시작·동시 처리·오래된 관측·CLI·비공개 저장을 확인한다. 실제 native 검증은 종료된 worker 조회를 별도 기록했으며, 실제 pending ID 수집·모바일 승인·외부 알림 전송은 미검증/미구현이다.
 
-이 도구는 조율자가 알림 수신 시 호출하는 연결이다. background watcher나 Orca 알림 hook 설치는 없다. Orca 자체 메시지의 생성 빈도·UI 표시를 바꾸지 않는다. 신규 자식의 실제 승인 모드와 현재 설치 버전의 공식 지원을 확인하는 작업도 별도로 남는다. 전역 권한을 넓혀 알림 수를 줄이지 않는다.
+이 도구는 조율자가 알림 수신 시 호출하는 연결이다. background watcher나 Orca 알림 hook 설치는 없다. Orca 자체 메시지의 생성 빈도·UI 표시를 바꾸지 않는다. 새 Codex worker의 대신 승인 적용은 제한된 별도 시험에서 확인했지만, 이 도구가 모드를 설정·검증하지는 않는다. [권한 정책](permission-policy.md)에 따라 대상 프로필의 적용을 확인하며 전역 권한을 넓혀 알림 수를 줄이지 않는다.
