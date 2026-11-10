@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "run_id": "00000000-0000-4000-8000-000000000001",
+  "task_id": "EXAMPLE-001",
+  "parent_task_id": "EXAMPLE-WORK",
+  "task_type": "development",
+  "role": "backend",
+  "adapter": "codex",
+  "runtime_version": null,
+  "requested": {"model": "gpt-6.1-sol", "effort": "medium", "sandbox": "workspace-write"},
+  "observed": {"model": null, "effort": null},
+  "timeout_seconds": 300,
+  "started_at": "2026-01-01T00:00:00+00:00",
+  "finished_at": "2026-01-01T00:00:10+00:00",
+  "duration_ms": 10000,
+  "execution_status": "succeeded",
+  "exit_code": 0,
+  "failure_reason": null,
+  "task_verification": "not_evaluated",
+  "result_refs": ["reports/EXAMPLE-001.md"],
+  "diagnostics": {
+    "prompt": null,
+    "events": {
+      "status": "observed",
+      "completed_items": {"command_execution": 2, "mcp_tool_call": 0, "web_search": 0, "file_change": 1, "agent_message": 1, "reasoning": 0, "plan": 0, "other": 0},
+      "completed_tool_items": 2,
+      "items_without_id": 0,
+      "model_calls": null
+    }
+  },
+  "usage": {
+    "status": "measured",
+    "source": "codex.exec.json.turn.completed",
+    "scope": "single_turn",
+    "input_tokens": 100,
+    "output_tokens": 20,
+    "cached_input_tokens": 60,
+    "reasoning_output_tokens": 5,
+    "total_tokens": 120,
+    "issues": []
+  }
+}

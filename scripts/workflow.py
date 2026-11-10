@@ -5,11 +5,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 import re
 import shutil
-import subprocess
 import sys
+
+from codex_runner import execute_run
+from context_input import load_context
+from run_records import JsonRecordStore, TASK_TYPES, new_record, validate_id, validate_records_dir
+from run_summary import STATUSES, print_summary, summarize
 
 TEMPLATE_ROOT = Path(__file__).resolve().parent.parent
 EFFORTS = {"low", "medium", "high", "xhigh", "max"}
@@ -124,7 +129,7 @@ def load_config(template_root, project_root, local_config=None):
     return result
 
 
-def prepare_run(config, project_root, role_name, task):
+def prepare_run(config, project_root, role_name, task, context_files=()):
     if role_name not in config["roles"]:
         raise ConfigError(f"Unknown role: {role_name}")
     if not task.strip():
@@ -136,16 +141,23 @@ def prepare_run(config, project_root, role_name, task):
         "이번 실행에서는 이 역할의 작업만 수행한다. 다른 에이전트를 생성하거나 실행기를 재호출하지 않는다.\n"
         "다른 역할의 작업이 필요하면 인계할 작업과 이유를 결과에 적는다.\n\n"
     )
+    instruction_characters = 0
     for index, path in enumerate(paths, 1):
-        prompt += f"## 적용 문서 {index}\n{path.read_text(encoding='utf-8')}\n\n"
+        content = path.read_text(encoding='utf-8')
+        instruction_characters += len(content)
+        prompt += f"## 적용 문서 {index}\n{content}\n\n"
+    context_text, context_stats = load_context(project_root, context_files)
+    prompt += context_text
     prompt += f"## 현재 작업 요청\n{task}\n"
     command = [
-        "codex", "exec", "--ephemeral", "--color", "never",
+        "codex", "exec", "--ephemeral", "--json", "--color", "never",
         "--sandbox", role["sandbox"], "--cd", str(Path(project_root).resolve()),
         "--model", role["model"], "--config",
         f'model_reasoning_effort="{role["effort"]}"', "-",
     ]
-    return command, prompt, paths
+    stats = {"prompt_characters": len(prompt), "instruction_files": len(paths),
+             "instruction_characters": instruction_characters, "task_characters": len(task), **context_stats}
+    return command, prompt, paths, stats
 
 
 def describe(config, selected=None):
@@ -168,6 +180,13 @@ def describe(config, selected=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    summary_command = commands.add_parser("summary", help="Read local records without calling a model")
+    summary_command.add_argument("--records-dir", required=True, type=Path)
+    summary_command.add_argument("--task-id")
+    summary_command.add_argument("--parent-task-id")
+    summary_command.add_argument("--role")
+    summary_command.add_argument("--execution-status", choices=STATUSES)
+    summary_command.add_argument("--json", action="store_true")
     for name in ("check", "run"):
         command = commands.add_parser(name)
         command.add_argument("--project", required=True, type=Path)
@@ -176,24 +195,59 @@ def main(argv=None):
         if name == "run":
             command.add_argument("--task", required=True, help="Task text, or '-' to read from stdin")
             command.add_argument("--dry-run", action="store_true")
+            command.add_argument("--task-id", help="Non-sensitive ID shared across attempts; otherwise generated")
+            command.add_argument("--parent-task-id", help="Optional parent task ID from the task input")
+            command.add_argument("--task-type", choices=sorted(TASK_TYPES))
+            command.add_argument("--timeout-seconds", type=float, help="Optional elapsed-time limit; not a token cap")
+            command.add_argument("--records-dir", type=Path, help="Opt-in private directory outside Git and project roots")
+            command.add_argument("--result-ref", action="append", default=[], help="Explicit report/artifact reference; requires --records-dir")
+            command.add_argument("--context-file", action="append", default=[], help="Explicit project text path or path:start:end to include once")
     args = parser.parse_args(argv)
     try:
+        if args.command == "summary":
+            validate_id(args.task_id, "task-id")
+            validate_id(args.parent_task_id, "parent-task-id")
+            directory = validate_records_dir(args.records_dir, [TEMPLATE_ROOT])
+            result = summarize(directory, args.task_id, args.parent_task_id, args.role, args.execution_status)
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            else:
+                print_summary(result)
+            return 0 if result["scan_complete"] else 2
         config = load_config(TEMPLATE_ROOT, args.project, args.local_config)
         if args.command == "check":
             print(json.dumps(describe(config, args.role), ensure_ascii=False, indent=2))
             return 0
         task = sys.stdin.read() if args.task == "-" else args.task
-        command, prompt, paths = prepare_run(config, args.project, args.role, task)
+        command, prompt, paths, prompt_stats = prepare_run(config, args.project, args.role, task, args.context_file)
+        validate_id(args.task_id, "task-id")
+        validate_id(args.parent_task_id, "parent-task-id")
+        if args.parent_task_id is not None and args.parent_task_id == args.task_id:
+            raise ConfigError("A task cannot be its own parent")
+        if args.timeout_seconds is not None and (not math.isfinite(args.timeout_seconds) or args.timeout_seconds <= 0):
+            raise ConfigError("timeout-seconds must be a finite positive number")
+        if args.result_ref and args.records_dir is None:
+            raise ConfigError("--result-ref requires --records-dir")
+        if any(not ref.strip() or len(ref) > 2048 for ref in args.result_ref):
+            raise ConfigError("result-ref must be a non-empty reference of at most 2048 characters")
+        records_dir = validate_records_dir(args.records_dir, [TEMPLATE_ROOT, args.project]) if args.records_dir is not None else None
         if args.dry_run:
             summary = describe(config, args.role)
             summary.update({"command": command, "loaded_files": [str(p) for p in paths], "prompt_characters": len(prompt)})
+            summary["prompt_diagnostics"] = prompt_stats
+            summary["execution"] = {"task_id": args.task_id, "parent_task_id": args.parent_task_id,
+                                    "task_type": args.task_type, "timeout_seconds": args.timeout_seconds}
+            summary["recording"] = {"enabled": records_dir is not None, "directory": str(records_dir) if records_dir else None}
             print(json.dumps(summary, ensure_ascii=False, indent=2))
             return 0
         if shutil.which("codex") is None:
             raise ConfigError("Codex CLI is not installed or is not on PATH")
         # Preserve user/organization controls; do not bypass approvals or load auth ourselves.
-        return subprocess.run(command, input=prompt, text=True, encoding="utf-8", cwd=args.project.resolve()).returncode
-    except (ConfigError, OSError, UnicodeError) as exc:
+        store = JsonRecordStore(records_dir, [TEMPLATE_ROOT, args.project]) if records_dir else None
+        record = new_record(args.role, config["roles"][args.role], args.task_id, args.result_ref,
+                            args.parent_task_id, args.task_type, args.timeout_seconds, prompt_stats)
+        return execute_run(command, prompt, args.project, record, store)
+    except (ValueError, OSError, UnicodeError) as exc:
         print(f"workflow: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

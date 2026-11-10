@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
 spec = importlib.util.spec_from_file_location("workflow", ROOT / "scripts/workflow.py")
 workflow = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(workflow)
@@ -43,7 +44,7 @@ class WorkflowTests(unittest.TestCase):
         config = workflow.load_config(ROOT, self.project)
         self.assertEqual(len(config["roles"]), 6)
         for name in config["roles"]:
-            command, prompt, _ = workflow.prepare_run(config, self.project, name, "Example task")
+            command, prompt, _, _ = workflow.prepare_run(config, self.project, name, "Example task")
             self.assertIn("Example task", prompt)
             self.assertIn("--ephemeral", command)
 
@@ -60,7 +61,7 @@ class WorkflowTests(unittest.TestCase):
             "roles": {"coordinator": {"model": "gpt-6-astra", "instructions": ["role.md"]}},
         })
         config = workflow.load_config(self.template, self.project, local)
-        command, prompt, paths = workflow.prepare_run(config, self.project, "coordinator", "작업")
+        command, prompt, paths, _ = workflow.prepare_run(config, self.project, "coordinator", "작업")
         self.assertEqual(config["roles"]["coordinator"]["effort"], "medium")
         self.assertIn("gpt-6-astra", command)
         for policy in ("COMMON_POLICY", "PROJECT_POLICY", "LOCAL_ROLE_POLICY"):
@@ -114,14 +115,14 @@ class WorkflowTests(unittest.TestCase):
             ["check", "--role", "unknown"],
         ):
             with self.subTest(arguments=arguments), patch.object(workflow, "TEMPLATE_ROOT", self.template), \
-                 patch.object(workflow.subprocess, "run") as run, contextlib.redirect_stderr(io.StringIO()):
+                 patch.object(workflow, "execute_run") as run, contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(workflow.main(arguments + ["--project", str(self.project)]), 2)
                 run.assert_not_called()
 
     def test_dry_run_never_starts_codex_or_prints_prompt_contents(self):
         output = io.StringIO()
         with patch.object(workflow, "TEMPLATE_ROOT", self.template), \
-             patch.object(workflow.subprocess, "run") as run, contextlib.redirect_stdout(output):
+             patch.object(workflow, "execute_run") as run, contextlib.redirect_stdout(output):
             code = workflow.main([
                 "run", "--project", str(self.project), "--role", "coordinator",
                 "--task", "PRIVATE_TASK_MARKER", "--dry-run",
@@ -141,6 +142,7 @@ class WorkflowTests(unittest.TestCase):
             f"#!{sys.executable}\n"
             "import json, os, sys\n"
             "from pathlib import Path\n"
+            "if '--version' in sys.argv:\n    print('codex-cli 0.167.0'); sys.exit(0)\n"
             f"Path({str(capture)!r}).write_text(json.dumps({{'args':sys.argv[1:], 'stdin':sys.stdin.read(), 'cwd':os.getcwd()}}))\n"
             "sys.exit(7)\n", encoding="utf-8",
         )
