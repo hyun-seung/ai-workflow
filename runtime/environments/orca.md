@@ -45,6 +45,8 @@ provider는 --agent로 선택하며 모델·effort 지원은 공급자와 버전
 
 승인·질문 대기 알림 수신 시 단발성 상태 조회는 [승인·질문 대기 처리 도구](../approval-waits.md)로 수행하고 상태와 미전달 알림을 기록한다. 같은 `worker-show` 조회를 별도로 반복하지 않는다. 확인된 원본 요청 ID가 있는 경우만 동일 대기를 억제한다. 현재 native pending 식별자와 외부 전송·원본 알림 제어의 한계를 함께 적용한다.
 
+Orca 대화로 전달할 때는 `approval_wait.py --chat ... orca --live`의 `chat.deliver`를 확인하고 문구를 전달한 뒤에만 notice를 ack한다. 과거 snapshot·liveness 미확인·이미 전달한 동일 요청을 현재 승인 대기로 알리지 않는다. 설치 버전에서 원본 승인 ID 규약을 확인하지 못한 native pending의 자동 중복 억제는 보류한다.
+
 알림 본문만으로 지금도 멈춰 있다고 단정하지 않는다. 먼저 정확한 dispatch의 `worker-show --full --json`에서 현재 상태와 `observation.agentWait`을 확인한다. 설치 도움말상 `agentWait: null`은 조회 시 대기 없음이며, 필드 부재는 확인 불가다. 부재를 대기 없음으로 바꾸지 않는다. 이미 종료한 worker에는 재개 지시를 보내지 않는다.
 
 실제 대기 원인을 알아야 할 때만 `worker-read --limit`와 필요한 cursor로 관련 부분을 읽는다. cursor가 무효화되면 새 읽기를 하며, 전체 transcript를 매번 다시 수집하지 않는다. 질문·승인 근거의 식별자와 마지막 처리 상태는 비공개 기록에 남겨 중복 알림을 구분한다. 새 프롬프트·내용 변경·미해결 상태 확인이 필요한 경우에는 다시 확인한다. resolved 표시는 허용/거부의 증거가 아니며, 사람의 보안 승인은 orchestration reply/send로 대신할 수 없다.

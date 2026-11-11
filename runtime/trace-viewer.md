@@ -2,6 +2,8 @@
 
 명시적으로 작성·전달된 판단 근거 요약, 지시와 행동·결과를 요청 단위로 모은다. 내부 추론을 저장하는 기능이 아니다. 신규 도구는 Python 표준 라이브러리만 사용하며 기존 `workflow.py`·역할 실행·JSON usage 기록을 변경하지 않는다. Orca native snapshot을 수입하며 native 실행을 자동 추적한다고 주장하지 않는다.
 
+최종 결과·검증 파일과 담당자/후속 작업을 연결할 때는 [요청 마감](trace-closeout.md)을 사용한다. 수입된 요청 상태와 마감 판정·수집 범위를 구분하고, 마감 이후 수집 기록이 바뀌면 재확인이 필요하다고 표시한다.
+
 ## 실행과 비공개 저장
 
 사용자가 정한 **Git 작업 트리 밖의 비공개 디렉터리**를 명시한다. 아래 경로는 가상값이다. 운영 기록 생성·실제 자료 수입은 사용자의 승인된 위치와 범위에서 수행한다.
@@ -14,7 +16,43 @@ python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 expor
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 serve --port 8765
 ```
 
-브라우저 주소는 `http://127.0.0.1:8765`다. localhost 별칭·다른 Host/Origin은 허용하지 않는다. 서버 종료는 Ctrl-C다. 외부 자산·텔레메트리·쓰기·실행·승인 UI는 없다. 화면은 요청 검색 → 요청 선택 → 역할/이벤트 AND 필터 → 본문 미리보기·상세 펼치기를 제공한다. 담당자·모델·사용량과 수집 근거는 접힌 보조 정보로 제공하며, 수집 한계와 원본 잘림 경고는 항상 표시한다. 모바일 요청 목록은 선택 후 접히고, 긴 타임라인에서는 선택 문맥과 필터를 유지한다. 원문 JSON·출처·해시·원본 시각은 각 상세에서 확인할 수 있으며, 표시는 UTC다. 검색 초기화와 필터 초기화는 별개다. 가상 fixture는 실제 관측이 아니다.
+브라우저 주소는 `http://127.0.0.1:8765`다. localhost 별칭·다른 Host/Origin은 허용하지 않는다. 서버 종료는 Ctrl-C다. 검증을 위해 시작한 서버·탭은 검증 뒤 종료한다. 외부 자산·텔레메트리·쓰기·실행·승인 UI는 없다. 가상 fixture는 실제 관측이 아니다.
+
+## 요청별 대시보드
+
+검색 없이 최신 요청을 먼저 선택한다. 접수 시각이 있는 요청은 그 시각의 내림차순이며, 시각 없는 요청은 그 아래에 최근 등록순으로 표시한다. 상태 갱신이나 같은 자료의 재수입은 등록 순서를 바꾸지 않는다. 화면은 최대 100개 요청을 조회한다. CLI의 `list --q`와 API 검색은 유지한다.
+
+- 상단: 요청 요약, 원문·보존 기록 펼치기, 상태, 참여한 담당 실행 수, 측정된 요청 토큰, 전체 실행 시간, 수집된 기록 수.
+- 본문: 조율·계획 → 담당 업무 → 결과·검증의 역할별 카드. [공통 역할](../roles/README.md)의 조율자·설계자·디자이너·백엔드 개발자·프론트엔드 개발자·검증자에 고정 색상을 사용한다. 작업명은 역할명 아래에 따로 표시한다. 기록된 상위 담당자와 후속 배정 관계를 표시하며 카드 배치와 길이는 시간이나 병렬 실행을 의미하지 않는다.
+- 담당자 상세: 전달 지시, 확인 모델, 입력·출력·합계 토큰, 실제 명령·도구 결과, 작업 설명·반환 결과. 조율자가 내린 지시와 담당자가 받은 지시는 각각 보존하며 근거 없는 연결을 만들지 않는다.
+- 하단: 요청 전체 → 역할별 합계 → 작업별 입력·출력·합계 → 세부 항목의 펼치기. 접힌 전체 기록과 역할/이벤트 AND 필터, 수집 범위·출처를 유지한다. 원문 JSON·해시·원본 시각을 펼쳐 확인할 수 있으며 시각 표시는 UTC다.
+
+요청의 명시 `summary`가 없으면 보존된 요청 본문 일부를 **발췌**로 표시한다. 새 요약이나 판단을 자동 생성하지 않는다. 일부 과거 지시는 도구 안내에서 잘려 있어 카드에 그 사실을 표시하고 원문을 유지한다. 전체 실행 시간은 명시 `request.execution.started_at/finished_at`이 있을 때만 계산하며 이벤트 간격으로 추정하지 않는다. 수입 actor 수는 고유 사람·세션 수나 전체 배정 횟수가 아니다.
+
+모바일에서는 요청 목록이 선택 후 접히고 단계별 카드가 세로로 이어진다. 카드와 원문은 hover 없이 클릭·키보드로 펼친다. 부분 수집·미측정·판정 재확인 표시를 유지하며, 수집 완료를 실제 작업 완료로 취급하지 않는다. 새로고침은 명시 동작이고 자동 polling은 없다.
+
+### 역할과 작업명 보완
+
+새 actor는 `role` 또는 `role_id`에 `workflow.json`과 같은 ID(`coordinator/architect/designer/backend/frontend/verifier`)를 사용하고 `task_title`에 업무를 적는다. 기존의 자유 형식 역할을 임의로 백엔드/프론트엔드로 추론하지 않는다. 분류할 수 없으면 중립 색상과 `역할 미분류`로 표시한다.
+
+기존 actor를 보완할 때는 명시 `assignment` 이벤트의 `detail.actor_roles`에 `{actor_id, role_id, task_title}` 배열과 사후 기록·판단 근거를 넣어 수입한다. 원래 actor와 지시는 보존되며 표시 역할만 이 근거를 사용한다. 대상 actor는 같은 요청에 있어야 하고, 한 이벤트 안의 중복과 모르는 역할 ID는 거부한다. 서로 다른 역할 지정이 충돌하면 자동 선택하지 않는다. 자료를 추가하면 기존 마감은 재확인이 필요하며, 결과 파일과 근거를 확인한 뒤 새 마감 revision을 등록한다.
+
+### 토큰 표시·합산 계약
+
+이 단계는 화면의 표시·합산 규칙을 구현했다. [native 세션의 배정별 JSON 수집](native-record.md#배정-구간의-사용량)은 구현했으며, 이 JSON의 DB 자동 수입·기존 actor 갱신은 아직 연결하지 않았다. 세션 누적값은 담당자 상세의 참고값으로만 보이며 요청 합계에서는 제외한다. 과거 DB 자료에 배정별 측정값이 없으면 `—`·미연결/미측정으로 표시한다.
+
+화면은 actor의 usage에 다음 조건이 **모두** 있을 때 배정별 집계에 포함한다.
+
+- `status=measured`, `scope=dispatch`, `task_attributed=true`.
+- usage의 `actor_id`와 `request_id`가 해당 actor와 일치.
+- 비어 있지 않은 원천 `source`와 측정 구간 식별자 `measurement_key`.
+- `measurements.input_tokens/output_tokens`가 0 이상인 안전한 정수. 선택 `total_tokens`는 둘의 합과 일치.
+
+`source + measurement_key`가 같은 입력이 여러 actor에 있으면 모두 중복 참고값으로 분리한다. 캐시 입력·추론 출력은 각 입력·출력에 포함된 세부값이며 다시 더하지 않는다. 일부 실행만 측정됐다면 측정된 합계와 `측정 실행 수/수입된 실행 수`를 함께 표시한다. 모든 수입 실행이 측정되어도 전체 요청의 수집이 완전하다는 뜻은 아니다. 이 계약은 원천 측정의 진위를 증명하지 않으므로 입력 작성자가 호출·세션·배정 구간의 근거를 보존해야 한다. 기존 actor 사용량의 사후 갱신·정정 자동화는 제공하지 않는다.
+
+역할별 합계는 이 중복 검사를 거친 동일 작업들을 역할로 묶어 계산하며 작업 값을 다시 요청 합계에 더하지 않는다. 세부 항목은 입력 전체·캐시 입력·캐시 외 입력, 출력 전체·추론 출력·추론 외 출력, 총 토큰을 표시한다. 세부값이 없는 경우 차감값도 만들지 않는다. 역할의 세부 합계는 측정된 작업 모두가 해당 세부값을 제공할 때만 계산한다.
+
+파일 읽기·검색·수정·명령 실행별 토큰 귀속은 현재 수집하지 않는다. 해당 행은 `도구별 귀속 미수집`으로 표시한다. 도구 호출 횟수, 파일 크기나 응답 문자열의 길이를 토큰으로 바꾸지 않는다. 파일 내용이 모델 입력에 포함되는 것과 그 파일 읽기만의 실제 사용량이 측정되는 것은 구분해야 한다. 현재 작업별 표시는 수입 actor/배정 단위이며, 그 안의 개별 명령까지 사용량을 배분한 것이 아니다.
 
 `run_records.validate_records_dir`의 Git/프로젝트 밖·소유권·private directory 검사를 재사용한다. 새 디렉터리는 0700, DB는 0600이며 SQLite journal/sidecar도 검사한다. 기존 경로의 권한을 바꾸지 않는다. symlink 경로는 거부한다(시스템 `/tmp`, `/var` 별칭도 포함하므로 macOS에서는 실제 `/private/...` 경로를 명시). 공유·의심 경로는 사용하지 않는다. 이 검사는 같은 OS 사용자나 악성 동시 파일 교체에 대한 보안 격리가 아니다. DB·백업·내보낸 원문은 비공개로 취급한다.
 
@@ -28,8 +66,8 @@ JSON bundle: `schema_version: 1`, `requests: []`, `actors: []`, `events: []`, �
 
 - request: `title`, `status`, 가상 표시용 `sample: true`.
 - actor(실행): `request_id`, `parent_id`, `role`, `environment`, `provider`, `status`, `requested: {model, effort}`, `observed: {model, effort}`. 요청과 확인값은 독립적이며 미확인은 null이다. native 수입은 workflow.json을 읽지 않으며 확인된 모델로 채우지 않는다.
-- event: `request_id`, 선택 `actor_id`, `kind`, `detail`. kind는 user_request/decision/assignment/instruction/tool_call/tool_result/question/approval_request/approval_resolution/handoff/verification/explanation이다. 상세의 정규 JSON UTF-8 SHA256을 `detail_sha256`으로 저장한다. 원본 파일 전체 바이트의 해시와 다르다. 원문 지시는 detail에 보존하되 내부 추론은 제외한다. 사후 요약은 detail에 `recorded_retrospectively: true`와 작성시각·근거를 명시하고 당시 판단처럼 표현하지 않는다.
-- usage: `source`, `scope`, 비어 있지 않은 `measurements`가 있어야 measured이며 없거나 `measurements={}`이면 unavailable이다. 0으로 채우지 않고 요청/실행 간 합산하지 않는다. measurements는 비음수 수치다. 공급자의 누적/턴 범위 해석과 중복제거는 입력 작성자가 명시한다.
+- event: `request_id`, 선택 `actor_id`, `kind`, `detail`. kind는 user_request/decision/assignment/instruction/tool_call/tool_result/question/approval_request/approval_resolution/handoff/verification/explanation/completion이다. completion은 별도 마감 계약을 검증한다. 상세의 정규 JSON UTF-8 SHA256을 `detail_sha256`으로 저장한다. 원본 파일 전체 바이트의 해시와 다르다. 원문 지시는 detail에 보존하되 내부 추론은 제외한다. 사후 요약은 detail에 `recorded_retrospectively: true`와 작성시각·근거를 명시하고 당시 판단처럼 표현하지 않는다.
+- usage: actor에 연결한다. `source`, `scope`, 비어 있지 않은 `measurements`가 있어야 저장 시 measured이며 없거나 `measurements={}`이면 unavailable이다. measurements는 비음수 수치다. 저장 시 measured라는 사실만으로 배정 귀속을 인정하지 않으며, 화면 합산에는 위의 더 엄격한 계약을 적용한다. 공급자의 누적/턴 범위 해석과 측정 근거는 입력 작성자가 명시한다.
 - collections: snapshot source/sourceIdentity, native source, cursor/nextCursor/limited, 반환 개수·경고·원본 상태와 생략 블록 수를 보존한다. snapshot 범위는 별도이며 이벤트 전부를 수집했다는 증거가 아니다.
 
 수입 파일은 최대 8 MiB다. bundle 전체는 한 transaction이며 잘못된 ID/참조/내용 충돌은 전체 롤백한다. 같은 ID·같은 내용은 중복 수입해도 늘지 않는다. request/actor는 명시적 status만 갱신할 수 있다. completed/finished/failed/succeeded/cancelled 이후 running/pending/unknown snapshot은 이전 상태를 보존한다. tool_call은 같은 입력에 한해 state/exitCode/durationMs만 갱신한다. resolved는 승인·거절이 아니라 원본 상태 문자열이다. 완료 상태에서 진행 상태로 되돌리지 않는다. 나머지 동일 ID의 다른 내용(잘린 출력이 나중에 바뀐 경우 포함)은 충돌로 거부한다. 원본 정정은 별도 출처/ID를 사용해야 하며 지시·결과를 조용히 덮어쓰지 않는다. 서로 다른 terminal 상태 간 마지막 명시 수입값은 저장되며 collections에서 관측 근거를 확인한다.
@@ -50,6 +88,7 @@ JSON bundle: `schema_version: 1`, `requests: []`, `actors: []`, `events: []`, �
 
 ```sh
 python3 -m unittest discover -s tests -p 'test_trace_viewer.py' -v
+node --test tests/test_trace_frontend.cjs
 python3 -m unittest discover -s tests -v
 ```
 

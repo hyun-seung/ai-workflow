@@ -14,6 +14,7 @@ import stat
 import sys
 
 from prepare_handoff import private_destination
+from dispatch_usage import collect as collect_dispatch_usage, ROLE_IDS
 
 MAX_BYTES = 128 * 1024 * 1024
 MAX_LINE_BYTES = 8 * 1024 * 1024
@@ -94,8 +95,8 @@ def observed(payload):
     }
 
 
-def tokens(info):
-    values = info.get("total_token_usage") if isinstance(info, dict) else None
+def tokens(info, field="total_token_usage"):
+    values = info.get(field) if isinstance(info, dict) else None
     if not isinstance(values, dict) or not values:
         return None, "missing_usage"
     result = {k: values.get(k) for k in TOKENS}
@@ -151,19 +152,27 @@ def launch_requested(snapshot, target):
                 'path': str(path), 'sha256': hashlib.sha256(raw).hexdigest()})
 
 
-def inspect_session(project, session_file, session_id, task_id, dispatch_id, expected=None, worker_snapshot=None):
+def inspect_session(project, session_file, session_id, task_id, dispatch_id, expected=None, worker_snapshot=None,
+                    request_id=None, role=None):
     project = Path(project).expanduser().resolve(strict=True)
     if not project.is_dir():
         raise ValueError("project_not_directory")
     for value in (session_id, task_id, dispatch_id):
         identifier(value)
+    if (request_id is None) != (role is None):
+        raise ValueError('request_id_and_role_required_together')
+    if request_id is not None:
+        identifier(request_id)
+        if role not in ROLE_IDS:
+            raise ValueError('invalid_workflow_role')
     expected = expected or {}
     if set(expected) - set(FIELDS) or any(label(v) is None for v in expected.values()):
         raise ValueError("invalid_expectation")
     path = Path(session_file).expanduser().resolve(strict=True)
     if not path.is_file():
         raise ValueError("session_not_regular_file")
-    contexts, assignments, measurements = [], [], []
+    contexts, assignments, measurements, boundaries, user_lines = [], [], [], [], []
+    inherited = False
     meta = None
     digest = hashlib.sha256()
     size = 0
@@ -203,16 +212,26 @@ def inspect_session(project, session_file, session_id, task_id, dispatch_id, exp
                     raise ValueError("session_identity_or_project_mismatch")
                 meta = {"id": session_id, "source": "vscode", "originator": "orca_desktop",
                         "cli_version": label(p.get("cli_version")), "line": n}
+                inherited = any(v for k, v in p.items() if 'fork' in k or 'parent' in k)
             elif kind == "turn_context":
                 contexts.append({"line": n, "time": timestamp(row.get("timestamp")), "values": observed(p)})
             elif kind == "response_item":
+                if p.get('role') == 'user':
+                    routing = p.get('internal_chat_message_metadata_passthrough')
+                    routing = routing if isinstance(routing, dict) else {}
+                    user_lines.append(dict(line=n, turn_id=label(routing.get('turn_id'))))
                 binding = assignment(p)
                 if binding:
                     assignments.append(dict(binding, line=n, context_line=contexts[-1]["line"] if contexts else None))
             elif kind == "event_msg" and p.get("type") == "token_count":
                 values, issue = tokens(p.get("info"))
+                last_values, last_issue = tokens(p.get('info'), 'last_token_usage')
                 measurements.append({"line": n, "time": timestamp(row.get("timestamp")),
-                                     "values": values, "issue": issue})
+                                     "values": values, "issue": issue,
+                                     "last_values": last_values, "last_issue": last_issue})
+            elif kind == 'event_msg' and p.get('type') in {'task_started', 'task_complete', 'turn_aborted'}:
+                boundaries.append(dict(line=n, time=timestamp(row.get('timestamp')),
+                                       kind=p['type'], turn_id=label(p.get('turn_id'))))
         after = os.fstat(stream.fileno())
     current = path.stat()
     fingerprint = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
@@ -261,15 +280,19 @@ def inspect_session(project, session_file, session_id, task_id, dispatch_id, exp
              "tokens": last["values"] if last else dict.fromkeys(TOKENS), "issues": sorted(issues),
              "assignment_count_in_snapshot": len(assignments),
              "includes_coordinator_or_reviewers": False}
+    dispatch_usage = collect_dispatch_usage(session_id, target, assignments, boundaries, measurements,
+                                            user_lines, request_id, role, inherited)
     return {"schema_version": 1, "kind": "orca_codex_metadata", "recorded_at": datetime.now(timezone.utc).isoformat(),
             "environment": "orca", "provider": "codex", "project": str(project), "binding": target,
             "session": meta, "source": {"path": str(path), "sha256": digest.hexdigest(), "bytes": size,
                                          "lines": n, "assignment_end_exclusive": end},
             "requested": requested, "expected": {k: expected.get(k) for k in FIELDS}, "observed_contexts": selected,
             "verification": {"status": verdict, "checks": checks}, "usage": usage,
+            "request_context": {"request_id": request_id, "role": role, "source": 'explicit_coordinator_input'},
+            "dispatch_usage": dispatch_usage,
             "live_state_verified": False, "task_acceptance_evaluated": False,
-            "limitations": ["snapshot_only", "no_permission_grant", "no_task_token_attribution",
-                            "no_coordinator_or_reviewer_usage", "not_a_trace_bundle"]}
+            "limitations": ["snapshot_only", "no_permission_grant", "single_closed_native_turn_only",
+                            "no_coordinator_or_reviewer_usage", "no_tool_token_allocation", "not_a_trace_bundle"]}
 
 
 def write_record(record, output, project):
@@ -294,11 +317,13 @@ def main(argv=None):
     for field in FIELDS:
         parser.add_argument("--expect-" + field.replace("_", "-"))
     parser.add_argument('--worker-snapshot', help='Optional explicit Orca worker-show --full JSON receipt')
+    parser.add_argument('--request-id', help='Logical user request ID from the coordinator')
+    parser.add_argument('--role', choices=sorted(ROLE_IDS), help='Workflow role; requires --request-id')
     args = parser.parse_args(argv)
     expected = {k: getattr(args, "expect_" + k) for k in FIELDS if getattr(args, "expect_" + k) is not None}
     try:
         record = inspect_session(args.project, args.session_file, args.session_id, args.task_id, args.dispatch_id,
-                                 expected, args.worker_snapshot)
+                                 expected, args.worker_snapshot, args.request_id, args.role)
         output = write_record(record, args.output, args.project)
     except (OSError, ValueError) as error:
         # OS exception strings may contain private paths; do not print them.
@@ -306,7 +331,8 @@ def main(argv=None):
         print("Native record failed: " + message, file=sys.stderr)
         return 2
     print(json.dumps({"output": str(output), "verification": record["verification"]["status"],
-                      "usage_status": record["usage"]["status"], "usage_scope": record["usage"]["scope"]}))
+                      "usage_status": record["usage"]["status"], "usage_scope": record["usage"]["scope"],
+                      "dispatch_usage_status": record['dispatch_usage']['status']}))
     return 1 if record["verification"]["status"] in ("fail", "unverified") else 0
 
 

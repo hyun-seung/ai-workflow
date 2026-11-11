@@ -73,7 +73,8 @@ def validate(event):
 
 def normalize_orca(snapshot, scope, dispatch_id, observed_at):
     """Use only documented/observed fields; never infer identity from prompt text."""
-    if not isinstance(snapshot, dict) or snapshot.get("ok") is not True:
+    if (not isinstance(snapshot, dict) or snapshot.get("ok") is not True or
+            snapshot.get("error") is not None):
         raise ValueError("Orca did not confirm the observation")
     result = snapshot.get("result")
     if not isinstance(result, dict) or not isinstance(result.get("dispatch"), dict) or result["dispatch"].get("id") != dispatch_id:
@@ -83,11 +84,11 @@ def normalize_orca(snapshot, scope, dispatch_id, observed_at):
     if isinstance(observation, dict) and observation.get("exactWorker") is True:
         # Task completion alone does not prove exit; conflicting evidence is unknown.
         if "agentWait" in observation and observation["agentWait"] is not None:
-            if observation.get("status") != "exited" and isinstance(observation["agentWait"], dict) and observation["agentWait"]:
+            if observation.get("status") == "live" and isinstance(observation["agentWait"], dict) and observation["agentWait"]:
                 state = "pending"
         elif observation.get("status") == "exited":
             state = "ended"
-        elif "agentWait" in observation:
+        elif "agentWait" in observation and observation.get("status") == "live":
             state = "clear"
     return validate({"version": 1, "scope": scope, "dispatch_id": dispatch_id,
                      "observed_at": observed_at, "state": state, "kind": "unknown",
@@ -98,7 +99,7 @@ def probe_orca(cli, project, scope, dispatch_id):
     identifier(dispatch_id, "dispatch_id")
     # One read per invocation. No polling, inbox consumption, retries or permission changes.
     result = subprocess.run([cli, "orchestration", "worker-show", "--dispatch", dispatch_id,
-                             "--full", "--json"], cwd=project, capture_output=True,
+                             "--full", "--environment", "local", "--json"], cwd=project, capture_output=True,
                             text=True, timeout=15)
     if result.returncode or len(result.stdout.encode()) > MAX_INPUT:
         raise ValueError("Orca probe denied, failed or oversized; use the formal approval path")
@@ -139,6 +140,33 @@ def private_db(path, project):
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def chat_notice(result, *, live):
+    """Prepare text only; delivery and its ack remain the coordinator's actions."""
+    output = {"channel": "orca_chat", "deliver": False, "text": None,
+              "notice_id": None, "permission_decision": "unknown"}
+    if not live:
+        return dict(output, reason="historical_observation_not_live")
+    if result.get("action") not in {"deliver_pending_notice", "replay"}:
+        return dict(output, reason="no_current_notice")
+    notice = result.get("notice")
+    if not notice or result.get("state") != notice["state"]:
+        return dict(output, reason="no_current_notice")
+    dispatch = notice["dispatch_id"]
+    if notice["state"] == "pending":
+        text = f"작업 {dispatch}에서 사용자 입력 대기가 관측되었습니다. 해당 Orca worker의 승인·질문 창에서 내용을 확인해 주세요."
+        if notice["reason"] == "pending_identity_unavailable":
+            text += " 원본 요청 ID가 없어 이전 알림과 같은 요청인지 확인하지 못했습니다."
+    elif notice["state"] == "clear":
+        text = f"작업 {dispatch}의 사용자 입력 대기는 더 이상 관측되지 않습니다. 승인 또는 거부 결과를 뜻하지 않습니다."
+    elif notice["state"] == "ended":
+        text = f"작업 {dispatch}의 worker 종료를 확인했습니다. 승인 또는 거부 결과는 확인하지 않았습니다."
+    else:
+        return dict(output, reason="no_current_notice")
+    text += f" 관측 시각: {notice['observed_at']}"
+    return dict(output, deliver=True, text=text, notice_id=notice["id"],
+                reason="delivery_required_before_ack")
 
 
 class WaitStore:
@@ -239,6 +267,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--state-db", type=Path, required=True)
+    parser.add_argument("--chat", action="store_true", help="Prepare an Orca chat notice; never sends or acknowledges it")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("observe").add_argument("event", type=Path)
     orca = sub.add_parser("orca")
@@ -257,6 +286,8 @@ def main(argv=None):
         project = args.project.expanduser().resolve(strict=True)
         if not project.is_dir():
             raise ValueError("Project must be a directory")
+        if args.chat and args.command not in {"orca", "observe"}:
+            raise ValueError("Chat preparation requires an observation")
         event = None
         if args.command == "observe":
             event = validate(read_json(args.event))
@@ -279,6 +310,8 @@ def main(argv=None):
             result = store.ack(args.notice_id)
         else:
             result = {"pending": store.pending()}
+        if args.chat:
+            result["chat"] = chat_notice(result, live=args.command == "orca" and args.live)
         print(json.dumps(result, ensure_ascii=False))
         return 0
     except (OSError, ValueError, sqlite3.Error, subprocess.TimeoutExpired):

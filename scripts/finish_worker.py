@@ -11,14 +11,24 @@ from lifecycle_io import digest, exited, locked, now, orca, private_file, read_j
 from native_record import inspect_session, identifier
 from startup import executable_for
 from harness_policy import load as load_policy
+from dispatch_usage import ROLE_IDS
 
 
-def finish(cli, project, session_file, session_id, task_id, dispatch_id, directory, expected):
+def finish(cli, project, session_file, session_id, task_id, dispatch_id, directory, expected,
+           request_id=None, role=None):
     identifier(dispatch_id)
+    if (request_id is None) != (role is None):
+        raise ValueError('request_id_and_role_required_together')
+    if request_id is not None:
+        identifier(request_id)
+        if role not in ROLE_IDS:
+            raise ValueError('invalid_workflow_role')
     project = Path(project).resolve()
     # Persist exact input mapping. A second notification cannot silently rebind it.
     binding = dict(project=str(project), session_file=str(Path(session_file).resolve()),
                    session_id=session_id, task_id=task_id, dispatch_id=dispatch_id, expected=expected)
+    if request_id is not None:
+        binding.update(request_id=request_id, role=role)
     state_path = private_file(Path(directory) / (dispatch_id + '.completion.json'), project)
     with locked(state_path.with_suffix('.lock'), project):
         if state_path.exists():
@@ -37,11 +47,14 @@ def finish(cli, project, session_file, session_id, task_id, dispatch_id, directo
         # A crash before the completion receipt is safe to retry under the same lock.
         save(snapshot_path, snapshot, project)
         record = inspect_session(project, session_file, session_id, task_id, dispatch_id,
-                                 expected, snapshot_path)
+                                 expected, snapshot_path, request_id, role)
         save(record_path, record, project)
         state = dict(version=1, binding=binding, completed_at=now(), record_path=str(record_path),
                      record_digest=digest(record), verification=record['verification']['status'],
                      usage_status=record['usage']['status'], worker_exited=True,
+                     dispatch_usage_status=record['dispatch_usage']['status'],
+                     task_attributed=record['dispatch_usage']['task_attributed'],
+                     measurement_key=record['dispatch_usage']['measurement_key'],
                      task_acceptance_evaluated=False)
         save(state_path, state, project)
         return dict(state, replay=False)
@@ -55,6 +68,8 @@ def main(argv=None):
     parser.add_argument('--expect-reviewer')
     parser.add_argument('--expect-model')
     parser.add_argument('--expect-effort')
+    parser.add_argument('--request-id', help='Logical user request ID for usage attribution')
+    parser.add_argument('--role', choices=sorted(ROLE_IDS), help='Workflow role; requires --request-id')
     parser.add_argument('--cleanup-plan', help='Optional previously authorized, archive-verified cleanup plan')
     parser.add_argument('--config', help='Explicit harness policy override file')
     parser.add_argument('--policy-project', help='Existing policy project; defaults to --project. Use a retained coordinator project for temporary sources.')
@@ -70,9 +85,11 @@ def main(argv=None):
         expected = {k: getattr(args, 'expect_' + k) for k in ('reviewer', 'model', 'effort')
                     if getattr(args, 'expect_' + k) is not None}
         result = finish(cli, args.project, args.session_file, args.session_id, args.task_id,
-                        args.dispatch_id, args.directory, expected)
+                        args.dispatch_id, args.directory, expected, args.request_id, args.role)
         print('completion=' + ('replay' if result['replay'] else 'recorded') +
               ' verification=' + result['verification'])
+        print('dispatch_usage=' + result.get('dispatch_usage_status', 'not_collected_legacy') +
+              ' request_binding=' + ('attributed' if result.get('task_attributed') else 'unlinked_or_unmeasured'))
         if args.dispatch_directory:
             from dispatch_guard import Ledger
             ledger=Ledger(args.dispatch_directory,args.project,os.environ.get('ORCA_AGENT_SESSION_ID'))

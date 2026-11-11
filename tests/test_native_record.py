@@ -280,6 +280,18 @@ class NativeRecordTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertFalse(self.output.exists())
 
+    def test_cli_request_context_collects_dispatch_usage_separately(self):
+        self.rows.insert(1,event('event_msg',{'type':'task_started','turn_id':'native_one'}))
+        self.rows[-1]['payload']['info']['last_token_usage']=dict(self.rows[-1]['payload']['info']['total_token_usage'])
+        self.rows.append(event('event_msg',{'type':'task_complete','turn_id':'native_one'}));self.save()
+        result=self.cli('--request-id','request_example','--role','backend')
+        self.assertEqual(result.returncode,0,result.stderr)
+        saved=json.loads(self.output.read_text())
+        self.assertTrue(saved['dispatch_usage']['task_attributed'])
+        self.assertEqual(saved['dispatch_usage']['measurements']['total_tokens'],120)
+        self.assertFalse(saved['usage']['task_attributed'])
+        self.assertNotIn('input_tokens',result.stdout)
+
     def test_duplicate_meta_and_missing_context_rejected(self):
         original = copy.deepcopy(self.rows)
         for rows in ([self.meta] + original, [self.meta, assigned(), usage()]):

@@ -1,4 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import redirect_stdout
+import io
 import json
 import os
 from pathlib import Path
@@ -11,7 +13,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from approval_wait import WaitStore, normalize_orca, probe_orca, validate
+from approval_wait import WaitStore, chat_notice, main, normalize_orca, probe_orca, validate
 
 
 def event(second=1, **values):
@@ -166,6 +168,72 @@ class WaitTests(unittest.TestCase):
         failed = subprocess.run(base + ["orca", "--scope", "orca.test", "--dispatch", "dispatch-test", "--snapshot", str(native)], capture_output=True, text=True, timeout=10)
         self.assertEqual(failed.returncode, 2)
 
+    def test_chat_preparation_does_not_ack_and_retry_keeps_notice(self):
+        a = self.store.observe(event())
+        chat = chat_notice(a, live=True)
+        self.assertTrue(chat['deliver'])
+        self.assertEqual(chat['notice_id'], a['notice']['id'])
+        self.assertEqual(len(self.store.pending()), 1)
+        replay = chat_notice(self.store.observe(event()), live=True)
+        self.assertEqual(replay['notice_id'], chat['notice_id'])
+        self.store.ack(chat['notice_id'])
+        self.assertFalse(chat_notice(self.store.observe(event(2)), live=True)['deliver'])
+
+    def test_chat_does_not_present_history_or_unknown_as_current_wait(self):
+        a = self.store.observe(event())
+        self.assertFalse(chat_notice(a, live=False)['deliver'])
+        unknown = self.store.observe(event(2, state='unknown', request_id=None, revision=None))
+        rendered = chat_notice(unknown, live=True)
+        self.assertFalse(rendered['deliver'])
+        self.assertIsNone(rendered['text'])
+        stale = self.store.observe(event())
+        self.assertFalse(chat_notice(stale, live=True)['deliver'])
+        self.assertEqual(self.store.pending()[0]['notice'], a['notice'])
+
+    def test_chat_resolution_is_not_permission_decision(self):
+        for state in ('clear', 'ended'):
+            with self.subTest(state=state):
+                # Begin a wait before the terminal resolution on a separate dispatch.
+                value = event(1)
+                value['dispatch_id'] = 'dispatch-' + state
+                self.store.observe(value)
+                value.update(observed_at='2026-01-01T00:00:02+00:00', state=state, request_id=None, revision=None)
+                chat = chat_notice(self.store.observe(value), live=True)
+                self.assertTrue(chat['deliver'])
+                self.assertEqual(chat['permission_decision'], 'unknown')
+                self.assertIn('승인 또는 거부 결과', chat['text'])
+
+    def test_native_chat_never_leaks_prompt_or_invents_source_identity(self):
+        source = snapshot(status='live', exactWorker=True, agentWait={
+            'source':'hook', 'reason':'agent-interactive-prompt',
+            'requestId':'unverified-id', 'prompt':'SECRET_COMMAND_CONTENT'})
+        value = normalize_orca(source, 'orca.test', 'dispatch-test', '2026-01-01T00:00:01Z')
+        self.assertIsNone(value['request_id'])
+        a = self.store.observe(value)
+        chat = chat_notice(a, live=True)
+        self.assertIn('원본 요청 ID가 없어', chat['text'])
+        self.assertNotIn('SECRET_COMMAND_CONTENT', json.dumps(chat))
+        self.store.ack(chat['notice_id'])
+        value['observed_at']='2026-01-01T00:00:02Z'
+        self.assertTrue(chat_notice(self.store.observe(value), live=True)['deliver'])
+
+    def test_chat_cli_is_one_probe_without_delivery_or_ack(self):
+        args=['--project',str(self.project),'--state-db',str(self.path),'--chat',
+              'orca','--scope','orca.test','--dispatch','dispatch-test','--live','--orca-cli','/chosen/orca']
+        output=io.StringIO()
+        with patch.dict(os.environ, {'ORCA_ENVIRONMENT':'','ORCA_PAIRING_CODE':''}), \
+                patch('approval_wait.probe_orca', return_value=event()) as probe, redirect_stdout(output):
+            self.assertEqual(main(args),0)
+        self.assertEqual(probe.call_count,1)
+        self.assertTrue(json.loads(output.getvalue())['chat']['deliver'])
+        self.assertEqual(len(self.store.pending()),1)
+        source=self.root/'snapshot.json'
+        source.write_text(json.dumps(snapshot(status='live',exactWorker=True,agentWait={'source':'hook'})))
+        output=io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(main(args[:-3]+['--snapshot',str(source),'--observed-at','2026-01-01T00:00:03Z']),0)
+        self.assertFalse(json.loads(output.getvalue())['chat']['deliver'])
+
 
 class NativeTests(unittest.TestCase):
     def normalize(self, value):
@@ -173,8 +241,11 @@ class NativeTests(unittest.TestCase):
 
     def test_absent_null_pending_and_exact_exit(self):
         for observation, state in [({}, "unknown"), ({"exactWorker": True}, "unknown"),
-                ({"exactWorker": True, "agentWait": None}, "clear"),
-                ({"exactWorker": True, "agentWait": {"evidence": "synthetic-only"}}, "pending"),
+                ({"status":"live", "exactWorker": True, "agentWait": None}, "clear"),
+                ({"status":"live", "exactWorker": True, "agentWait": {"evidence": "synthetic-only"}}, "pending"),
+                ({"exactWorker": True, "agentWait": None}, "unknown"),
+                ({"status":"unverifiable", "exactWorker": True, "agentWait": None}, "unknown"),
+                ({"status":"unverifiable", "exactWorker": True, "agentWait": {"source":"hook"}}, "unknown"),
                 ({"exactWorker": True, "status": "exited"}, "ended"),
                 ({"status": "exited", "exactWorker": False}, "unknown"),
                 ({"exactWorker": True, "status": "exited", "agentWait": {"evidence": "conflicting"}}, "unknown"),
@@ -185,17 +256,17 @@ class NativeTests(unittest.TestCase):
                 self.assertIsNone(value["request_id"])
 
     def test_unexpected_identity_and_failed_snapshot_rejected(self):
-        for value in [{"ok": False}, {"ok": True, "result": {"dispatch": None}},
+        for value in [{"ok": False}, dict(snapshot(exactWorker=True),error={'code':'unexpected'}), {"ok": True, "result": {"dispatch": None}},
                       {"ok": True, "result": {"dispatch": {"id": "other"}}}]:
             with self.assertRaises(ValueError):self.normalize(value)
 
     def test_live_probe_is_one_read_only_call_with_no_fallback(self):
-        response = subprocess.CompletedProcess([], 0, json.dumps(snapshot(exactWorker=True, agentWait=None)), "")
+        response = subprocess.CompletedProcess([], 0, json.dumps(snapshot(status='live',exactWorker=True, agentWait=None)), "")
         with patch("approval_wait.subprocess.run", return_value=response) as run:
             result = probe_orca("/chosen/orca", ROOT, "orca.local", "dispatch-test")
             self.assertEqual(result["state"], "clear")
             self.assertEqual(run.call_count, 1)
-            self.assertEqual(run.call_args.args[0], ["/chosen/orca", "orchestration", "worker-show", "--dispatch", "dispatch-test", "--full", "--json"])
+            self.assertEqual(run.call_args.args[0], ["/chosen/orca", "orchestration", "worker-show", "--dispatch", "dispatch-test", "--full", "--environment", "local", "--json"])
         with patch("approval_wait.subprocess.run", return_value=subprocess.CompletedProcess([], 1, "", "SECRET")) as run:
             with self.assertRaises(ValueError):probe_orca("/chosen/orca", ROOT, "orca.local", "dispatch-test")
             self.assertEqual(run.call_count, 1)

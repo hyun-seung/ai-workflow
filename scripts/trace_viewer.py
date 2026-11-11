@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 from trace_store import Store, load_bundle, load_file, orca_bundle, encoded
+from trace_closeout import close_request
 
 ASSETS = Path(__file__).with_name('trace_web')
 
@@ -64,6 +65,7 @@ def main():
     p.add_argument('--db', required=True)
     sub = p.add_subparsers(dest='command',required=True)
     b = sub.add_parser('import'); b.add_argument('file')
+    c = sub.add_parser('close'); c.add_argument('file', help='Explicit final result manifest with artifact paths')
     o = sub.add_parser('import-orca'); o.add_argument('file'); o.add_argument('--request-id',required=True); o.add_argument('--title',required=True); o.add_argument('--role'); o.add_argument('--parent-id')
     l = sub.add_parser('list'); l.add_argument('--q',default=''); l.add_argument('--limit',type=int,default=100)
     e = sub.add_parser('export'); e.add_argument('--request-id',required=True); e.add_argument('--format', choices=('json','jsonl'), default='json')
@@ -82,6 +84,7 @@ def main():
         store = Store(args.db,readonly=args.command in ('list','export'))
         try:
             if args.command == 'import': result = store.import_bundle(load_bundle(args.file))
+            elif args.command == 'close': result = close_request(store, json.loads(load_file(args.file)))
             elif args.command == 'import-orca': result = store.import_bundle(orca_bundle(json.loads(load_file(args.file)),args.request_id,args.title,args.role,args.parent_id))
             elif args.command == 'list': result = store.requests(args.q,args.limit)
             else:

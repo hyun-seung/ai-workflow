@@ -18,15 +18,21 @@ python3 scripts/finish_worker.py \
   --session-file /path/to/private/session.jsonl \
   --session-id session_example \
   --task-id task_example --dispatch-id ctx_example \
+  --request-id request_example --role backend \
   --expect-reviewer auto_review \
   --directory /path/to/private/completions
 ```
 
 - 한 번의 `worker-show --full --json`으로 task/dispatch·로컬 host·종료 상태를 확인한다. `worker_done` 메시지나 업무 성공만으로 프로세스 종료를 추정하지 않는다. 미종료·불명 상태면 종료 코드 2로 멈추며 반복 조회하지 않는다.
 - 원본 snapshot, 메타데이터, 완료 영수증을 비공개 디렉터리에 저장한다. 잠금으로 동시 처리를 막고 재시작 후 같은 영수증을 재사용한다. 원래 입력 연결이나 저장된 메타데이터가 바뀌면 충돌로 멈춘다.
+- 새 수집은 `--request-id`와 공통 `--role`을 함께 명시한다. 메타데이터의 `dispatch_usage`와 영수증의 `dispatch_usage_status/task_attributed/measurement_key`를 확인한다. 같은 native 턴에 여러 논리 요청을 배정하지 않는다. 자세한 구간 조건은 [배정별 수집](native-record.md#배정-구간의-사용량)을 따른다.
 - 승인 모드/모델의 불일치·미확인은 결과를 보존하고 종료 코드 1을 반환한다. 미측정 사용량은 별도 상태로 유지한다. 기대값이 없는 검사는 `not_requested`이며 업무 AC 통과가 아니다.
 - 형식 오류·권한·조회 실패는 종료 코드 2다. 같은 명령의 정식 권한 절차를 사용하며 설정 변경이나 다른 CLI로 우회하지 않는다.
 - 소스·로그 등의 최종 보관과 업무 AC 판정은 조율자의 책임이다. 완료 기록 자체는 결과의 기능 검증을 대신하지 않는다.
+
+사용량 귀속이 불가능해도 누적 참고값과 실패 이유는 남긴다. 기능 검증·프로필 검사와 별개이며, 자동으로 0 또는 요청 합계로 바꾸지 않는다. DB·대시보드 수입은 아직 이 명령에 연결되지 않았다.
+
+기존 영수증은 새 버전에서 자동 변경하지 않는다. 예전 누적 기록만 있는 영수증은 `not_collected_legacy`로 안내하고 replay한다. 요청/역할을 바꿔 덮어쓰면 충돌한다. 보존된 종료 작업을 새 수집기로 재관측하려면 기존 기록을 유지한 별도 비공개 `--directory`를 명시하고 새 근거를 확인한다. 같은 구간을 여러 번 관측한 결과는 같은 측정 키이므로 합산하지 않는다.
 
 ## 정리 계획 만들기
 

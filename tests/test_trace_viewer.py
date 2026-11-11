@@ -141,6 +141,32 @@ class TraceTests(unittest.TestCase):
         usage=self.s.request('sample-request')['actors'][0]['usage']
         self.assertEqual(usage['status'],'unavailable')
         self.assertNotIn('total_tokens',usage)
+    def test_additive_role_labels_keep_source_actor_and_validate_references(self):
+        self.s.import_bundle(self.bundle)
+        before=self.s.request('sample-request')['actors']
+        event=dict(self.bundle['events'][0],id='role-labels',kind='assignment',detail={
+            'actor_roles':[{'actor_id':'sample-worker','role_id':'backend','task_title':'가상 작업'}]})
+        bundle=dict(schema_version=1,requests=[],actors=[],events=[event])
+        self.s.import_bundle(bundle);self.s.import_bundle(bundle)
+        self.assertEqual(self.s.request('sample-request')['actors'],before)
+        for patch in [dict(actor_id='absent'),dict(role_id='arbitrary'),dict(task_title=' ')]:
+            bad=copy.deepcopy(bundle);bad['events'][0]['id']='bad-label'
+            bad['events'][0]['detail']['actor_roles'][0].update(patch)
+            with self.assertRaises(ValueError):self.s.import_bundle(bad)
+        self.assertEqual(len(self.s.request('sample-request')['events']),5)
+    def test_newest_requests_before_limit_unknowns_use_registration_order(self):
+        base = self.bundle['requests'][0]
+        rows = [dict(base, id='z-older', time='2026-01-01T00:00:00Z'),
+                dict(base, id='a-newer', time='2026-01-02T00:00:00Z'),
+                dict(base, id='unknown-first', time=None), dict(base, id='unknown-last', time=None)]
+        self.s.import_bundle(dict(schema_version=1, requests=rows, actors=[], events=[]))
+        self.assertEqual([r['id'] for r in self.s.requests('', 2)], ['a-newer','z-older'])
+        self.assertEqual([r['id'] for r in self.s.requests()][2:], ['unknown-last','unknown-first'])
+        # Re-importing identical records must not make an old request newer.
+        self.s.import_bundle(dict(schema_version=1, requests=[rows[2]], actors=[], events=[]))
+        self.assertEqual([r['id'] for r in self.s.requests()][2:], ['unknown-last','unknown-first'])
+        self.s.import_bundle(dict(schema_version=1, requests=[dict(rows[2],status='completed')], actors=[], events=[]))
+        self.assertEqual([r['id'] for r in self.s.requests()][2:], ['unknown-last','unknown-first'])
     def test_http(self):
         self.s.import_bundle(self.bundle)
         server=HTTPServer(('127.0.0.1',0),handler_for(self.path));thread=threading.Thread(target=server.serve_forever);thread.start()

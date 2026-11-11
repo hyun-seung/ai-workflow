@@ -10,11 +10,13 @@ import sqlite3
 import stat
 from datetime import datetime, timezone
 from run_records import validate_records_dir
+from trace_closeout import closeout_view, validate_detail
 
 MAX_BYTES = 8 * 1024 * 1024
 KINDS = {'user_request', 'decision', 'assignment', 'instruction', 'tool_call', 'tool_result',
-         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation'}
+         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion'}
 FORBIDDEN = {'analysis', 'reasoning', 'thinking', 'chain_of_thought'}
+ROLE_IDS = {'coordinator', 'architect', 'designer', 'backend', 'frontend', 'verifier'}
 
 
 def clean(value):
@@ -148,6 +150,22 @@ class Store:
                     if row.get('kind') not in KINDS: raise ValueError('Unsupported event kind')
                     if row.get('actor_id') is not None: ident(row['actor_id'])
                     if 'detail' not in row: raise ValueError('Event detail missing')
+                    if row['kind'] == 'assignment' and isinstance(row['detail'], dict) and 'actor_roles' in row['detail']:
+                        labels = row['detail']['actor_roles']
+                        if not isinstance(labels, list) or not 1 <= len(labels) <= 200:
+                            raise ValueError('Invalid actor role labels')
+                        seen = set()
+                        for label in labels:
+                            if not isinstance(label, dict) or label.get('role_id') not in ROLE_IDS:
+                                raise ValueError('Invalid workflow role ID')
+                            aid = ident(label.get('actor_id'))
+                            if aid in seen or not isinstance(label.get('task_title'), str) or not 1 <= len(label['task_title'].strip()) <= 200:
+                                raise ValueError('Invalid actor role label')
+                            seen.add(aid)
+                    if row['kind'] == 'completion':
+                        if row['source'] != 'trace.closeout' or row['time'] is None or not row.get('actor_id'):
+                            raise ValueError('Invalid closeout event source/time/coordinator')
+                        validate_detail(row['detail'])
                     row['detail_sha256'] = digest(row['detail'])
                 rows.append((kind, row['id'], rid, row))
         with self.db:
@@ -168,13 +186,29 @@ class Store:
                             continue
                     elif previous.get('status') in ('completed','finished','failed','succeeded','cancelled') and row.get('status') in ('running','pending','unknown'):
                         continue
-                self.db.execute('INSERT OR REPLACE INTO records VALUES(?,?,?,?)', (kind,key,rid,encoded(row)))
+                self.db.execute('INSERT INTO records VALUES(?,?,?,?) ON CONFLICT(kind,id) DO UPDATE '
+                                'SET request_id=excluded.request_id, body=excluded.body', (kind,key,rid,encoded(row)))
             for kind,key,rid,row in rows:
                 if not self.db.execute("SELECT 1 FROM records WHERE kind='request' AND id=?",(rid,)).fetchone():
                     raise ValueError('Unknown request '+rid)
                 ref = row.get('actor_id') if kind == 'event' else row.get('parent_id') if kind == 'actor' else None
                 if ref and not self.db.execute("SELECT 1 FROM records WHERE kind='actor' AND id=? AND request_id=?",(ref,rid)).fetchone():
                     raise ValueError('Unknown actor/parent '+ref)
+                if kind == 'event' and row.get('kind') == 'assignment' and isinstance(row.get('detail'), dict):
+                    for label in row['detail'].get('actor_roles', []):
+                        if not self.db.execute("SELECT 1 FROM records WHERE kind='actor' AND id=? AND request_id=?", (label['actor_id'], rid)).fetchone():
+                            raise ValueError('Unknown actor role reference')
+                if kind == 'event' and row.get('kind') == 'completion':
+                    coordinator = json.loads(self.db.execute(
+                        "SELECT body FROM records WHERE kind='actor' AND id=? AND request_id=?",
+                        (row['actor_id'], rid)).fetchone()[0])
+                    if coordinator.get('parent_id') is not None:
+                        raise ValueError('Closeout coordinator must be a root actor')
+                    for assignment in row['detail']['assignments']:
+                        if assignment['actor_id'] == row['actor_id']:
+                            raise ValueError('Closeout coordinator cannot also be an assignment')
+                        if not self.db.execute("SELECT 1 FROM records WHERE kind='actor' AND id=? AND request_id=?",(assignment['actor_id'],rid)).fetchone():
+                            raise ValueError('Unknown closeout actor')
             for collection in bundle.get('collections', []):
                 rid = ident(collection['request_id'])
                 if not all(isinstance(collection.get(k), str) and collection[k] for k in ('source', 'source_id', 'completeness')):
@@ -189,7 +223,12 @@ class Store:
     def requests(self, q='', limit=100):
         if len(q)>200 or not 1<=limit<=200: raise ValueError('Invalid search/limit')
         # Literal substring search, no SQL interpolation or wildcard semantics.
-        return [json.loads(x[0]) for x in self.db.execute("SELECT body FROM records WHERE kind='request' AND instr(lower(body),lower(?))>0 ORDER BY id LIMIT ?",(q,limit))]
+        # Unknown receipt times are not invented from snapshot activity. Keep
+        # them after known times, newest local registration first within ties.
+        return [json.loads(x[0]) for x in self.db.execute(
+            "SELECT body FROM records WHERE kind='request' AND instr(lower(body),lower(?))>0 "
+            "ORDER BY json_extract(body,'$.time') IS NULL, "
+            "julianday(json_extract(body,'$.time')) DESC, rowid DESC LIMIT ?", (q,limit))]
 
     def request(self, rid):
         ident(rid)
@@ -199,6 +238,7 @@ class Store:
         if not result['requests']: return None
         result['events'].sort(key=lambda e:(e['time'] is None,e['time'] or '',e['id']))
         result['collections'] = [json.loads(r[0]) for r in self.db.execute('SELECT body FROM collections WHERE request_id=? ORDER BY rowid',(rid,))]
+        result['closeout'] = closeout_view(result)
         return result
 
 

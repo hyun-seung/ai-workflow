@@ -14,7 +14,7 @@ python3 scripts/approval_wait.py --project /path/to/project \
   orca --scope orca.local --dispatch ctx_example --live --orca-cli /path/to/orca
 ```
 
-명시 CLI가 없으면 시작 가이드의 CLI 선택 규칙을 재사용한다. 실제 호출은 `orchestration worker-show --dispatch ... --full --json` 한 번이며 timeout은 15초다. 조회가 거부되면 정상 승인 경로를 이용한다. 다른 실행 파일·호스트·직접 Codex 호출로 우회하지 않는다. native inbox/check를 소비하지 않는다.
+명시 CLI가 없으면 시작 가이드의 CLI 선택 규칙을 재사용한다. 실제 호출은 `orchestration worker-show --dispatch ... --full --environment local --json` 한 번이며 timeout은 15초다. 조회가 거부되면 정상 승인 경로를 이용한다. 다른 실행 파일·호스트·직접 Codex 호출로 우회하지 않는다. native inbox/check를 소비하지 않는다.
 
 `--snapshot /private/path/worker-show.json --observed-at <실제-수집시각>`으로 보존한 관측을 처리할 수도 있다. 수입 시각을 원본 관측 시각으로 쓰지 않는다. snapshot 재생은 과거 근거의 확인이며 현재 상태의 live 증명이 아니다.
 
@@ -32,9 +32,31 @@ python3 scripts/approval_wait.py --project /path/to/project \
 
 `state`는 pending/clear/unknown/ended다. 모든 결과의 `permission_decision`은 unknown이며, clear나 ack를 허용·거부 판정으로 바꾸지 않는다. 종료 task 정보만으로 프로세스가 끝났다고 판단하지 않는다.
 
-Orca adapter는 dispatch 일치와 `observation.exactWorker`를 확인한다. `agentWait` 부재는 unknown, 명시 null은 clear, 비어 있지 않은 객체는 pending이며 정확한 exited 관측은 ended로 처리한다. malformed 값이나 exited와 pending의 상충은 unknown이다. 조회 실패는 오류이며 clear로 저장하지 않는다. 필드 부재/null의 의미는 [Orca 공식 호환성 문서](https://github.com/stablyai/orca/blob/main/docs/reference/remote-wire-compatibility.md)도 구분한다.
+Orca adapter는 dispatch 일치와 `observation.exactWorker`를 확인한다. 정확한 live 관측에서 `agentWait`가 명시 null이면 clear, 비어 있지 않은 객체면 pending이다. 정확한 exited 관측은 ended로 처리한다. `agentWait` 부재·liveness 미확인·잘못된 값·exited와 pending의 상충은 unknown이다. 조회 실패나 성공과 error가 섞인 응답은 오류이며 clear로 저장하지 않는다. 필드 부재/null의 의미는 설치 CLI의 `orchestration worker-show --help`에 명시되어 있다. [공식 CLI 안내](https://www.onorca.dev/docs/cli/overview)에 따라 설치 버전의 계약을 우선 확인한다.
 
 **현재 확인한 CLI 계약에는 대기의 안정적인 원본 요청 ID·내용 버전 규약이 없다.** 따라서 native pending을 같은 명령·같은 dispatch라는 이유만으로 자동 억제하지 않는다. `pending_identity_unavailable`로 남겨 실제 요청을 확인하게 한다. native의 종료된 worker·대기 해소·확인 불가 처리는 연결됐고, pending 원본 식별자 연결은 후속이다. 이 제한 때문에 현재 도구만으로 Orca의 모든 반복 알림이 없어지지는 않는다.
+
+2026-11-11 설치된 Orca 1.4.256의 `agent-context`·`worker-show --help`와 배포본 CLI handler를 대조했다. 이 공개 경로에서 원본 승인 요청 ID와 변경 버전의 규약을 확인하지 못했다. `msg_stop_*` 등의 알림 메시지 ID, 명령 해시, 앱 내부의 비공개 prompt key를 원본 승인 ID로 대체하지 않는다. live pending의 ID 연결 검증은 이 계약이 확보될 때까지 보류한다.
+
+## Orca 대화용 안내 준비
+
+사용자가 Orca 대화 수신을 선택한 경우 전역 옵션 `--chat`을 추가한다.
+
+```sh
+python3 scripts/approval_wait.py --project /path/to/project \
+  --state-db /private/path/approval-waits/state.sqlite3 --chat \
+  orca --scope orca.local --dispatch ctx_example --live --orca-cli /path/to/orca
+```
+
+기존 JSON에 `chat` 필드가 추가된다. `chat.deliver=true`인 경우에만 조율자가 `chat.text`를 현재 Orca 대화에 전달한다. 전달한 뒤 기존 `ack <chat.notice_id>` 명령으로 확인을 남긴다. 안내 준비·화면 미리보기·전송 실패에는 ack하지 않는다. 재처리에서 같은 미전달 notice ID가 반환될 수 있으므로 전달 이력을 확인한다. chat 옵션 자체는 메시지를 보내거나 승인 버튼을 누르지 않는다.
+
+- 대기 안내에는 대상 dispatch·관측 시각·승인/질문 창을 확인할 행동을 담는다. 명령·질문 원문·인증 정보는 넣지 않는다.
+- 대기 해소와 worker 종료는 별도 문구로 표시하며 승인/거부 결과로 해석하지 않는다.
+- unknown·오래된 관측·상충·이미 전달한 동일 요청에는 현재 승인 안내를 준비하지 않는다. 확인 불가 자체의 조사·보고는 조율자가 별도로 처리한다.
+- `--snapshot`이나 공통 `observe`는 과거 관측일 수 있으므로 `--chat`을 붙여도 전달 후보로 만들지 않는다. 새 live 조회가 필요하다.
+- 원본 ID 없는 native pending은 새 live 관측마다 안내 후보가 될 수 있다. 원본 알림 빈도나 중복을 제어했다고 주장하지 않는다.
+
+가상 pending으로 준비→미전달 재시도→ack→억제, 변경·해소·재등장, 원문 미포함과 unknown/과거 관측의 전송 차단을 검사했다. 실제 native에서는 이미 종료된 정확한 worker를 단발성 조회해 ended·새 안내 없음만 확인했다. 실제 pending·Orca 화면의 승인 버튼·외부 전송은 검증하지 않았다. 상시 watcher나 새 시험 에이전트는 만들지 않았다.
 
 ## 원본 요청 ID가 있는 관측
 

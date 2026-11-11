@@ -253,6 +253,34 @@ class LifecycleTests(unittest.TestCase):
             shutil.rmtree(self.source)
             self.assertTrue(self.completion()['replay'])
 
+    def test_request_usage_saved_once_and_binding_cannot_change(self):
+        self.session=self.root/'session.jsonl'
+        def counter():
+            row=usage();row['payload']['info']['last_token_usage']=dict(row['payload']['info']['total_token_usage']);return row
+        rows=[event('session_meta',{'id':'session_example','cwd':str(self.source),'source':'vscode','originator':'orca_desktop'}),
+              event('event_msg',{'type':'task_started','turn_id':'native_one'}),context(),assigned(),counter(),
+              event('event_msg',{'type':'task_complete','turn_id':'native_one'})]
+        self.session.write_text(''.join(json.dumps(x)+'\n' for x in rows))
+        with patch.object(fw,'orca',return_value=snapshot()) as call:
+            one=self.completion(request_id='request_one',role='backend')
+            record=json.loads(Path(one['record_path']).read_text())
+            self.assertEqual(record['dispatch_usage']['measurements']['total_tokens'],120)
+            self.assertEqual(record['dispatch_usage']['request_id'],'request_one')
+            self.assertTrue(one['task_attributed']);self.assertEqual(one['dispatch_usage_status'],'measured')
+            saved=Path(one['record_path']).read_bytes();self.session.unlink()
+            two=fw.finish(cli='orca-example',directory=self.root/'private',**one['binding'])
+            self.assertTrue(two['replay']);self.assertEqual(one['measurement_key'],two['measurement_key'])
+            self.assertFalse(self.session.exists())
+            self.assertEqual(Path(one['record_path']).read_bytes(),saved);self.assertEqual(call.call_count,1)
+            for changes in [dict(request_id='request_two',role='backend'),dict(request_id='request_one',role='frontend')]:
+                with self.assertRaisesRegex(ValueError,'binding_conflict'):self.completion(**changes)
+
+    def test_unpaired_request_context_fails_before_native_call(self):
+        with patch.object(fw,'orca') as call:
+            for change in [dict(request_id='request_one'),dict(role='backend'),dict(request_id='request_one',role='other')]:
+                with self.assertRaises(ValueError):self.completion(**change)
+            call.assert_not_called()
+
     def test_completion_binding_change_or_metadata_tamper_not_replayed(self):
         with patch.object(fw,'orca',return_value=snapshot()):
             one=self.completion()
