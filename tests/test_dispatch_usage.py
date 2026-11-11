@@ -144,6 +144,26 @@ class DispatchUsageTests(unittest.TestCase):
         message['payload']['internal_chat_message_metadata_passthrough']['turn_id']='other'
         self.assertEqual(self.inspect()['dispatch_usage']['issues'],['unbound_user_message'])
 
+    def test_malformed_routing_on_initial_or_mid_turn_message_is_not_absence(self):
+        key='internal_chat_message_metadata_passthrough'
+        original=copy.deepcopy(self.rows)
+        for routing in [None,123,'routing',[],{'turn_id':None},{'turn_id':123},
+                        {'turn_id':'invalid turn'},{'turn_id':'invalid/turn'}]:
+            for initial in [True,False]:
+                self.rows=copy.deepcopy(original)
+                if initial:
+                    self.rows[3]['payload'][key]=routing
+                else:
+                    self.rows.insert(-1,event('response_item',dict(role='user',content=[],**{key:routing})))
+                with self.subTest(routing=routing,initial=initial):
+                    u=self.inspect()['dispatch_usage']
+                    self.assertEqual(u['issues'],['invalid_user_message_routing'])
+                    self.assertFalse(u['task_attributed']);self.assertEqual(u['measurements'],{})
+        self.rows=copy.deepcopy(original)
+        self.assertEqual(self.inspect()['dispatch_usage']['status'],'measured')
+        self.rows[3]['payload'][key]={}
+        self.assertEqual(self.inspect()['dispatch_usage']['status'],'measured')
+
     def test_multiple_dispatches_in_one_native_turn_are_ambiguous(self):
         self.rows.insert(-1, context()); self.rows.insert(-1, assigned('task_two', 'ctx_two'))
         self.assertEqual(self.inspect()['dispatch_usage']['issues'], ['ambiguous_turn_assignment'])

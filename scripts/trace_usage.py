@@ -42,27 +42,35 @@ def validate_usage(usage):
     expected = {'version', 'status', 'scope', 'task_attributed', 'request_id', 'role', 'task_id',
                 'dispatch_id', 'actor_id', 'session_id', 'source', 'measurement_key', 'measurements',
                 'issues', 'interval', 'baseline', 'final', 'increments', 'request_binding'}
+    turn = isinstance(usage, dict) and type(usage.get('version')) is int and usage['version'] == 2
+    if turn:
+        expected.add('message_sha256')
     if not isinstance(usage, dict) or set(usage) != expected:
         raise ValueError('Unsupported dispatch usage record')
     u = usage
-    if (type(u['version']) is not int or u['version'] != 1 or u['status'] != 'measured' or
-            u['scope'] != 'dispatch' or u['task_attributed'] is not True or u['issues'] != [] or
-            u['source'] != SOURCE or u['request_binding'] != 'explicit' or
+    if (type(u['version']) is not int or u['version'] != (2 if turn else 1) or u['status'] != 'measured' or
+            u['scope'] != ('native_turn' if turn else 'dispatch') or u['task_attributed'] is not True or u['issues'] != [] or
+            u['source'] != SOURCE or u['request_binding'] != ('explicit_native_turn' if turn else 'explicit') or
             not isinstance(u['role'], str) or u['role'] not in ROLE_IDS):
         raise ValueError('Usage must be measured and explicitly attributed')
-    for key in ('request_id', 'task_id', 'dispatch_id', 'actor_id', 'session_id'):
+    for key in ('request_id', 'task_id', 'actor_id', 'session_id'):
         ident(u[key])
-    if u['actor_id'] != u['dispatch_id']:
+    if turn:
+        if (u['dispatch_id'] is not None or u['role'] != 'coordinator' or not isinstance(u['message_sha256'], str) or
+                not re.fullmatch('[0-9a-f]{64}', u['message_sha256'])):
+            raise ValueError('Invalid coordinator turn attribution')
+    elif ident(u['dispatch_id']) != u['actor_id']:
         raise ValueError('Native usage actor must match dispatch')
     interval = u['interval']
-    if not isinstance(interval, dict) or set(interval) != {'native_turn_id', 'start_line', 'assignment_line', 'end_line', 'started_at', 'finished_at'}:
+    binding = 'binding_line' if turn else 'assignment_line'
+    if not isinstance(interval, dict) or set(interval) != {'native_turn_id', 'start_line', binding, 'end_line', 'started_at', 'finished_at'}:
         raise ValueError('Invalid usage interval')
     ident(interval['native_turn_id'])
     if u['measurement_key'] != 'codex.session:' + u['session_id'] + ':turn:' + interval['native_turn_id']:
         raise ValueError('Usage key does not match physical interval')
-    for key in ('start_line', 'assignment_line', 'end_line'):
+    for key in ('start_line', binding, 'end_line'):
         integer(interval[key], 1)
-    if not interval['start_line'] < interval['assignment_line'] < interval['end_line']:
+    if not interval['start_line'] < interval[binding] < interval['end_line']:
         raise ValueError('Invalid usage interval order')
     for key in ('started_at', 'finished_at'): stamp(interval[key])
     if interval['started_at'] and interval['finished_at'] and stamp(interval['started_at']) > stamp(interval['finished_at']):
@@ -82,7 +90,7 @@ def validate_usage(usage):
             raise ValueError('Invalid prior usage baseline')
     else:
         raise ValueError('Unsupported usage baseline')
-    if not interval['assignment_line'] < integer(final['line'], 1) < interval['end_line']:
+    if not interval[binding] < integer(final['line'], 1) < interval['end_line']:
         raise ValueError('Invalid final usage line')
     for key in FIELDS:
         a, b, measured = baseline['values'][key], final['values'][key], u['measurements'][key]
@@ -90,7 +98,7 @@ def validate_usage(usage):
             raise ValueError('Usage does not match counter endpoints')
     if not isinstance(u['increments'], list) or len(u['increments']) > 100000:
         raise ValueError('Invalid usage increments')
-    previous = interval['assignment_line']; totals = dict.fromkeys(FIELDS, 0)
+    previous = interval[binding]; totals = dict.fromkeys(FIELDS, 0)
     for increment in u['increments']:
         if not isinstance(increment, dict) or set(increment) != {'line', 'time', 'values'}:
             raise ValueError('Invalid usage increment')
@@ -201,6 +209,8 @@ def validate_store(store, row):
         other = json.loads(body)['detail']['usage']
         reject_physical_conflict(other, u)
     actor = json.loads(store.db.execute("SELECT body FROM records WHERE kind='actor' AND id=?", (row['actor_id'],)).fetchone()[0])
+    if u['scope'] == 'native_turn' and (actor.get('parent_id') is not None or row['actor_id'] != u['actor_id']):
+        raise ValueError('Coordinator turn requires its explicitly bound root actor')
     legacy = actor.get('usage', {})
     validate_owner_legacy(legacy, u)
     for (body,) in store.db.execute("SELECT body FROM records WHERE kind='actor' AND id!=?", (row['actor_id'],)):
@@ -249,7 +259,9 @@ def import_usage(store, filename, actor_id=None, task_title=None):
         raise ValueError('Usage input oversized or changed while reading')
     record = json.loads(raw, object_pairs_hook=unique, parse_constant=invalid_number)
     if not isinstance(record, dict): raise ValueError('Invalid usage input')
-    u = record.get('dispatch_usage'); validate_usage(u)
+    if ('dispatch_usage' in record) == ('turn_usage' in record):
+        raise ValueError('Exactly one usage record is required')
+    u = record.get('turn_usage') if 'turn_usage' in record else record['dispatch_usage']; validate_usage(u)
     owner = ident(actor_id if actor_id is not None else u['actor_id'])
     detail = dict(version=1, task_title=task_title if task_title is not None else u['task_id'], usage=copy.deepcopy(u))
     event = dict(id=event_id(u['measurement_key']), request_id=u['request_id'], actor_id=owner, kind='usage',
@@ -267,7 +279,7 @@ def import_usage(store, filename, actor_id=None, task_title=None):
                     time=stamp(record.get('recorded_at')), completeness='partial', actor_id=owner,
                     measurement_key=u['measurement_key'], input_path=str(path),
                     input_sha256=hashlib.sha256(raw).hexdigest(), native_source=origin,
-                    actor_mapping='explicit' if actor_id is not None else 'native_dispatch_actor')
+                    actor_mapping='explicit' if actor_id is not None else 'native_turn_actor' if u['scope'] == 'native_turn' else 'native_dispatch_actor')
     store.import_bundle(dict(schema_version=1, requests=[], actors=[], events=[event], collections=[evidence]))
     return dict(event_id=event['id'], request_id=u['request_id'], actor_id=owner,
                 measurement_key=u['measurement_key'])

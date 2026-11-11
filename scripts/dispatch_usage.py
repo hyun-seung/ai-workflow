@@ -47,6 +47,9 @@ def collect(session_id, target, assignments, boundaries, measurements, user_line
     inside = [a for a in assignments if start['line'] < a['line'] < terminal['line']]
     if len(inside) != 1 or inside[0] != target:
         return stop('ambiguous_turn_assignment')
+    if any(start['line'] < message['line'] < terminal['line'] and message.get('routing_status') == 'invalid'
+           for message in user_lines):
+        return stop('invalid_user_message_routing')
     if any(target['line'] <= message['line'] < terminal['line']
            and message['turn_id'] != start['turn_id']
            and (message['line'] != target['line'] or message['turn_id'] is not None)
@@ -63,12 +66,24 @@ def collect(session_id, target, assignments, boundaries, measurements, user_line
                 if later_starts:
                     return stop('unbound_followup_turn')
             break
+    return measure_window(result, session_id, start, terminal, target['line'], boundaries,
+                          measurements, inherited, request_id is not None,
+                          'explicit' if request_id is not None else 'unlinked')
+
+
+def measure_window(result, session_id, start, terminal, binding_line, boundaries, measurements,
+                   inherited, attributed, binding_method):
+    """Reconcile counter deltas after the caller validates its binding and boundaries."""
+    def stop(reason):
+        result['issues'] = [reason]
+        return result
+    starts = [b for b in boundaries if b['kind'] == 'task_started' and b['line'] <= start['line']]
     result['measurement_key'] = 'codex.session:' + session_id + ':turn:' + start['turn_id']
     result['interval'] = dict(native_turn_id=start['turn_id'], start_line=start['line'],
-                              assignment_line=target['line'], end_line=terminal['line'],
+                              assignment_line=binding_line, end_line=terminal['line'],
                               started_at=start['time'], finished_at=terminal['time'])
     current = [m for m in measurements if start['line'] < m['line'] < terminal['line']]
-    if any(m['line'] < target['line'] for m in current):
+    if any(m['line'] < binding_line for m in current):
         return stop('usage_before_assignment')
     if not current:
         return stop('missing_dispatch_usage')
@@ -131,7 +146,7 @@ def collect(session_id, target, assignments, boundaries, measurements, user_line
         if totals[detail] is not None and totals[detail] > totals[primary]:
             return stop('invalid_dispatch_subset')
     totals['total_tokens'] = totals['input_tokens'] + totals['output_tokens']
-    result.update(status='measured', task_attributed=request_id is not None, measurements=totals,
+    result.update(status='measured', task_attributed=attributed, measurements=totals,
                   final=dict(line=current[-1]['line'], time=current[-1]['time'], values=previous),
-                  request_binding='explicit' if request_id is not None else 'unlinked')
+                  request_binding=binding_method)
     return result

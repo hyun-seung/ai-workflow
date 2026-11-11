@@ -2,6 +2,8 @@
 
 [native 수집기](native-record.md)가 만든 `dispatch_usage`를 기존 SQLite 기록에 연결한다. 원래 actor의 `usage`·지시·로그는 그대로 두고 `kind=usage` 이벤트와 입력 근거 collection을 추가한다. 모델 호출이나 원본 세션 경로 자동 탐색은 하지 않는다.
 
+[조율자 턴 수집기](coordinator-usage.md)의 `turn_usage`도 같은 명령으로 연결한다. version 2의 native_turn 범위이며 dispatch는 null이다. 기존 최상위 actor와 정확히 일치해야 하고 다른 actor로 매핑하지 않는다. 두 형식이 한 입력에 함께 있으면 거부한다. 물리 키·구간 검사는 형식 간에도 공유한다.
+
 ## 수입
 
 요청과 담당 actor를 먼저 [조회 도구](trace-viewer.md)의 bundle/Orca snapshot 수입으로 등록한다. 다음은 가상 경로·ID다.

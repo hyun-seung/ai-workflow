@@ -58,6 +58,23 @@ def reject_constant(_):
     raise ValueError("nonfinite_json")
 
 
+def message_routing(payload):
+    """Keep missing routing distinct from explicit malformed routing."""
+    key = 'internal_chat_message_metadata_passthrough'
+    if key not in payload:
+        return {'routing_status': 'absent', 'turn_id': None}
+    routing = payload[key]
+    if not isinstance(routing, dict):
+        return {'routing_status': 'invalid', 'turn_id': None}
+    if 'turn_id' not in routing:
+        return {'routing_status': 'absent', 'turn_id': None}
+    try:
+        turn_id = identifier(routing['turn_id'])
+    except ValueError:
+        return {'routing_status': 'invalid', 'turn_id': None}
+    return {'routing_status': 'valid', 'turn_id': turn_id}
+
+
 def assignment(payload):
     """Read only the generated header; task text/references cannot bind a dispatch."""
     if payload.get("role") != "user":
@@ -152,22 +169,15 @@ def launch_requested(snapshot, target):
                 'path': str(path), 'sha256': hashlib.sha256(raw).hexdigest()})
 
 
-def inspect_session(project, session_file, session_id, task_id, dispatch_id, expected=None, worker_snapshot=None,
-                    request_id=None, role=None):
-    project = Path(project).expanduser().resolve(strict=True)
-    if not project.is_dir():
-        raise ValueError("project_not_directory")
-    for value in (session_id, task_id, dispatch_id):
-        identifier(value)
-    if (request_id is None) != (role is None):
-        raise ValueError('request_id_and_role_required_together')
-    if request_id is not None:
-        identifier(request_id)
-        if role not in ROLE_IDS:
-            raise ValueError('invalid_workflow_role')
-    expected = expected or {}
-    if set(expected) - set(FIELDS) or any(label(v) is None for v in expected.values()):
-        raise ValueError("invalid_expectation")
+def read_session(project, session_file, session_id, archived_project=False):
+    """Read metadata only from one explicit, stable Orca/Codex source."""
+    original = Path(project).expanduser()
+    if archived_project and not original.is_absolute():
+        raise ValueError('archived_project_requires_absolute_path')
+    project = original.resolve(strict=not archived_project)
+    if (project.exists() and not project.is_dir()) or (not archived_project and not project.is_dir()):
+        raise ValueError('project_not_directory')
+    identifier(session_id)
     path = Path(session_file).expanduser().resolve(strict=True)
     if not path.is_file():
         raise ValueError("session_not_regular_file")
@@ -217,9 +227,9 @@ def inspect_session(project, session_file, session_id, task_id, dispatch_id, exp
                 contexts.append({"line": n, "time": timestamp(row.get("timestamp")), "values": observed(p)})
             elif kind == "response_item":
                 if p.get('role') == 'user':
-                    routing = p.get('internal_chat_message_metadata_passthrough')
-                    routing = routing if isinstance(routing, dict) else {}
-                    user_lines.append(dict(line=n, turn_id=label(routing.get('turn_id'))))
+                    user_lines.append(dict(line=n, **message_routing(p),
+                        content_sha256=hashlib.sha256(json.dumps(p.get('content'), ensure_ascii=False,
+                            sort_keys=True, separators=(',', ':')).encode()).hexdigest()))
                 binding = assignment(p)
                 if binding:
                     assignments.append(dict(binding, line=n, context_line=contexts[-1]["line"] if contexts else None))
@@ -237,6 +247,31 @@ def inspect_session(project, session_file, session_id, task_id, dispatch_id, exp
     fingerprint = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
     if fingerprint(before) != fingerprint(after) or fingerprint(after) != fingerprint(current):
         raise ValueError("session_changed_during_read")
+    if meta is None:
+        raise ValueError('missing_initial_session_meta')
+    return dict(project=project, path=path, contexts=contexts, assignments=assignments,
+                measurements=measurements, boundaries=boundaries, user_lines=user_lines,
+                inherited=inherited, meta=meta, sha256=digest.hexdigest(), size=size, lines=n)
+
+
+def inspect_session(project, session_file, session_id, task_id, dispatch_id, expected=None, worker_snapshot=None,
+                    request_id=None, role=None, archived_project=False):
+    for value in (session_id, task_id, dispatch_id):
+        identifier(value)
+    if (request_id is None) != (role is None):
+        raise ValueError('request_id_and_role_required_together')
+    if request_id is not None:
+        identifier(request_id)
+        if role not in ROLE_IDS:
+            raise ValueError('invalid_workflow_role')
+    expected = expected or {}
+    if set(expected) - set(FIELDS) or any(label(v) is None for v in expected.values()):
+        raise ValueError("invalid_expectation")
+    data = read_session(project, session_file, session_id, archived_project)
+    project, path = data['project'], data['path']
+    contexts, assignments, measurements = data['contexts'], data['assignments'], data['measurements']
+    boundaries, user_lines, inherited = data['boundaries'], data['user_lines'], data['inherited']
+    meta, size, n = data['meta'], data['size'], data['lines']
     targets = [a for a in assignments if a["task_id"] == task_id and a["dispatch_id"] == dispatch_id]
     if len(targets) != 1:
         raise ValueError("missing_or_ambiguous_assignment")
@@ -284,19 +319,19 @@ def inspect_session(project, session_file, session_id, task_id, dispatch_id, exp
                                             user_lines, request_id, role, inherited)
     return {"schema_version": 1, "kind": "orca_codex_metadata", "recorded_at": datetime.now(timezone.utc).isoformat(),
             "environment": "orca", "provider": "codex", "project": str(project), "binding": target,
-            "session": meta, "source": {"path": str(path), "sha256": digest.hexdigest(), "bytes": size,
+            "session": meta, "source": {"path": str(path), "sha256": data["sha256"], "bytes": size,
                                          "lines": n, "assignment_end_exclusive": end},
             "requested": requested, "expected": {k: expected.get(k) for k in FIELDS}, "observed_contexts": selected,
             "verification": {"status": verdict, "checks": checks}, "usage": usage,
             "request_context": {"request_id": request_id, "role": role, "source": 'explicit_coordinator_input'},
             "dispatch_usage": dispatch_usage,
-            "live_state_verified": False, "task_acceptance_evaluated": False,
+            "live_state_verified": False, "task_acceptance_evaluated": False, "archived_project": archived_project,
             "limitations": ["snapshot_only", "no_permission_grant", "single_closed_native_turn_only",
                             "no_coordinator_or_reviewer_usage", "no_tool_token_allocation", "not_a_trace_bundle"]}
 
 
-def write_record(record, output, project):
-    destination = private_destination(output, Path(project).resolve(strict=True))
+def write_record(record, output, project, archived_project=False):
+    destination = private_destination(output, Path(project).resolve(strict=not archived_project))
     fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
@@ -319,12 +354,13 @@ def main(argv=None):
     parser.add_argument('--worker-snapshot', help='Optional explicit Orca worker-show --full JSON receipt')
     parser.add_argument('--request-id', help='Logical user request ID from the coordinator')
     parser.add_argument('--role', choices=sorted(ROLE_IDS), help='Workflow role; requires --request-id')
+    parser.add_argument('--archived-project', action='store_true', help='Offline metadata only; allow an explicit former project path')
     args = parser.parse_args(argv)
     expected = {k: getattr(args, "expect_" + k) for k in FIELDS if getattr(args, "expect_" + k) is not None}
     try:
         record = inspect_session(args.project, args.session_file, args.session_id, args.task_id, args.dispatch_id,
-                                 expected, args.worker_snapshot, args.request_id, args.role)
-        output = write_record(record, args.output, args.project)
+                                 expected, args.worker_snapshot, args.request_id, args.role, args.archived_project)
+        output = write_record(record, args.output, args.project, args.archived_project)
     except (OSError, ValueError) as error:
         # OS exception strings may contain private paths; do not print them.
         message = str(error) if isinstance(error, ValueError) else type(error).__name__

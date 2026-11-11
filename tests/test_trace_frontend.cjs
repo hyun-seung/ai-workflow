@@ -153,3 +153,16 @@ test('physical native usage keys cannot be counted through different sources', (
   const two=measuredActor('two',{source:'different',measurement_key:'codex.session:s:turn:t'});
   assert.equal(usageSummary([one,two]).total,null);
 });
+test('coordinator turn observations join role totals without fabricated dispatches or counting legacy turn references', () => {
+  const {usageUnits,displayActors,roleUsage}=require('../scripts/trace_web/app.js');
+  const u=structuredClone(require('./fixtures/traces/native-usage.json').dispatch_usage);
+  Object.assign(u,{version:2,scope:'native_turn',role:'coordinator',actor_id:'coord',dispatch_id:null,
+    request_binding:'explicit_native_turn',message_sha256:'0'.repeat(64)});
+  const bundle={actors:[{id:'coord',request_id:'sample-request',role:'coordinator'}],events:[
+    {id:'observed',kind:'usage',actor_id:'coord',detail:{task_title:'결과 취합',usage:u}}]};
+  const summary=usageSummary(usageUnits(bundle,displayActors(bundle)));
+  assert.equal(summary.total,120);assert.equal(summary.rows[0].label,'조율자 턴 측정');
+  assert.equal(roleUsage(summary)[0].key,'coordinator');
+  assert.equal(usageFor({...bundle.actors[0],usage:u}).kind,'reference');
+  assert.equal(usageFor({...usageUnits(bundle)[0],usage:{...u,dispatch_id:'invented'}}).kind,'reference');
+});

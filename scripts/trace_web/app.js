@@ -112,10 +112,11 @@ function usageFor(actor) {
       (m.reasoning_output_tokens != null && (!valid(m.reasoning_output_tokens) || m.reasoning_output_tokens > output))) {
     return { kind: 'unavailable', label: '배정별 미측정', input: null, output: null, total: null };
   }
-  const attributed = u.status === 'measured' && u.scope === 'dispatch' && u.task_attributed === true &&
+  const attributed = u.status === 'measured' && (u.scope === 'dispatch' ||
+    u.scope === 'native_turn' && u.version === 2 && actor.observation_id && u.role === 'coordinator' && u.dispatch_id === null) && u.task_attributed === true &&
     u.actor_id === (actor.observation_id ? actor.native_actor_id : actor.id) && u.request_id === actor.request_id && typeof u.source === 'string' && u.source &&
     typeof u.measurement_key === 'string' && u.measurement_key.trim();
-  return { kind: attributed ? 'attributed' : 'reference', label: attributed ? '배정별 측정' : u.scope === 'session_cumulative' ? '세션 누적 · 참고값' : '배정 귀속 미확인',
+  return { kind: attributed ? 'attributed' : 'reference', label: attributed ? u.scope === 'native_turn' ? '조율자 턴 측정' : '배정별 측정' : u.scope === 'session_cumulative' ? '세션 누적 · 참고값' : '배정 귀속 미확인',
     input, output, total, cached: m.cached_input_tokens ?? null, reasoning: m.reasoning_output_tokens ?? null,
     uncached: m.cached_input_tokens == null ? null : input - m.cached_input_tokens,
     ordinaryOutput: m.reasoning_output_tokens == null ? null : output - m.reasoning_output_tokens,

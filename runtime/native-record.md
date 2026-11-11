@@ -22,6 +22,8 @@ python3 scripts/native_record.py \
 
 `--worker-snapshot`과 `--expect-*`는 선택 항목이다. snapshot 없이도 실제 설정·사용량을 기록하지만 시작 요청값의 출처는 `unavailable`이다. snapshot은 명시한 dispatch의 성공한 `worker-show --full --json` 응답이어야 한다. 이 CLI가 Orca를 호출하거나 snapshot을 대신 만들지는 않는다.
 
+이미 정리된 임시 프로젝트의 보존 기록을 읽을 때만 `--archived-project`를 명시한다. 절대 경로로 전달한 과거 cwd와 원본 `session_meta.cwd`를 대조하며 폴더를 복원하지 않는다. `archived_project=true`, `live_state_verified=false`인 오프라인 메타데이터 검사다. 기본 모드와 `finish_worker.py`는 기존 프로젝트 확인을 유지하며 이 옵션을 현재 종료·정리 증거로 사용하지 않는다.
+
 `--request-id`는 조율자가 연결한 사용자 요청 ID, `--role`은 `workflow.json`의 역할 ID이며 함께 지정한다. 요청 ID는 원본에서 발견한 값으로 위장하지 않고 `request_context.source=explicit_coordinator_input`으로 구분한다. 둘을 생략한 기존 호출도 지원하지만 요청별 합산 대상으로 표시하지 않는다.
 
 `--expect-model`, `--expect-effort`, `--expect-sandbox-mode`도 지정할 수 있다. 기대값은 실행 설정을 바꾸지 않는다. 조직이 승인한 다른 정책을 쓰는 경우 해당 기대값만 지정한다. 명시하지 않은 기대값을 자동으로 성공 처리하지 않는다.
@@ -67,7 +69,7 @@ python3 scripts/native_record.py \
 
 조율자의 요청 ID·역할까지 연결된 성공 기록만 `task_attributed=true`다. `measurement_key`는 물리 세션과 native 턴에 기반하므로 다른 파일·요청 이름으로 같은 구간을 다시 읽어도 변하지 않는다. 여러 기록을 합칠 때 이 키로 중복을 확인해야 한다. 구간 측정 성공과 요청 연결, 프로필 검사 성공은 서로 다른 상태다.
 
-이 수집기는 배정별 비공개 JSON을 만든다. [DB 수입과 요청/역할 집계](trace-usage.md)는 별도 연결기가 담당하고 기존 actor 값은 보존한다. 여러 native 턴에 걸친 한 배정, 다른 공급자, 개별 도구별 귀속, 조율자·별도 자동 승인 검토자의 전체 수집은 지원하지 않는다. 이미 존재하는 누적 기록이나 원본 세션을 수정하지 않는다.
+이 수집기는 검증자를 포함한 각 역할의 하위 배정별 비공개 JSON을 만든다. [DB 수입과 요청/역할 집계](trace-usage.md)는 별도 연결기가 담당하고 기존 actor 값은 보존한다. 배정 ID 없는 [조율자 단일 턴](coordinator-usage.md)은 별도 명시 연결을 사용한다. 여러 native 턴에 걸친 한 배정, 다른 공급자, 개별 도구별 귀속, 조율자·별도 자동 승인 검토자의 전체 수집은 지원하지 않는다. 이미 존재하는 누적 기록이나 원본 세션을 수정하지 않는다.
 
 | 종료 코드 | 의미 |
 | --- | --- |
