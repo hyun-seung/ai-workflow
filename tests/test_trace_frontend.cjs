@@ -132,3 +132,24 @@ test('role totals reuse globally deduplicated tasks and preserve missing detail 
     {...measuredActor('b',{measurement_key:'same'}),role:'frontend'}],events:[]})));
   assert.ok(duplicate.every(r=>r.total===null));
 });
+test('append-only observations split tasks while retaining one actor and missing roles', () => {
+  const {usageUnits,actorUsage,displayActors,roleUsage}=require('../scripts/trace_web/app.js');
+  const fixture=require('./fixtures/traces/native-usage.json'), u=fixture.dispatch_usage;
+  const actors=[{id:'sample-worker',request_id:'sample-request',role:'backend',usage:{status:'unavailable'}},
+    {id:'coord',request_id:'sample-request',role:'coordinator'}];
+  const second=structuredClone(u);second.task_id='second';second.dispatch_id=second.actor_id='second';second.measurement_key='codex.session:session_example:turn:second';
+  const bundle={actors,events:[{id:'usage-one',kind:'usage',actor_id:'sample-worker',request_id:'sample-request',detail:{task_title:'첫 작업',usage:u}},
+    {id:'usage-two',kind:'usage',actor_id:'sample-worker',request_id:'sample-request',detail:{task_title:'후속 작업',usage:second}}]};
+  const before=JSON.stringify(bundle), displayed=displayActors(bundle), units=usageUnits(bundle,displayed), summary=usageSummary(units);
+  assert.equal(units.length,3);assert.equal(summary.covered,2);assert.equal(summary.total,240);
+  assert.equal(roleUsage(summary).find(r=>r.key==='backend').total,240);
+  assert.equal(actorUsage(summary,displayed[0]).total,240);
+  assert.equal(actorUsage(summary,displayed[1]).total,null);
+  assert.deepEqual(units.slice(0,2).map(a=>a.display_task),['첫 작업','후속 작업']);
+  assert.equal(JSON.stringify(bundle),before);
+});
+test('physical native usage keys cannot be counted through different sources', () => {
+  const one=measuredActor('one',{measurement_key:'codex.session:s:turn:t'});
+  const two=measuredActor('two',{source:'different',measurement_key:'codex.session:s:turn:t'});
+  assert.equal(usageSummary([one,two]).total,null);
+});

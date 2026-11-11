@@ -11,10 +11,11 @@ import stat
 from datetime import datetime, timezone
 from run_records import validate_records_dir
 from trace_closeout import closeout_view, validate_detail
+from trace_usage import validate_event as validate_usage_event, validate_store as validate_usage_store, validate_evidence, validate_legacy_actor
 
 MAX_BYTES = 8 * 1024 * 1024
 KINDS = {'user_request', 'decision', 'assignment', 'instruction', 'tool_call', 'tool_result',
-         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion'}
+         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion', 'usage'}
 FORBIDDEN = {'analysis', 'reasoning', 'thinking', 'chain_of_thought'}
 ROLE_IDS = {'coordinator', 'architect', 'designer', 'backend', 'frontend', 'verifier'}
 
@@ -150,6 +151,8 @@ class Store:
                     if row.get('kind') not in KINDS: raise ValueError('Unsupported event kind')
                     if row.get('actor_id') is not None: ident(row['actor_id'])
                     if 'detail' not in row: raise ValueError('Event detail missing')
+                    if row['kind'] == 'usage':
+                        validate_usage_event(row)
                     if row['kind'] == 'assignment' and isinstance(row['detail'], dict) and 'actor_roles' in row['detail']:
                         labels = row['detail']['actor_roles']
                         if not isinstance(labels, list) or not 1 <= len(labels) <= 200:
@@ -194,6 +197,10 @@ class Store:
                 ref = row.get('actor_id') if kind == 'event' else row.get('parent_id') if kind == 'actor' else None
                 if ref and not self.db.execute("SELECT 1 FROM records WHERE kind='actor' AND id=? AND request_id=?",(ref,rid)).fetchone():
                     raise ValueError('Unknown actor/parent '+ref)
+                if kind == 'event' and row.get('kind') == 'usage':
+                    validate_usage_store(self, row)
+                if kind == 'actor' and row.get('usage', {}).get('task_attributed') is True:
+                    validate_legacy_actor(self, row)
                 if kind == 'event' and row.get('kind') == 'assignment' and isinstance(row.get('detail'), dict):
                     for label in row['detail'].get('actor_roles', []):
                         if not self.db.execute("SELECT 1 FROM records WHERE kind='actor' AND id=? AND request_id=?", (label['actor_id'], rid)).fetchone():
@@ -216,6 +223,8 @@ class Store:
                 stamp(collection.get('time'))
                 if not self.db.execute("SELECT 1 FROM records WHERE kind='request' AND id=?", (rid,)).fetchone():
                     raise ValueError('Unknown collection request')
+                if collection['source'] == 'trace.native-usage-evidence':
+                    validate_evidence(self, collection)
                 key = digest(collection)
                 self.db.execute('INSERT OR IGNORE INTO collections VALUES(?,?,?)', (key,ident(collection['request_id']),encoded(collection)))
         return {'records_received':len(rows)}

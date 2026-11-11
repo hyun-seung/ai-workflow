@@ -10,7 +10,8 @@
 
 ```sh
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 import tests/fixtures/traces/sample.json
-python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 import-orca /private/path/snapshot.json --request-id request-example --title '요청 제목' --role developer
+python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 import-orca /private/path/snapshot.json --request-id request-example --title '요청 제목' --role backend
+python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 import-usage /private/path/native-record.json --task-title '서버 구현'
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 list --q example
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 export --request-id request-example
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 serve --port 8765
@@ -39,7 +40,7 @@ python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 serve
 
 ### 토큰 표시·합산 계약
 
-이 단계는 화면의 표시·합산 규칙을 구현했다. [native 세션의 배정별 JSON 수집](native-record.md#배정-구간의-사용량)은 구현했으며, 이 JSON의 DB 자동 수입·기존 actor 갱신은 아직 연결하지 않았다. 세션 누적값은 담당자 상세의 참고값으로만 보이며 요청 합계에서는 제외한다. 과거 DB 자료에 배정별 측정값이 없으면 `—`·미연결/미측정으로 표시한다.
+화면의 표시·합산 규칙과 [수집 JSON의 DB 연결](trace-usage.md)을 구현했다. 명시 `import-usage` 또는 완료 명령의 `--trace-db`로 연결하며 원래 actor 값은 갱신하지 않는다. 새 관측이 있는 actor는 배정별 행과 담당 합계를 표시한다. 세션 누적값은 참고값으로 분리하고, 배정별 관측이 없는 과거 자료는 `—`·미연결/미측정으로 표시한다.
 
 화면은 actor의 usage에 다음 조건이 **모두** 있을 때 배정별 집계에 포함한다.
 
@@ -67,6 +68,7 @@ JSON bundle: `schema_version: 1`, `requests: []`, `actors: []`, `events: []`, �
 - request: `title`, `status`, 가상 표시용 `sample: true`.
 - actor(실행): `request_id`, `parent_id`, `role`, `environment`, `provider`, `status`, `requested: {model, effort}`, `observed: {model, effort}`. 요청과 확인값은 독립적이며 미확인은 null이다. native 수입은 workflow.json을 읽지 않으며 확인된 모델로 채우지 않는다.
 - event: `request_id`, 선택 `actor_id`, `kind`, `detail`. kind는 user_request/decision/assignment/instruction/tool_call/tool_result/question/approval_request/approval_resolution/handoff/verification/explanation/completion이다. completion은 별도 마감 계약을 검증한다. 상세의 정규 JSON UTF-8 SHA256을 `detail_sha256`으로 저장한다. 원본 파일 전체 바이트의 해시와 다르다. 원문 지시는 detail에 보존하되 내부 추론은 제외한다. 사후 요약은 detail에 `recorded_retrospectively: true`와 작성시각·근거를 명시하고 당시 판단처럼 표현하지 않는다.
+- `usage` 이벤트는 별도의 [측정·연결 계약](trace-usage.md)을 검증하며 기존 actor를 보존한다. 관측·근거는 기존 event/collection 배열로 JSON·JSONL 수입·내보내기를 지원한다.
 - usage: actor에 연결한다. `source`, `scope`, 비어 있지 않은 `measurements`가 있어야 저장 시 measured이며 없거나 `measurements={}`이면 unavailable이다. measurements는 비음수 수치다. 저장 시 measured라는 사실만으로 배정 귀속을 인정하지 않으며, 화면 합산에는 위의 더 엄격한 계약을 적용한다. 공급자의 누적/턴 범위 해석과 측정 근거는 입력 작성자가 명시한다.
 - collections: snapshot source/sourceIdentity, native source, cursor/nextCursor/limited, 반환 개수·경고·원본 상태와 생략 블록 수를 보존한다. snapshot 범위는 별도이며 이벤트 전부를 수집했다는 증거가 아니다.
 

@@ -4,7 +4,7 @@
 
 작업 분리·역할·완료 기준·검증·결과 보고는 공통 규칙으로 유지합니다. 에이전트 생성·전달·상태·결과 수신은 선택한 Orca/Paseo 환경의 기능을 사용하고, 개발 규칙과 테스트는 대상 프로젝트에서 적용합니다. 환경과 AI 공급자·모델은 별개입니다. [설계 결정과 기존 계획의 변경](runtime/architecture.md)을 참고하세요.
 
-현재는 **환경 가이드 선택·연결 확인**, 단일 Codex 역할 실행·기록·집계, 관리 경로의 위임 한도, 명시적으로 수입한 실행 기록의 SQLite 대시보드를 제공합니다. Orca 네이티브 위임·결과 반환과 새 Codex worker의 대신 승인 적용은 제한된 실제 작업에서 확인했습니다. 닫힌 단일 native 턴의 배정별 토큰을 완료 기록에 저장하며, DB 자동 수입·전체 요청 집계는 후속 범위입니다. 자동 업무 분해, Paseo 실제 위임, 복수 저장소 통합도 남아 있습니다. [하네스 개선 상태와 다음 작업](runtime/harness-roadmap.md)에 구현·운영 규칙·미검증을 구분했습니다.
+현재는 **환경 가이드 선택·연결 확인**, 단일 Codex 역할 실행·기록·집계, 관리 경로의 위임 한도, 명시적으로 수입한 실행 기록의 SQLite 대시보드를 제공합니다. Orca 네이티브 위임·결과 반환과 새 Codex worker의 대신 승인 적용은 제한된 실제 작업에서 확인했습니다. 닫힌 단일 native 턴의 배정별 토큰을 완료 기록에 저장하고, 지정된 DB에 중복 없이 연결해 요청·역할·작업별로 표시합니다. 조율자 등 누락된 역할의 전체 수집, 자동 업무 분해, Paseo 실제 위임, 복수 저장소 통합은 남아 있습니다. [하네스 개선 상태와 다음 작업](runtime/harness-roadmap.md)에 구현·운영 규칙·미검증을 구분했습니다.
 
 ## 무엇을 바꾸면 되나요?
 
@@ -23,6 +23,7 @@
 | [runtime/native-record.md](runtime/native-record.md), [scripts/native_record.py](scripts/native_record.py) | 명시한 Orca/Codex 기록의 승인/모델·세션 누적값·배정별 토큰과 비공개 JSON 저장 |
 | [runtime/completion.md](runtime/completion.md) | 완료 알림의 단발성 기록·중복 방지, 보관본이 검증된 임시 폴더의 명시적 정리 |
 | [runtime/trace-viewer.md](runtime/trace-viewer.md), [runtime/trace-closeout.md](runtime/trace-closeout.md) | 요청→역할→작업 흐름, 토큰 표시·상세, 결과 파일·검증 근거와 마감 연결 |
+| [runtime/trace-usage.md](runtime/trace-usage.md), [scripts/trace_usage.py](scripts/trace_usage.py) | 원래 actor를 보존하는 배정별 토큰 DB 수입, 물리 구간 중복·충돌 검사와 집계 |
 | [harness.json](harness.json), [runtime/delegation.md](runtime/delegation.md) | 임시 공간 자동 정리 Y/N(기본 Y), 작업별 동시·누적 위임 한도와 native 호출 전 예약 |
 | [runtime/harness.md](runtime/harness.md), [scripts/prepare_handoff.py](scripts/prepare_handoff.py) | 작업 크기에 맞는 조율, 중복 대기 처리 규칙, 명시 입력 파일의 인계 준비 |
 | [runtime/approval-waits.md](runtime/approval-waits.md), [scripts/approval_wait.py](scripts/approval_wait.py) | 승인·질문 대기 관측, 확인된 요청의 중복 억제, 알림 전달 확인과 단발성 Orca 조회 |
@@ -107,7 +108,7 @@ python3 scripts/workflow.py run --project ../my-project --role backend --task "�
 - 실행별 실제 토큰 사용량 수집, 선택적 JSON 기록, 상위 작업·작업 유형 연결, 선택적 실행 시간 제한을 제공합니다. 실패·중단·시간 초과와 미측정을 구분합니다.
 - 저장된 기록의 역할·요청 모델·effort별 집계와 작업 ID 필터를 제공합니다. 입력 문자 수와 완료된 도구 작업 수를 본문 없이 기록합니다. 모델 호출 횟수나 파일 읽기 횟수는 측정하지 않습니다.
 - Orca/Codex의 확인된 단일 배정 구간은 요청·역할·task/dispatch·세션과 연결해 토큰을 수집합니다. 세션 누적 참고값과 구분하고 완료 재처리 시 기록을 재사용합니다. 여러 native 턴의 한 배정과 도구별 토큰 귀속은 지원하지 않습니다.
-- 요청별 대시보드는 공통 역할·작업명, 명시 계획·지시·실제 명령 상세와 토큰 표시를 제공합니다. 수집 JSON의 DB 자동 연결은 남아 있으며, 미측정값을 0으로 채우지 않습니다. 결과·검증 파일은 해시로 연결하고 수집 범위와 마감 판정을 구분합니다.
+- 요청별 대시보드는 공통 역할·작업명, 명시 계획·지시·실제 명령 상세와 토큰 표시를 제공합니다. `import-usage` 또는 완료 처리의 `--trace-db`로 수집 JSON을 연결하며 미측정값을 0으로 채우지 않습니다. 결과·검증 파일은 해시로 연결하고 수집 범위와 마감 판정을 구분합니다.
 - 조율자의 자동 업무 분배, 역할 간 인계, 결과 보고서 자동 생성, 토큰 예산 강제는 아직 구현하지 않았습니다. 실행기 밖의 사용량이나 전체 업무의 누락된 기록을 자동 수집하지 않습니다.
 - `check`와 `--dry-run`은 설정만 확인합니다. 모델 접근 권한·effort 지원 여부·응답 품질은 실제 실행 시 확인해야 합니다.
 - 기본 read-only 역할에서 파일을 생성하는 테스트나 시안 작업이 필요하면 프로젝트 설정에서 해당 역할의 sandbox를 `workspace-write`로 명시합니다.

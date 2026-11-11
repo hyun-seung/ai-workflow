@@ -4,7 +4,7 @@ const labels = {
   user_request: '사용자 요청', decision: '결정·이유 요약', assignment: '업무 배정',
   instruction: '전달 지시', tool_call: '명령·도구 입력', tool_result: '도구 결과',
   question: '질문', approval_request: '승인 요청 · 결정 미확인',
-  approval_resolution: '승인 처리', handoff: '결과 인계', verification: '검증 판정', explanation: '명시된 설명', completion: '요청 마감'
+  approval_resolution: '승인 처리', handoff: '결과 인계', verification: '검증 판정', explanation: '명시된 설명', completion: '요청 마감', usage: '토큰 측정'
 };
 const show = value => JSON.stringify(value, null, 2) ?? String(value);
 const known = value => value === null || value === undefined || value === '' ? '미확인' : value;
@@ -79,7 +79,7 @@ function eventWarnings(event) {
   if (truncated(detail)) warnings.push('원본 잘림 표식 있음');
   return warnings;
 }
-function roleFor(event, actors) { const actor = actors.get(event.actor_id); return actor?.display_role || actor?.role || '미확인'; }
+function roleFor(event, actors) { const actor = actors.get(event.actor_id); return event.kind === 'usage' ? roleCatalog[event.detail?.usage?.role]?.label || '역할 미분류' : actor?.display_role || actor?.role || '미확인'; }
 function filterEvents(bundle, role, kind) {
   const actors = new Map(displayActors(bundle).map(actor => [actor.id, actor]));
   return bundle.events.filter(event => (!role || roleFor(event, actors) === role) && (!kind || event.kind === kind));
@@ -113,13 +113,40 @@ function usageFor(actor) {
     return { kind: 'unavailable', label: '배정별 미측정', input: null, output: null, total: null };
   }
   const attributed = u.status === 'measured' && u.scope === 'dispatch' && u.task_attributed === true &&
-    u.actor_id === actor.id && u.request_id === actor.request_id && typeof u.source === 'string' && u.source &&
+    u.actor_id === (actor.observation_id ? actor.native_actor_id : actor.id) && u.request_id === actor.request_id && typeof u.source === 'string' && u.source &&
     typeof u.measurement_key === 'string' && u.measurement_key.trim();
   return { kind: attributed ? 'attributed' : 'reference', label: attributed ? '배정별 측정' : u.scope === 'session_cumulative' ? '세션 누적 · 참고값' : '배정 귀속 미확인',
     input, output, total, cached: m.cached_input_tokens ?? null, reasoning: m.reasoning_output_tokens ?? null,
     uncached: m.cached_input_tokens == null ? null : input - m.cached_input_tokens,
     ordinaryOutput: m.reasoning_output_tokens == null ? null : output - m.reasoning_output_tokens,
-    key: attributed ? u.source + ':' + u.measurement_key : null };
+    key: attributed ? u.measurement_key.startsWith('codex.session:') ? u.measurement_key : u.source + ':' + u.measurement_key : null };
+}
+function usageUnits(bundle, actors = displayActors(bundle)) {
+  const observations = bundle.events.filter(event => event.kind === 'usage');
+  return actors.flatMap(actor => {
+    const own = observations.filter(event => event.actor_id === actor.id);
+    if (!own.length) return [{ ...actor, owner_actor_id: actor.id }];
+    return own.map(event => {
+      const u = event.detail.usage;
+      return { ...actor, id: event.id, owner_actor_id: actor.id, observation_id: event.id,
+        native_actor_id: u.actor_id, task_id: u.task_id, dispatch_id: u.dispatch_id,
+        display_role_id: u.role, display_role: roleCatalog[u.role]?.label || '역할 미분류',
+        display_task: event.detail.task_title, usage: u, usage_event: event };
+    });
+  });
+}
+function actorUsage(summary, actor) {
+  const rows = summary.rows.filter(row => (row.actor.owner_actor_id || row.actor.id) === actor.id);
+  if (rows.length === 1 && !rows[0].actor.observation_id) return rows[0];
+  const measured = rows.filter(row => row.kind === 'attributed');
+  if (!measured.length) return usageFor(actor);
+  const result = { kind: 'attributed', label: `측정된 ${measured.length}개 배정 합계` };
+  for (const field of ['input', 'output', 'total', 'cached', 'reasoning', 'uncached', 'ordinaryOutput']) {
+    const sum = measured.reduce((n, row) => n + row[field], 0);
+    result[field] = measured.every(row => row[field] != null) && Number.isSafeInteger(sum) ? sum : null;
+  }
+  if (result.total == null) result.kind = 'unavailable';
+  return result;
 }
 function roleUsage(summary) {
   const groups = new Map();
@@ -180,7 +207,7 @@ function durationText(request) {
   const seconds = Math.round((Date.parse(b) - Date.parse(a)) / 1000);
   return seconds < 60 ? `${seconds}초` : `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
 }
-if (typeof module !== 'undefined') module.exports = { extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage };
+if (typeof module !== 'undefined') module.exports = { extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
 if (typeof document !== 'undefined') startViewer();
 
 function startViewer() {
@@ -318,6 +345,7 @@ function startViewer() {
       body.append(evidenceDetails('실제 명령·도구 결과', commands, actors));
       const output = own.filter(e => ['explanation', 'handoff', 'verification'].includes(e.kind));
       body.append(evidenceDetails('작업 설명·반환 결과', output, actors));
+      if (own.some(e => e.kind === 'usage')) body.append(evidenceDetails('배정별 측정 근거', own.filter(e => e.kind === 'usage'), actors));
       body.append(lazyDisclosure('모델·사용량 원문과 출처', target => {
         target.append(node('pre', show(bundle.actors.find(a => a.id === actor.id))));
         target.append(node('p', '표시 역할 근거: ' + (actor.display_basis.join(', ') || '원본 역할'), 'muted'));
@@ -350,12 +378,12 @@ function startViewer() {
     const groups = flowGroups({ ...bundle, actors: [...actors.values()] }), board = node('div', undefined, 'flow-board');
     function phase(number, name) { const e = node('div', undefined, 'phase'), h = node('div', undefined, 'phase-title'); h.append(node('b', number), node('span', name)); e.append(h); return e; }
     const planning = phase('01', '조율 · 계획'), delegation = phase('02', '담당 업무'), result = phase('03', '결과 · 검증');
-    for (const a of groups.roots) planning.append(agentCard(a, bundle.actors.indexOf(a), bundle, actors, measured.rows.find(r => r.actor.id === a.id)));
+    for (const a of groups.roots) planning.append(agentCard(a, bundle.actors.indexOf(a), bundle, actors, actorUsage(measured, a)));
     if (!groups.roots.length) planning.append(node('p', '조율자 연결 기록이 없습니다.', 'empty'));
     planning.append(evidenceDetails('전체 배정 근거', groups.assignments, actors));
     planning.append(evidenceDetails('하위 에이전트에 내린 지시', bundle.events.filter(e => e.kind === 'instruction' && groups.roots.some(a => a.id === e.actor_id)), actors));
     const cards = node('div', undefined, 'assignment-cards');
-    for (const a of groups.workers) cards.append(agentCard(a, bundle.actors.indexOf(a), bundle, actors, measured.rows.find(r => r.actor.id === a.id)));
+    for (const a of groups.workers) cards.append(agentCard(a, bundle.actors.indexOf(a), bundle, actors, actorUsage(measured, a)));
     if (!groups.workers.length) cards.append(node('p', '연결된 하위 실행이 없습니다.', 'empty'));
     delegation.append(cards);
     const closeout = bundle.closeout, box = node('div', undefined, 'result-box' + (!closeout?.current ? ' unknown-result' : ''));
@@ -399,7 +427,7 @@ function startViewer() {
     const roles = node('div', undefined, 'role-usage-grid');
     for (const group of roleUsage(measured)) {
       const card = lazyDisclosure('', body => {
-        body.append(node('p', '이 역할의 수입된 작업 · 같은 세션의 초기/후속 내용이 함께 포함될 수 있습니다.', 'notice'));
+        body.append(node('p', '측정 구간이 연결된 배정은 각각 표시합니다. 미연결 담당자의 추가 작업은 누락되어 있을 수 있습니다.', 'notice'));
         for (const r of group.rows) {
           const task = node('article', undefined, 'task-usage'); task.dataset.actorId = r.actor.id;
           task.append(node('h4', r.actor.display_task), node('p', r.actor.observed?.model || '모델 미확인', 'muted'));
@@ -408,6 +436,11 @@ function startViewer() {
             const cell = node('div', label, 'mini-stat'); cell.append(node('strong', tokenText(r.kind === 'attributed' ? r[key] : null))); grid.append(cell);
           }
           task.append(grid, node('p', r.label, 'muted'), tokenDetails(r));
+          if (r.actor.observation_id) task.append(lazyDisclosure('이 작업의 측정 원문·출처', target => {
+            target.append(node('p', `작업 ${r.actor.task_id} · dispatch ${r.actor.dispatch_id}`, 'muted'));
+            target.append(node('pre', show({ event: r.actor.usage_event,
+              evidence: bundle.collections.filter(c => c.source === 'trace.native-usage-evidence' && c.measurement_key === r.actor.usage.measurement_key) })));
+          }, 'plain-disclosure'));
           if (r.kind !== 'attributed') task.append(node('p', '배정별 수치 미연결 · 세션 참고값이 있으면 세부 항목에서 확인합니다.', 'notice'));
           body.append(task);
         }
@@ -419,7 +452,7 @@ function startViewer() {
       roles.append(card);
     }
     section.append(roles);
-    const note = measured.total == null ? '배정별 수치가 아직 연결되지 않았습니다. 미측정은 0이 아니며 세션 누적값은 요청 합계에 더하지 않습니다.' : `측정된 합계 ${tokenText(measured.total)} tokens · 수입된 담당 실행 ${measured.covered}/${bundle.actors.length}개. 전체 요청의 수집이 완전하다는 뜻은 아닙니다.`;
+    const note = measured.total == null ? '배정별 수치가 아직 연결되지 않았습니다. 미측정은 0이 아니며 세션 누적값은 요청 합계에 더하지 않습니다.' : `측정된 합계 ${tokenText(measured.total)} tokens · 표시된 작업 ${measured.covered}/${measured.rows.length}개 측정. 조율·검증·추가 작업의 전체 수집을 뜻하지 않습니다.`;
     section.append(node('p', note, 'usage-note'));
   }
   function renderMetadata(bundle) {
@@ -440,10 +473,10 @@ function startViewer() {
       const bundle = await get('/api/request?id=' + encodeURIComponent(id));
       if (version !== selectionVersion) return;
       data = bundle;
-      const displayed = displayActors(bundle), actors = new Map(displayed.map(a => [a.id, a])), measured = usageSummary(displayed), title = renderSummary(bundle, actors);
+      const displayed = displayActors(bundle), actors = new Map(displayed.map(a => [a.id, a])), units = usageUnits(bundle, displayed), measured = usageSummary(units), title = renderSummary(bundle, actors);
       const duration = durationText(bundle.requests[0]);
       $('metrics').append(metric('참여한 담당 실행', bundle.actors.length + '개', new Set(displayed.map(a => a.display_role)).size + '개 역할 · 수입된 배정 기준'),
-        metric('측정된 요청 토큰', tokenText(measured.total), `배정별 측정 ${measured.covered}/${bundle.actors.length} · 입력 ${tokenText(measured.input)} / 출력 ${tokenText(measured.output)}`),
+        metric('측정된 요청 토큰', tokenText(measured.total), `배정별 측정 ${measured.covered}/${measured.rows.length} · 입력 ${tokenText(measured.input)} / 출력 ${tokenText(measured.output)}`),
         metric('전체 실행 시간', duration || '미확인', duration ? '명시된 시작 → 종료 기준' : '시작·종료 구간 미수집'),
         metric('수집된 실행 기록', bundle.events.length + '개', '명령·지시·검증을 펼쳐 확인'));
       renderFlow(bundle, actors, measured); renderUsage(bundle, measured); renderMetadata(bundle);

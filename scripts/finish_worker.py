@@ -5,6 +5,7 @@ import argparse
 import os
 from pathlib import Path
 import subprocess
+import sqlite3
 import sys
 
 from lifecycle_io import digest, exited, locked, now, orca, private_file, read_json, save
@@ -70,6 +71,9 @@ def main(argv=None):
     parser.add_argument('--expect-effort')
     parser.add_argument('--request-id', help='Logical user request ID for usage attribution')
     parser.add_argument('--role', choices=sorted(ROLE_IDS), help='Workflow role; requires --request-id')
+    parser.add_argument('--trace-db', help='Existing private trace DB to append the collected usage')
+    parser.add_argument('--trace-actor-id', help='Explicit existing trace actor association')
+    parser.add_argument('--trace-task-title', help='Task title for the immutable usage observation')
     parser.add_argument('--cleanup-plan', help='Optional previously authorized, archive-verified cleanup plan')
     parser.add_argument('--config', help='Explicit harness policy override file')
     parser.add_argument('--policy-project', help='Existing policy project; defaults to --project. Use a retained coordinator project for temporary sources.')
@@ -79,6 +83,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         policy = load_policy(args.policy_project or args.project, args.config, args.auto_cleanup)
+        if (args.trace_actor_id is not None or args.trace_task_title is not None) and not args.trace_db:
+            raise ValueError('trace_options_require_trace_db')
+        if args.trace_db and (args.request_id is None or args.role is None):
+            raise ValueError('trace_db_requires_request_context')
         if bool(args.dispatch_directory) != bool(args.operation_id):
             raise ValueError('dispatch_directory_and_operation_id_required_together')
         cli = args.orca_cli or executable_for('orca', os.environ)
@@ -97,6 +105,18 @@ def main(argv=None):
             if (operation.get('task_id'),operation.get('dispatch_id')) != (args.task_id,args.dispatch_id):
                 raise ValueError('completion_operation_binding_mismatch')
             print('delegation=' + ledger.refresh(args.operation_id,cli)['state'])
+        if args.trace_db:
+            from trace_store import Store
+            from trace_usage import import_usage
+            target = private_file(args.trace_db, Path(args.project).resolve())
+            if not target.is_file():
+                raise ValueError('trace_db_must_already_exist')
+            trace = Store(target)
+            try:
+                imported = import_usage(trace, result['record_path'], args.trace_actor_id, args.trace_task_title)
+            finally:
+                trace.close()
+            print('trace_import=' + imported['event_id'])
         if result['verification'] in ('fail', 'unverified'):
             return 1
         if args.cleanup_plan and policy['auto_cleanup'] == 'N':
@@ -108,7 +128,7 @@ def main(argv=None):
                 raise ValueError('cleanup_plan_not_for_this_dispatch')
             print('cleanup=' + apply(args.cleanup_plan, cli)['phase'])
         return 0
-    except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+    except (OSError, ValueError, KeyError, TypeError, sqlite3.Error, subprocess.TimeoutExpired) as error:
         print('Completion failed: ' + (str(error) if isinstance(error, ValueError) else type(error).__name__), file=sys.stderr)
         return 2
 
