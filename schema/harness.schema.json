@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harness policy (separate from provider/model settings)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "version": {"const": 1},
+    "auto_cleanup": {"enum": ["Y", "N"]},
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_active_workers": {"type": ["integer", "null"], "minimum": 1},
+        "max_dispatches_per_request": {"type": ["integer", "null"], "minimum": 1}
+      }
+    }
+  }
+}

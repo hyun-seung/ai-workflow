@@ -99,6 +99,8 @@ Codex의 `turn.completed.usage`에서 수치를 읽는다. **`total_tokens = inp
 
 ## Orca 등 native 세션의 별도 근거
 
+명시한 로컬 Orca/Codex 세션과 선택 worker snapshot의 대조는 [native 기록 도구](native-record.md)로 수행할 수 있다. 실제 시작 요청, 검사 기대값, 적용값을 구분하고 비공개 JSON으로 저장한다. live 조회·새 에이전트 생성·자동 DB 수입은 하지 않는다.
+
 위 단독 실행기의 기록과 native 세션 자료는 수집 경로가 다르다. worker의 자체 보고가 `unavailable`이어도 명시적으로 연결된 실행 도구의 기록에 측정값이 있다면 조율자가 출처를 붙여 보완할 수 있다. 기존 자체 보고는 덮어쓰지 않고 측정한 범위와 시점을 별도로 남긴다. 현재 `workflow.py`나 조회 화면이 이 자료를 자동 수집하지는 않는다.
 
 로컬 Codex 원본 기록에서 확인할 경우 해당 task/dispatch에 대응하는 세션을 먼저 특정한다. `session_meta`의 식별자·출처, `turn_context`의 설정, `event_msg` 중 `token_count`의 수치처럼 필요한 메타데이터만 사용한다. 이 구조는 확인한 CLI 버전의 보조 근거이며 모든 공급자의 공통 계약이 아니다. 누락·형식 변경·출처 불일치는 미확인으로 남기고 전체 대화·내부 추론을 복사하지 않는다.

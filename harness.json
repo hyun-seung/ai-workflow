@@ -1,0 +1,9 @@
+{
+  "$schema": "schema/harness.schema.json",
+  "version": 1,
+  "auto_cleanup": "Y",
+  "limits": {
+    "max_active_workers": null,
+    "max_dispatches_per_request": null
+  }
+}

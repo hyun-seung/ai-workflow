@@ -20,6 +20,9 @@
 | [schema/workflow.schema.json](schema/workflow.schema.json) | 설정 파일의 필드·타입·허용값 |
 | [scripts/workflow.py](scripts/workflow.py) | 설정 검증, 적용값 확인, Codex 실행, 로컬 기록 집계 |
 | [runtime/execution-records.md](runtime/execution-records.md) | 실제 사용량·진단 수집, 비공개 기록, 자료 전달, 집계 |
+| [runtime/native-record.md](runtime/native-record.md), [scripts/native_record.py](scripts/native_record.py) | 명시한 Orca/Codex 기록의 배정·실제 승인/모델·누적 사용량 확인과 비공개 JSON 저장 |
+| [runtime/completion.md](runtime/completion.md) | 완료 알림의 단발성 기록·중복 방지, 보관본이 검증된 임시 폴더의 명시적 정리 |
+| [harness.json](harness.json), [runtime/delegation.md](runtime/delegation.md) | 임시 공간 자동 정리 Y/N(기본 Y), 작업별 동시·누적 위임 한도와 native 호출 전 예약 |
 | [runtime/harness.md](runtime/harness.md), [scripts/prepare_handoff.py](scripts/prepare_handoff.py) | 작업 크기에 맞는 조율, 중복 대기 처리 규칙, 명시 입력 파일의 인계 준비 |
 | [runtime/approval-waits.md](runtime/approval-waits.md), [scripts/approval_wait.py](scripts/approval_wait.py) | 승인·질문 대기 관측, 확인된 요청의 중복 억제, 알림 전달 확인과 단발성 Orca 조회 |
 | [runtime/permission-policy.md](runtime/permission-policy.md), [권한 인계 양식](templates/execution-permissions.md) | 공식 운영 사례, 사전 허용 범위·예외 승인·실제 적용 확인. 권한을 자동 부여하는 설정 파일은 아님 |

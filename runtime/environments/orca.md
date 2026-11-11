@@ -37,6 +37,10 @@ provider는 --agent로 선택하며 모델·effort 지원은 공급자와 버전
 
 필요한 메타데이터는 해당 task/dispatch와 연결된 세션에서만 읽는다. 로컬 Codex 기록을 보조 근거로 사용할 때는 `session_meta`·`turn_context` 같은 설정 항목만 추출하고, 별도 자동 검토 세션을 역할 worker로 잘못 집계하지 않는다. 내부 추론이나 전체 대화를 설정 확인에 복사하지 않는다. [사용량·출처 구분](../execution-records.md)을 따른다.
 
+명시한 세션 파일과 해당 dispatch의 보존된 `worker-show --full --json`을 연결하려면 [native 기록 도구](../native-record.md)를 사용할 수 있다. 이 도구의 기대값 확인은 이미 실행된 snapshot 검사이며 생성 전 제한·현재 권한 승인·모델 설정 적용을 대신하지 않는다.
+
+완료 알림 후에는 [완료 처리기](../completion.md)가 해당 worker를 단발성 조회하고 기록 중복을 막는다. 준비된 임시 폴더 정리 계획도 연결할 수 있다. Orca 1.4.256의 `project setups`, `worktree ps`, `project setup-delete`로 로컬 folder setup을 확인·해제하며, Git worktree 삭제 명령으로 대체하지 않는다.
+
 ## 승인 대기 알림 처리
 
 승인·질문 대기 알림 수신 시 단발성 상태 조회는 [승인·질문 대기 처리 도구](../approval-waits.md)로 수행하고 상태와 미전달 알림을 기록한다. 같은 `worker-show` 조회를 별도로 반복하지 않는다. 확인된 원본 요청 ID가 있는 경우만 동일 대기를 억제한다. 현재 native pending 식별자와 외부 전송·원본 알림 제어의 한계를 함께 적용한다.
