@@ -48,7 +48,16 @@ def private_destination(output, project):
         missing.append(cursor)
         cursor = cursor.parent
     for path in reversed(missing):
-        path.mkdir(mode=0o700)
+        try:
+            path.mkdir(mode=0o700)
+        except FileExistsError:
+            # Another registered task may create the same private parent first.
+            # Revalidate the winner rather than accepting any existing path.
+            if path.is_symlink():
+                raise ValueError("Output must not use symlinks") from None
+            validate_records_dir(path, [TEMPLATE_ROOT, project])
+    if any(path.is_symlink() for path in (output, *output.parents)):
+        raise ValueError("Output must not use symlinks")
     validate_records_dir(directory, [TEMPLATE_ROOT, project])
     return directory / output.name
 

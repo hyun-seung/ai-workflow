@@ -6,9 +6,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from prepare_handoff import MAX_TASK_BYTES, prepare
+from prepare_handoff import MAX_TASK_BYTES, prepare, private_destination
 
 
 class HandoffTests(unittest.TestCase):
@@ -74,6 +75,25 @@ class HandoffTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.run_prepare(output=alias / "handoff.md")
         self.assertFalse((target / "handoff.md").exists())
+
+    def test_concurrent_parent_creation_revalidates_privacy_and_symlinks(self):
+        original = Path.mkdir
+        target = self.root / 'link-target'; target.mkdir(mode=0o700)
+        for kind in ('private', 'public', 'symlink', 'file'):
+            directory = self.root / ('racing-' + kind)
+            def racing(path, *args, **kwargs):
+                if path == directory:
+                    if kind == 'symlink': path.symlink_to(target, target_is_directory=True)
+                    elif kind == 'file': path.write_text('occupied')
+                    else: original(path, mode=0o700 if kind == 'private' else 0o755)
+                    raise FileExistsError('concurrent creator')
+                return original(path, *args, **kwargs)
+            with self.subTest(kind=kind), patch.object(Path, 'mkdir', racing):
+                if kind == 'private':
+                    self.assertEqual(private_destination(directory/'output.json', self.project), directory/'output.json')
+                else:
+                    with self.assertRaises(ValueError): private_destination(directory/'output.json', self.project)
+            self.assertFalse((directory/'output.json').exists())
 
     def test_rejects_invalid_task_and_environment(self):
         for contents in [b" ", b"\xff", b"x" * (MAX_TASK_BYTES + 1)]:
