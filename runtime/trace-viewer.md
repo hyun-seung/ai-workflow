@@ -2,6 +2,8 @@
 
 명시적으로 작성·전달된 판단 근거 요약, 지시와 행동·결과를 요청 단위로 모은다. 내부 추론을 저장하는 기능이 아니다. 신규 도구는 Python 표준 라이브러리만 사용하며 기존 `workflow.py`·역할 실행·JSON usage 기록을 변경하지 않는다. Orca native snapshot을 수입하며 native 실행을 자동 추적한다고 주장하지 않는다.
 
+SQLite에는 요청·actor·허용된 지시/명령/결과·검증·마감과 수입한 토큰 관측을 저장한다. 원본 실행 로그·소스·보고서 보관본은 별도 파일로 유지하고 입력 근거 및 마감에서 경로·해시를 연결한다. 수집한 범위만 저장하며 전체 대화·모든 작업의 토큰이 자동으로 들어간다고 가정하지 않는다.
+
 최종 결과·검증 파일과 담당자/후속 작업을 연결할 때는 [요청 마감](trace-closeout.md)을 사용한다. 수입된 요청 상태와 마감 판정·수집 범위를 구분하고, 마감 이후 수집 기록이 바뀌면 재확인이 필요하다고 표시한다.
 
 ## 실행과 비공개 저장
@@ -12,6 +14,7 @@
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 import tests/fixtures/traces/sample.json
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 import-orca /private/path/snapshot.json --request-id request-example --title '요청 제목' --role backend
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 import-usage /private/path/native-record.json --task-title '서버 구현'
+python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 import-observation /private/path/observation.json
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 list --q example
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 export --request-id request-example
 python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 serve --port 8765
@@ -69,6 +72,7 @@ JSON bundle: `schema_version: 1`, `requests: []`, `actors: []`, `events: []`, �
 - actor(실행): `request_id`, `parent_id`, `role`, `environment`, `provider`, `status`, `requested: {model, effort}`, `observed: {model, effort}`. 요청과 확인값은 독립적이며 미확인은 null이다. native 수입은 workflow.json을 읽지 않으며 확인된 모델로 채우지 않는다.
 - event: `request_id`, 선택 `actor_id`, `kind`, `detail`. kind는 user_request/decision/assignment/instruction/tool_call/tool_result/question/approval_request/approval_resolution/handoff/verification/explanation/completion이다. completion은 별도 마감 계약을 검증한다. 상세의 정규 JSON UTF-8 SHA256을 `detail_sha256`으로 저장한다. 원본 파일 전체 바이트의 해시와 다르다. 원문 지시는 detail에 보존하되 내부 추론은 제외한다. 사후 요약은 detail에 `recorded_retrospectively: true`와 작성시각·근거를 명시하고 당시 판단처럼 표현하지 않는다.
 - `usage` 이벤트는 별도의 [측정·연결 계약](trace-usage.md)을 검증하며 기존 actor를 보존한다. 관측·근거는 기존 event/collection 배열로 JSON·JSONL 수입·내보내기를 지원한다.
+- 최종 명령·검증 관측은 선택 [실행자/대상 계약](trace-observations.md)의 `attribution`을 지원한다. 이 source의 명령 actor는 실제 실행자, 판정 actor는 판정자다. 입력을 작성한 actor와 제품/검증 대상은 별도로 보존한다.
 - usage: actor에 연결한다. `source`, `scope`, 비어 있지 않은 `measurements`가 있어야 저장 시 measured이며 없거나 `measurements={}`이면 unavailable이다. measurements는 비음수 수치다. 저장 시 measured라는 사실만으로 배정 귀속을 인정하지 않으며, 화면 합산에는 위의 더 엄격한 계약을 적용한다. 공급자의 누적/턴 범위 해석과 측정 근거는 입력 작성자가 명시한다.
 - collections: snapshot source/sourceIdentity, native source, cursor/nextCursor/limited, 반환 개수·경고·원본 상태와 생략 블록 수를 보존한다. snapshot 범위는 별도이며 이벤트 전부를 수집했다는 증거가 아니다.
 

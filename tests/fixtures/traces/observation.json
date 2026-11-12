@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "sample-independent-command",
+  "request_id": "sample-request",
+  "kind": "tool_call",
+  "time": "2026-01-01T00:00:00Z",
+  "recorded_at": "2026-01-01T00:01:00Z",
+  "attribution": {
+    "version": 1,
+    "recorded_by_actor_id": "sample-coordinator",
+    "executor_actor_id": "sample-coordinator",
+    "product_owner_actor_id": "sample-worker",
+    "verification_subject_actor_id": "sample-worker",
+    "verifier_actor_id": "sample-coordinator"
+  },
+  "detail": {
+    "name": "shell",
+    "input": {"command": ["python3", "example.py"]},
+    "state": "completed",
+    "exitCode": 0
+  }
+}

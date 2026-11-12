@@ -12,6 +12,10 @@ from datetime import datetime, timezone
 from run_records import validate_records_dir
 from trace_closeout import closeout_view, validate_detail
 from trace_usage import validate_event as validate_usage_event, validate_store as validate_usage_store, validate_evidence, validate_legacy_actor
+from trace_observation import (SOURCE as OBSERVATION_SOURCE,
+                               uses_contract, validate_event as validate_observation_event,
+                               validate_references, validate_evidence as validate_observation_evidence,
+                               uses_input_contract, validate_input as validate_observation_input)
 
 MAX_BYTES = 8 * 1024 * 1024
 KINDS = {'user_request', 'decision', 'assignment', 'instruction', 'tool_call', 'tool_result',
@@ -111,6 +115,16 @@ class Store:
     def import_bundle(self, bundle):
         if bundle.get('schema_version') != 1:
             raise ValueError('Unsupported schema_version')
+        # Reject malformed protected metadata before privacy cleaning can erase
+        # an invalid field or turn its source marker into an untyped legacy row.
+        if isinstance(bundle.get('events'), list):
+            for event in bundle['events']:
+                if isinstance(event, dict) and uses_contract(event):
+                    validate_observation_event(event)
+        if isinstance(bundle.get('collections'), list):
+            for collection in bundle['collections']:
+                if isinstance(collection, dict) and uses_input_contract(collection):
+                    validate_observation_input(collection)
         bundle = clean(bundle)
         rows = []
         for kind, plural in [('request','requests'), ('actor','actors'), ('event','events')]:
@@ -151,6 +165,8 @@ class Store:
                     if row.get('kind') not in KINDS: raise ValueError('Unsupported event kind')
                     if row.get('actor_id') is not None: ident(row['actor_id'])
                     if 'detail' not in row: raise ValueError('Event detail missing')
+                    if uses_contract(row):
+                        validate_observation_event(row)
                     if row['kind'] == 'usage':
                         validate_usage_event(row)
                     if row['kind'] == 'assignment' and isinstance(row['detail'], dict) and 'actor_roles' in row['detail']:
@@ -179,6 +195,8 @@ class Store:
                     if previous == row: continue
                     # Only explicit lifecycle status fields may evolve. Content conflicts roll back.
                     mutable = {'status'} if kind in ('request','actor') else ({'detail', 'detail_sha256'} if row.get('kind') == 'tool_call' else set())
+                    if kind == 'event' and row.get('source') == OBSERVATION_SOURCE:
+                        mutable = set()
                     if {k:v for k,v in previous.items() if k not in mutable} != {k:v for k,v in row.items() if k not in mutable}:
                         raise ValueError('Conflicting ID: '+key)
                     if kind == 'event':
@@ -199,6 +217,8 @@ class Store:
                     raise ValueError('Unknown actor/parent '+ref)
                 if kind == 'event' and row.get('kind') == 'usage':
                     validate_usage_store(self, row)
+                if kind == 'event' and uses_contract(row):
+                    validate_references(self, row)
                 if kind == 'actor' and row.get('usage', {}).get('task_attributed') is True:
                     validate_legacy_actor(self, row)
                 if kind == 'event' and row.get('kind') == 'assignment' and isinstance(row.get('detail'), dict):
@@ -225,6 +245,8 @@ class Store:
                     raise ValueError('Unknown collection request')
                 if collection['source'] == 'trace.native-usage-evidence':
                     validate_evidence(self, collection)
+                if uses_input_contract(collection):
+                    validate_observation_evidence(self, collection)
                 key = digest(collection)
                 self.db.execute('INSERT OR IGNORE INTO collections VALUES(?,?,?)', (key,ident(collection['request_id']),encoded(collection)))
         return {'records_received':len(rows)}

@@ -1,6 +1,8 @@
 # 실행 사용량과 로컬 기록
 
-실행기는 한 역할의 `codex exec --json --ephemeral` 출력을 읽고 종료 시 측정 가능한 토큰 수를 stderr에 표시한다. 최종 에이전트 메시지는 stdout으로 출력한다. 원시 이벤트와 도구 출력은 파일에 보관하지 않는다. 추가 Python 패키지나 DB는 필요하지 않다.
+이 문서 앞부분은 단독 `workflow.py` 실행기의 선택 JSON 기록을 설명한다. Orca native 기록은 [별도 수집기](native-record.md)와 [SQLite 조회 도구](trace-viewer.md)를 사용하며, 측정 토큰은 [DB 연결기](trace-usage.md), 새 실행자/대상 관측은 [관측 입력](trace-observations.md)으로 연결한다. 저장 경로가 다른 두 실행 방식을 구분한다.
+
+단독 실행기는 한 역할의 `codex exec --json --ephemeral` 출력을 읽고 종료 시 측정 가능한 토큰 수를 stderr에 표시한다. 최종 에이전트 메시지는 stdout으로 출력한다. 원시 이벤트와 도구 출력은 파일에 보관하지 않는다. 이 단독 실행에는 추가 Python 패키지나 DB가 필요하지 않다.
 
 ## 저장과 업무 연결
 
