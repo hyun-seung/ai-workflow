@@ -42,13 +42,14 @@ def validate_usage(usage):
     expected = {'version', 'status', 'scope', 'task_attributed', 'request_id', 'role', 'task_id',
                 'dispatch_id', 'actor_id', 'session_id', 'source', 'measurement_key', 'measurements',
                 'issues', 'interval', 'baseline', 'final', 'increments', 'request_binding'}
-    turn = isinstance(usage, dict) and type(usage.get('version')) is int and usage['version'] == 2
+    version = usage.get('version') if isinstance(usage, dict) else None
+    turn = type(version) is int and version in (2, 3)
     if turn:
-        expected.add('message_sha256')
+        expected.add('message_bindings' if version == 3 else 'message_sha256')
     if not isinstance(usage, dict) or set(usage) != expected:
         raise ValueError('Unsupported dispatch usage record')
     u = usage
-    if (type(u['version']) is not int or u['version'] != (2 if turn else 1) or u['status'] != 'measured' or
+    if (type(u['version']) is not int or u['version'] not in ((2, 3) if turn else (1,)) or u['status'] != 'measured' or
             u['scope'] != ('native_turn' if turn else 'dispatch') or u['task_attributed'] is not True or u['issues'] != [] or
             u['source'] != SOURCE or u['request_binding'] != ('explicit_native_turn' if turn else 'explicit') or
             not isinstance(u['role'], str) or u['role'] not in ROLE_IDS):
@@ -56,8 +57,8 @@ def validate_usage(usage):
     for key in ('request_id', 'task_id', 'actor_id', 'session_id'):
         ident(u[key])
     if turn:
-        if (u['dispatch_id'] is not None or u['role'] != 'coordinator' or not isinstance(u['message_sha256'], str) or
-                not re.fullmatch('[0-9a-f]{64}', u['message_sha256'])):
+        if (u['dispatch_id'] is not None or u['role'] != 'coordinator' or
+                version == 2 and (not isinstance(u['message_sha256'], str) or not re.fullmatch('[0-9a-f]{64}', u['message_sha256']))):
             raise ValueError('Invalid coordinator turn attribution')
     elif ident(u['dispatch_id']) != u['actor_id']:
         raise ValueError('Native usage actor must match dispatch')
@@ -72,6 +73,21 @@ def validate_usage(usage):
         integer(interval[key], 1)
     if not interval['start_line'] < interval[binding] < interval['end_line']:
         raise ValueError('Invalid usage interval order')
+    if version == 3:
+        messages = u['message_bindings']
+        if not isinstance(messages, list) or not 1 <= len(messages) <= 1000:
+            raise ValueError('Invalid usage message bindings')
+        previous = interval['start_line']
+        for message in messages:
+            if (not isinstance(message, dict) or set(message) != {'line', 'sha256'} or
+                    not isinstance(message['sha256'], str) or not re.fullmatch('[0-9a-f]{64}', message['sha256'])):
+                raise ValueError('Invalid usage message binding')
+            line = integer(message['line'], 1)
+            if not previous < line < interval['end_line']:
+                raise ValueError('Invalid usage message binding order')
+            previous = line
+        if messages[0]['line'] != interval[binding]:
+            raise ValueError('Usage first message binding mismatch')
     for key in ('started_at', 'finished_at'): stamp(interval[key])
     if interval['started_at'] and interval['finished_at'] and stamp(interval['started_at']) > stamp(interval['finished_at']):
         raise ValueError('Invalid usage time order')

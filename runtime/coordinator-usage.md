@@ -1,6 +1,6 @@
 # 조율자 실행 턴의 토큰 수집
 
-하위 worker는 생성된 Orca 배정 머리말로 연결한다. 조율자의 일반 대화에는 그런 dispatch가 없으므로 `scripts/native_turn_record.py`는 별도의 명시 연결을 사용한다. dispatch ID를 만들거나 세션 누적값을 요청별로 복제하지 않는다. 현재 Orca·Codex의 닫힌 단일 native 턴만 지원한다.
+하위 worker는 생성된 Orca 배정 머리말로 연결한다. 조율자의 일반 대화에는 그런 dispatch가 없으므로 `scripts/native_turn_record.py`는 별도의 명시 연결을 사용한다. dispatch ID를 만들거나 세션 누적값을 요청별로 복제하지 않는다. 현재 Orca·Codex의 닫힌 native 턴을 개별 측정한다. 여러 턴은 [논리 작업 묶음](trace-amendments.md)으로 연결한다.
 
 ## 연결과 실행
 
@@ -36,7 +36,7 @@ python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 \
 ## 측정 조건
 
 - 동일한 native 턴의 유일한 시작·정상 종료, 중첩·중단·ID 재사용 부재를 확인한다. 현재 진행 중인 조율자 턴은 닫힌 뒤 수집해야 한다. 이 명령은 완료 hook이 아니다.
-- 턴 안에 사용자 메시지가 정확히 하나 있어야 하고 지정한 행·내용 해시·확인 가능한 routing 턴과 일치해야 한다. 추가 사용자 메시지가 있으면 같은 논리 요청이라고 가정해 합산하지 않는다. 여러 메시지·턴의 귀속은 후속 범위다.
+- schema_version=1 binding은 턴 안의 사용자 메시지 하나와 행·내용 해시·확인 가능한 routing 턴이 일치해야 한다. 여러 메시지는 아래 version 2의 명시 연결만 지원한다. 서로 다른 업무가 섞인 턴을 임의로 나누지 않는다.
 - routing이나 turn_id가 실제로 없는 경우와 명시됐으나 잘못된 경우를 구분한다. 명시한 null·잘못된 형식·유효하지 않은 ID를 부재로 바꿔 허용하지 않는다. 하위 worker 배정에도 같은 검사를 적용한다.
 - 생성된 worker 배정 머리말이 있는 턴은 이 경로로 수집하지 않는다. 기존 [배정 수집기](native-record.md)를 사용한다.
 - 기준 누적값, 각 증가분과 `last_token_usage`, 종료값을 하위 배정과 같은 계산 함수로 대조한다. 누락·상충·상속 기준 미확인·메시지 앞 측정·턴 밖 측정은 미측정으로 남긴다.
@@ -51,3 +51,11 @@ python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 \
 두 형식은 같은 물리 `session/turn` 키를 사용한다. worker/조율자·다른 역할·다른 파일·수입 순서가 달라도 물리 키·구간이 겹치면 거부한다. 원래 actor에 적힌 누적값이나 검증되지 않은 native 턴 값을 화면 합계로 승격하지 않는다.
 
 화면은 `조율자 턴 측정`으로 구분한다. 일부 상태 확인·결과 보고 턴이 측정됐어도 요청의 모든 조율·승인 검토·추가 업무가 포함됐다는 뜻은 아니다. 측정된 작업 행의 비율과 요청 전체 수집 완전성을 구분하고, 알고 있는 보류 항목과 이유를 마감·수집 범위 설명에 남긴다. 도구별 읽기·검색·수정 토큰은 이 수치에서 나눌 수 없다.
+
+## 여러 메시지가 들어온 하나의 턴
+
+binding `schema_version=2`는 기존 `message_line`·`message_sha256` 대신 `scope: "single_work"`, `messages: [{"line": 4, "sha256": "실제64자리해시"}, ...]`를 사용한다. 나머지 요청·actor·task·role·native_turn_id는 version 1과 같다. 모든 메시지가 같은 업무에 속한다는 호출자의 명시 선언이며 원본 내용으로 자동 추론하지 않는다.
+
+행 순서대로 1~1000개를 연결하며 턴 안의 **모든** 사용자 메시지가 정확히 일치해야 한다. 누락·추가·중복·내용 변경을 허용하지 않는다. 두 번째 이후 메시지는 원본의 유효한 동일 턴 routing이 필수다. 첫 메시지의 routing 부재 호환은 유지하되 잘못된 명시 routing은 거부한다.
+
+출력 `turn_usage.version=3`은 `message_sha256` 대신 `message_bindings`를 보존한다. 물리 측정은 여전히 턴 전체 하나다. 메시지별 토큰으로 쪼개거나, 서로 다른 작업·역할로 비율 배분하지 않는다. 이미 저장된 version 2를 version 3으로 덮어쓰지 않으며 다른 binding으로 같은 물리 키를 수입하면 충돌한다. 과거 애매한 구간을 자동으로 측정값으로 승격하지 않는다.

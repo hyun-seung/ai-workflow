@@ -42,6 +42,65 @@ class NativeTurnTests(unittest.TestCase):
         self.assertNotIn('assignment_line', u['interval'])
         self.assertNotIn('PRIVATE_REQUEST_BODY', json.dumps(record))
 
+    def multi_binding(self):
+        second = copy.deepcopy(self.message)
+        second['payload']['content'] = [dict(type='input_text', text='ADDITIONAL_PRIVATE_REQUEST')]
+        self.rows.insert(4, second)
+        self.binding = {k:v for k,v in self.binding.items() if k not in ('message_line','message_sha256')}
+        self.binding.update(schema_version=2, scope='single_work', messages=[
+            dict(line=index+1, sha256=hashlib.sha256(json.dumps(row['payload']['content'],ensure_ascii=False,
+                 sort_keys=True,separators=(',',':')).encode()).hexdigest())
+            for index,row in enumerate(self.rows) if row['type']=='response_item'])
+
+    def test_explicit_multi_message_binding_is_one_physical_measurement(self):
+        self.multi_binding();record=self.inspect();u=record['turn_usage']
+        self.assertEqual(u['version'],3);self.assertEqual(u['measurements']['total_tokens'],120)
+        self.assertEqual(u['interval']['binding_line'],4)
+        self.assertEqual(len(u['message_bindings']),2)
+        self.assertNotIn('ADDITIONAL_PRIVATE_REQUEST',json.dumps(record))
+        from trace_usage import validate_usage
+        validate_usage(u)
+        sample=load_bundle(Path(__file__).parent/'fixtures/traces/sample.json')
+        store=Store(self.root/'private/multi.sqlite3');self.addCleanup(store.close);store.import_bundle(sample)
+        path=self.root/'record.json';path.write_text(json.dumps(record));import_usage(store,path)
+        import_usage(store,path)
+        usage=[e for e in store.request('sample-request')['events'] if e['kind']=='usage']
+        self.assertEqual(len(usage),1);self.assertEqual(usage[0]['detail']['usage'],u)
+
+    def test_multi_message_binding_requires_all_messages_and_valid_additional_routing(self):
+        self.multi_binding();original=copy.deepcopy(self.binding)
+        self.binding['messages'].pop()
+        self.assertEqual(self.inspect()['turn_usage']['status'],'unavailable')
+        self.binding=original
+        for metadata in [None,{},dict(turn_id='other')]:
+            self.rows[4]['payload']['internal_chat_message_metadata_passthrough']=metadata
+            self.assertEqual(self.inspect()['turn_usage']['status'],'unavailable')
+        self.rows[4]['payload']['internal_chat_message_metadata_passthrough']=dict(turn_id='turn_one')
+        self.rows[4]['payload']['content'][0]['text']='changed'
+        self.assertEqual(self.inspect()['turn_usage']['status'],'unavailable')
+
+    def test_multi_binding_order_scope_and_duplicates_fail_closed(self):
+        self.multi_binding();original=copy.deepcopy(self.binding)
+        for change in [dict(scope='mixed_requests'),dict(messages=[]),dict(messages=self.binding['messages'][::-1]),
+                       dict(messages=self.binding['messages']*2),dict(messages=[dict(line=True,sha256='0'*64)])]:
+            self.binding=dict(original,**change)
+            with self.assertRaises(ValueError):self.inspect()
+
+    def test_version_three_cannot_overlap_version_two_or_mutate_existing_usage(self):
+        from trace_usage import validate_usage
+        self.multi_binding();u=self.inspect()['turn_usage']
+        for members in [[],u['message_bindings'][::-1],[dict(line=6,sha256='0'*64)],
+                        [dict(line=4,sha256='bad')],u['message_bindings']*2]:
+            bad=copy.deepcopy(u);bad['message_bindings']=members
+            with self.assertRaises(ValueError):validate_usage(bad)
+        # Identical physical key cannot acquire a different logical binding on replay.
+        store=Store(self.root/'private/conflict.sqlite3');self.addCleanup(store.close)
+        store.import_bundle(load_bundle(Path(__file__).parent/'fixtures/traces/sample.json'))
+        path=self.root/'v3.json';record=self.inspect();path.write_text(json.dumps(record));import_usage(store,path)
+        record['turn_usage'].pop('message_bindings');record['turn_usage'].update(version=2,message_sha256='0'*64)
+        path.write_text(json.dumps(record))
+        with self.assertRaises(ValueError):import_usage(store,path)
+
     def test_separate_later_turn_does_not_change_a_closed_turn_measurement(self):
         first=self.inspect()['turn_usage']
         self.rows += [boundary('task_started','turn_two'), context(), event('response_item',dict(role='user',content=[])),

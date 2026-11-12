@@ -123,8 +123,7 @@ def finite_float(value):
     return number
 
 
-def import_observation(store, filename):
-    from trace_store import stamp
+def read_input(filename):
     path = Path(filename).resolve(strict=True)
     with os.fdopen(os.open(path, os.O_RDONLY | os.O_NONBLOCK), 'rb') as stream:
         before = os.fstat(stream.fileno())
@@ -135,6 +134,12 @@ def import_observation(store, filename):
     if len(raw) > MAX_BYTES or fingerprint(before) != fingerprint(after) or fingerprint(after) != fingerprint(path.stat()):
         raise ValueError('Observation input changed or oversized')
     payload = json.loads(raw, object_pairs_hook=unique, parse_constant=invalid_number, parse_float=finite_float)
+    return path, raw, payload
+
+
+def import_observation(store, filename):
+    from trace_store import stamp
+    path, raw, payload = read_input(filename)
     event = build_event(payload)
     evidence = dict(request_id=event['request_id'], source=INPUT_SOURCE, source_id=event['id'],
                     actor_id=event['attribution']['recorded_by_actor_id'], time=stamp(payload['recorded_at']),

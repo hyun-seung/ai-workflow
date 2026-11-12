@@ -2,7 +2,7 @@
 
 [native 수집기](native-record.md)가 만든 `dispatch_usage`를 기존 SQLite 기록에 연결한다. 원래 actor의 `usage`·지시·로그는 그대로 두고 `kind=usage` 이벤트와 입력 근거 collection을 추가한다. 모델 호출이나 원본 세션 경로 자동 탐색은 하지 않는다.
 
-[조율자 턴 수집기](coordinator-usage.md)의 `turn_usage`도 같은 명령으로 연결한다. version 2의 native_turn 범위이며 dispatch는 null이다. 기존 최상위 actor와 정확히 일치해야 하고 다른 actor로 매핑하지 않는다. 두 형식이 한 입력에 함께 있으면 거부한다. 물리 키·구간 검사는 형식 간에도 공유한다.
+[조율자 턴 수집기](coordinator-usage.md)의 `turn_usage`도 같은 명령으로 연결한다. version 2/3의 native_turn 범위이며 dispatch는 null이다. 기존 최상위 actor와 정확히 일치해야 하고 다른 actor로 매핑하지 않는다. 두 형식이 한 입력에 함께 있으면 거부한다. 물리 키·구간 검사는 형식 간에도 공유한다.
 
 ## 수입
 
@@ -60,3 +60,5 @@ node --test tests/test_trace_frontend.cjs
 ```
 
 가상 자료로 재처리·다른 snapshot·교차 요청/actor·겹친 구간·generic 복원 우회·숫자·출처·실패 후 재시도를 검증한다. 실제 적용 전에는 비공개 백업과 사본 검사를 수행하고 기존 원문·actor·다른 요청의 보존, 수입 결과와 요청/역할/작업 합계를 대조한다.
+
+여러 닫힌 구간의 논리 작업 묶음과 표준 관측의 원본 보존 정정은 [작업 묶음·정정 규칙](trace-amendments.md)을 따른다. 원천 토큰 측정값의 수정은 지원하지 않는다.

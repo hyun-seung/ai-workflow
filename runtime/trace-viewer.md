@@ -99,3 +99,5 @@ python3 -m unittest discover -s tests -v
 ```
 
 보안 검증은 권한·Git 경로·symlink·XSS payload 보존과 CSP·SQL injection 검색·임의 파일 경로·cross-origin·읽기 전용 응답을 포함한다. 브라우저 시각 검증은 실행별 비공개 인계 보고에 별도 기재한다.
+
+표준 실행·검증 관측의 정정은 [원본 보존 정정](trace-amendments.md)을 사용한다. 정정이 있는 요청은 현재 값과 `정정됨` 표시를 보여주고 최초 원본·정정 이유·이력을 펼쳐 확인한다. 작업 묶음 합계는 조회 API의 `usage_groups`에 제공하며 화면의 토큰 행은 물리 측정 단위다.

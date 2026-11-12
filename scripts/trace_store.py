@@ -17,9 +17,11 @@ from trace_observation import (SOURCE as OBSERVATION_SOURCE,
                                validate_references, validate_evidence as validate_observation_evidence,
                                uses_input_contract, validate_input as validate_observation_input)
 
+import trace_amendments as amendments
+
 MAX_BYTES = 8 * 1024 * 1024
 KINDS = {'user_request', 'decision', 'assignment', 'instruction', 'tool_call', 'tool_result',
-         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion', 'usage'}
+         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion', 'usage', 'usage_group', 'revision'}
 FORBIDDEN = {'analysis', 'reasoning', 'thinking', 'chain_of_thought'}
 ROLE_IDS = {'coordinator', 'architect', 'designer', 'backend', 'frontend', 'verifier'}
 
@@ -119,10 +121,14 @@ class Store:
         # an invalid field or turn its source marker into an untyped legacy row.
         if isinstance(bundle.get('events'), list):
             for event in bundle['events']:
+                if isinstance(event, dict) and amendments.uses_contract(event):
+                    amendments.validate_event(event)
                 if isinstance(event, dict) and uses_contract(event):
                     validate_observation_event(event)
         if isinstance(bundle.get('collections'), list):
             for collection in bundle['collections']:
+                if isinstance(collection, dict) and amendments.uses_input(collection):
+                    amendments.validate_input(collection)
                 if isinstance(collection, dict) and uses_input_contract(collection):
                     validate_observation_input(collection)
         bundle = clean(bundle)
@@ -165,6 +171,8 @@ class Store:
                     if row.get('kind') not in KINDS: raise ValueError('Unsupported event kind')
                     if row.get('actor_id') is not None: ident(row['actor_id'])
                     if 'detail' not in row: raise ValueError('Event detail missing')
+                    if amendments.uses_contract(row):
+                        amendments.validate_event(row)
                     if uses_contract(row):
                         validate_observation_event(row)
                     if row['kind'] == 'usage':
@@ -245,10 +253,14 @@ class Store:
                     raise ValueError('Unknown collection request')
                 if collection['source'] == 'trace.native-usage-evidence':
                     validate_evidence(self, collection)
+                if amendments.uses_input(collection):
+                    amendments.validate_evidence(self, collection)
                 if uses_input_contract(collection):
                     validate_observation_evidence(self, collection)
                 key = digest(collection)
                 self.db.execute('INSERT OR IGNORE INTO collections VALUES(?,?,?)', (key,ident(collection['request_id']),encoded(collection)))
+            for rid in {rid for _, _, rid, _ in rows}:
+                self.request(rid)  # validate the complete revision graph inside this transaction
         return {'records_received':len(rows)}
 
     def requests(self, q='', limit=100):
@@ -269,6 +281,7 @@ class Store:
         if not result['requests']: return None
         result['events'].sort(key=lambda e:(e['time'] is None,e['time'] or '',e['id']))
         result['collections'] = [json.loads(r[0]) for r in self.db.execute('SELECT body FROM collections WHERE request_id=? ORDER BY rowid',(rid,))]
+        result.update(amendments.project(result))
         result['closeout'] = closeout_view(result)
         return result
 

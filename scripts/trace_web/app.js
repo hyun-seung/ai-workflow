@@ -4,7 +4,7 @@ const labels = {
   user_request: '사용자 요청', decision: '결정·이유 요약', assignment: '업무 배정',
   instruction: '전달 지시', tool_call: '명령·도구 입력', tool_result: '도구 결과',
   question: '질문', approval_request: '승인 요청 · 결정 미확인',
-  approval_resolution: '승인 처리', handoff: '결과 인계', verification: '검증 판정', explanation: '명시된 설명', completion: '요청 마감', usage: '토큰 측정'
+  approval_resolution: '승인 처리', handoff: '결과 인계', verification: '검증 판정', explanation: '명시된 설명', completion: '요청 마감', usage: '토큰 측정', usage_group: '논리 작업 묶음', revision: '기록 정정'
 };
 const show = value => JSON.stringify(value, null, 2) ?? String(value);
 const known = value => value === null || value === undefined || value === '' ? '미확인' : value;
@@ -102,6 +102,10 @@ function closeoutLines(closeout) {
 }
 
 // Only explicitly attributed, non-cumulative measurements are eligible for totals.
+function effectiveBundle(bundle) {
+  return bundle.effective_events ? { ...bundle, original_events: bundle.events, events: bundle.effective_events } : bundle;
+}
+
 function usageFor(actor) {
   const u = actor.usage || {}, m = u.measurements || u.tokens || {};
   const valid = value => Number.isSafeInteger(value) && value >= 0;
@@ -113,7 +117,7 @@ function usageFor(actor) {
     return { kind: 'unavailable', label: '배정별 미측정', input: null, output: null, total: null };
   }
   const attributed = u.status === 'measured' && (u.scope === 'dispatch' ||
-    u.scope === 'native_turn' && u.version === 2 && actor.observation_id && u.role === 'coordinator' && u.dispatch_id === null) && u.task_attributed === true &&
+    u.scope === 'native_turn' && [2, 3].includes(u.version) && actor.observation_id && u.role === 'coordinator' && u.dispatch_id === null) && u.task_attributed === true &&
     u.actor_id === (actor.observation_id ? actor.native_actor_id : actor.id) && u.request_id === actor.request_id && typeof u.source === 'string' && u.source &&
     typeof u.measurement_key === 'string' && u.measurement_key.trim();
   return { kind: attributed ? 'attributed' : 'reference', label: attributed ? u.scope === 'native_turn' ? '조율자 턴 측정' : '배정별 측정' : u.scope === 'session_cumulative' ? '세션 누적 · 참고값' : '배정 귀속 미확인',
@@ -208,7 +212,7 @@ function durationText(request) {
   const seconds = Math.round((Date.parse(b) - Date.parse(a)) / 1000);
   return seconds < 60 ? `${seconds}초` : `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
 }
-if (typeof module !== 'undefined') module.exports = { extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
+if (typeof module !== 'undefined') module.exports = { effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
 if (typeof document !== 'undefined') startViewer();
 
 function startViewer() {
@@ -285,7 +289,13 @@ function startViewer() {
     header.append(node('span', displayTime(event.time), 'event-time'), node('span', roleFor(event, actors)), node('span', labels[event.kind] || event.kind, 'event-kind'));
     const body = extractBody(event.detail, event.kind), badges = node('div', undefined, 'badges');
     for (const warning of eventWarnings(event)) badges.append(node('span', warning, 'warning'));
+    const history = data?.event_revisions?.[event.id] || [];
+    if (history.length) badges.append(node('span', '정정됨', 'warning'));
     item.append(header, badges);
+    if (history.length) item.append(lazyDisclosure('정정 이력·최초 기록 펼치기', target => {
+      const original = data.original_events.find(e => e.id === event.id);
+      target.append(node('pre', show({ original, revisions: history })));
+    }));
     if (preview) item.append(node('p', body.structured ? '구조화된 기록' : brief(body.text, 200), 'preview'));
     item.append(lazyDisclosure(event.kind === 'tool_call' ? '실제 명령 펼치기' : '내용·원문 펼치기', target => {
       target.append(node(body.code ? 'pre' : 'div', body.text, body.code ? 'code' : 'body-text'));
@@ -471,7 +481,8 @@ function startViewer() {
     const version = ++selectionVersion; selectedId = id; clearRequest(); syncNavigation();
     $('status').className = ''; $('status').setAttribute('role', 'status'); $('status').textContent = '기록 불러오는 중…'; $('main').setAttribute('aria-busy', 'true');
     try {
-      const bundle = await get('/api/request?id=' + encodeURIComponent(id));
+      const received = await get('/api/request?id=' + encodeURIComponent(id));
+      const bundle = effectiveBundle(received);
       if (version !== selectionVersion) return;
       data = bundle;
       const displayed = displayActors(bundle), actors = new Map(displayed.map(a => [a.id, a])), units = usageUnits(bundle, displayed), measured = usageSummary(units), title = renderSummary(bundle, actors);

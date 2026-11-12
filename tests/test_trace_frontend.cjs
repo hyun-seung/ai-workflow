@@ -166,3 +166,24 @@ test('coordinator turn observations join role totals without fabricated dispatch
   assert.equal(usageFor({...bundle.actors[0],usage:u}).kind,'reference');
   assert.equal(usageFor({...usageUnits(bundle)[0],usage:{...u,dispatch_id:'invented'}}).kind,'reference');
 });
+
+test('multi-message turns stay atomic and grouping metadata cannot add tokens', () => {
+  const {usageUnits, effectiveBundle}=require('../scripts/trace_web/app.js');
+  const u=structuredClone(require('./fixtures/traces/native-usage.json').dispatch_usage);
+  Object.assign(u,{version:3,scope:'native_turn',role:'coordinator',actor_id:'coord',dispatch_id:null,
+    request_binding:'explicit_native_turn',message_bindings:[{line:4,sha256:'0'.repeat(64)},{line:5,sha256:'1'.repeat(64)}]});
+  const bundle={actors:[{id:'coord',request_id:'sample-request',role:'coordinator'}],events:[
+    {id:'observed',kind:'usage',actor_id:'coord',detail:{task_title:'결과 취합',usage:u}},
+    {id:'group',kind:'usage_group',actor_id:'coord',detail:{measurement_event_ids:['observed']}}],
+    usage_groups:[{measurements:{total_tokens:120}}]};
+  assert.equal(usageSummary(usageUnits(effectiveBundle(bundle))).total,120);
+  assert.equal(usageUnits(bundle).length,1); // one atomic observation; the group adds no measurement
+});
+test('effective view retains original and revision history without mutating the received bundle', () => {
+  const {effectiveBundle}=require('../scripts/trace_web/app.js');
+  const original={id:'one',actor_id:'wrong'}, current={id:'one',actor_id:'right'};
+  const bundle={events:[original,{id:'revision',kind:'revision'}],effective_events:[current],event_revisions:{one:[{detail:{reason:'corrected'}}]}};
+  const before=JSON.stringify(bundle), view=effectiveBundle(bundle);
+  assert.deepEqual(view.events,[current]);assert.equal(view.original_events[0],original);
+  assert.equal(view.event_revisions.one[0].detail.reason,'corrected');assert.equal(JSON.stringify(bundle),before);
+});
