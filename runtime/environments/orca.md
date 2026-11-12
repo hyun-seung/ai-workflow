@@ -80,3 +80,7 @@ Orca 공식 문서는 Settings → Agents의 Manual/Auto/Yolo와 기존 채팅�
 공통 task ID와 Orca가 반환한 run/task/dispatch·작업 공간 주소를 비공개 연결 자료에 함께 둔다. 완료 통지만으로 AC 통과를 확정하지 않는다. 측정 출처·범위가 없는 사용량은 unavailable로 표시한다. 기존 workflow.py의 Codex 로그가 Orca가 관리한 실행을 자동 수집한다고 가정하지 않는다.
 
 이 가이드는 연결 절차다. 모든 위임을 대신하는 자체 엔진이나 현재 프로젝트에서의 네이티브 실행 검증 완료를 뜻하지 않는다.
+
+Orca 1.4.256의 plugin 상태 이벤트와 Codex 공급자의 Stop hook은 구분한다. structured worker의 native 완료/종료를 터미널 상태로 대체하지 않는다. 프로젝트별 opt-in [완료 토큰 수집](../completion-hook.md)은 공식 Stop의 명시 세션 경로와 기존 native 검사기를 사용하며, hook 설치·신뢰·실제 이벤트/수입 검증 전에는 자동 연결 완료로 안내하지 않는다.
+
+사용 중인 프로젝트의 완료 hook config와 신뢰·지원 상태가 확인됐다면, 새 지원 배정을 만들 때 요청/actor를 먼저 DB에 등록하고 관리 실행기의 세 `--usage-*` 값을 함께 명시한다. 미등록 작업을 자동 귀속하지 않으며 마감 시 기대한 배정과 실제 수집 영수증을 대조한다. 조율자 세션/ledger 또는 대상 프로젝트가 바뀌면 명시 config 연결을 다시 확인한다.

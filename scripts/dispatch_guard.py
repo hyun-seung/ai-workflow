@@ -235,6 +235,12 @@ def make_plan(args, ledger):
     plan = dict(action=args.command, project=str(project), worktree=args.worktree, agent=args.agent,
                 model=args.model, effort=args.effort, spec_digest=digest(text), writes=sorted(set(writes)),
                 depends_on=sorted(set(args.depends_on)), previous=None, subject=args.subject)
+    usage_fields = tuple(getattr(args, key, None) for key in ('usage_role','usage_actor_id','usage_task_title'))
+    if any(value is not None for value in usage_fields):
+        from completion_hook import validate_collection
+        collection = validate_collection(dict(zip(('role','actor_id','task_title'),usage_fields)))
+        if args.agent != 'codex': raise ValueError('usage_hook_requires_codex')
+        plan['usage_collection'] = collection
     if args.command in ('followup','retry'):
         old=ledger.read()['operations'].get(args.previous)
         if not old or not old.get('dispatch_id'): raise ValueError('predecessor_unknown')
@@ -261,6 +267,7 @@ def main(argv=None):
         q.add_argument('--worktree',default='current')
         q.add_argument('--agent',default='codex')
         q.add_argument('--model');q.add_argument('--effort')
+        q.add_argument('--usage-role');q.add_argument('--usage-actor-id');q.add_argument('--usage-task-title')
         q.add_argument('--subject',default='Follow-up assignment')
         q.add_argument('--writes',action='append',default=[])
         q.add_argument('--depends-on',action='append',default=[])

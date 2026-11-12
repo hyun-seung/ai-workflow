@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "project": "/path/to/project",
+  "ledger": "/private/path/ledger/dispatches.json",
+  "directory": "/private/path/completion-hooks",
+  "trace_db": "/private/path/traces/workflow.sqlite3",
+  "coordinator": "coordinator_example"
+}

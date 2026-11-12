@@ -78,3 +78,5 @@ python3 scripts/dispatch_guard.py \
 현재 범위는 **이 관리 경로로 시작한 로컬 Orca 배정**이다. 기존 프로젝트의 native 기능을 사용하며 신규 worktree 생성·원격 host·중첩 위임은 제외한다. 하위 worker는 새 에이전트를 직접 생성하지 말고 조율자에게 요청한다. 직접 CLI·다른 ledger·다른 조율자의 실행을 막는 보안 경계나 OS 전체 상한은 아니다. 도입 전에 남아 있는 이전 worker를 확인하고 같은 조율자의 관리 경로를 하나로 유지한다.
 
 가상 응답 검증과 실제 native 실행 검증을 구분한다. 미지원 receipt 형식은 `unknown`으로 보존하고 성공으로 추정하지 않는다. [병렬 작업 판단](parallelism.md)은 이 수량 제한과 함께 적용한다.
+
+등록된 Orca·Codex 배정의 토큰 자동 수집을 준비할 때 `--usage-role`, `--usage-actor-id`, `--usage-task-title`을 함께 명시한다. native 호출 전에 계획에 고정하며 측정값은 입력받지 않는다. 프로젝트 hook의 설치·신뢰와 [실제 완료 이벤트 검증](completion-hook.md)이 별도로 필요하다. 옵션이 없는 기존 배정은 자동 수집 대상으로 승격하지 않는다.

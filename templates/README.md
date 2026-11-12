@@ -94,3 +94,5 @@ cat /path/to/selected/task-input.md templates/task-result.md |
 ```
 
 `--role`은 입력의 `role`과 일치시킨다. 현재 실행기는 이 일치 여부나 양식 내용을 자동 검증하지 않는다. `--dry-run`은 실제 모델을 호출하지 않는다. 이를 제거하면 모델 사용량이 발생하며 결과는 터미널로 출력된다. 양식을 특정 폴더에 두는 것만으로 자동 적용되거나 저장되지는 않는다. 실제 기록을 저장할 위치와 공개 범위는 [개인정보 관리 기준](../principles/privacy.md)을 따른다.
+
+- [완료 hook 가상 설정](completion-hook.config.json): 프로젝트별 비공개 ledger/DB/출력 경로 연결. 실제 activation·신뢰·지원 검증은 [완료 시 수집 가이드](../runtime/completion-hook.md)를 따른다.
