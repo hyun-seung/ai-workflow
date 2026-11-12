@@ -187,3 +187,60 @@ test('effective view retains original and revision history without mutating the 
   assert.deepEqual(view.events,[current]);assert.equal(view.original_events[0],original);
   assert.equal(view.event_revisions.one[0].detail.reason,'corrected');assert.equal(JSON.stringify(bundle),before);
 });
+
+function profileFixture() {
+  const actor={id:'profile-worker',requested:{model:'requested-model',effort:'low'},observed:{model:'legacy-model',effort:'high'}};
+  const usage={id:'usage-profile',kind:'usage',actor_id:actor.id,detail:{usage:{measurement_key:'key-one'}}};
+  const unknown={model:null,effort:null,status:'unavailable',source:null};
+  const profile={id:'profile-proof',kind:'profile',source:'trace.native-profile.v1',actor_id:actor.id,
+    detail:{version:1,usage_event_id:usage.id,measurement_key:'key-one',requested:{...unknown},effective:{...unknown},contexts:[{line:3,model:'actual-model',effort:'medium'}]}};
+  return {actor,usage,profile,bundle:{actors:[actor],events:[usage,profile],collections:[]}};
+}
+test('actual model and effort require interval evidence; legacy and requested fields remain references', () => {
+  const {profileFor}=require('../scripts/trace_web/app.js'),f=profileFixture();
+  const before=JSON.stringify(f.bundle),p=profileFor(f.bundle,f.actor);
+  assert.equal(p.actual.model.text,'actual-model');assert.equal(p.actual.effort.text,'medium');
+  assert.equal(p.requested.model.state,'registered');assert.equal(p.effective.model.state,'unavailable');
+  assert.equal(p.warnings.length,2);assert.equal(JSON.stringify(f.bundle),before);
+  assert.equal(profileFor({...f.bundle,events:[f.usage]},f.actor).actual.model.state,'unavailable');
+});
+test('task views never borrow the actor request for a different dispatch', () => {
+  const {profileFor}=require('../scripts/trace_web/app.js'),f=profileFixture();
+  const p=profileFor(f.bundle,{...f.actor,id:f.usage.id,owner_actor_id:f.actor.id,observation_id:f.usage.id});
+  assert.equal(p.requested.model.state,'unavailable');assert.equal(p.actual.model.text,'actual-model');
+});
+test('explicit runtime application, native request and actual context stay distinct', () => {
+  const {profileFor}=require('../scripts/trace_web/app.js'),f=profileFixture();
+  Object.assign(f.profile.detail.requested,{model:'asked',effort:'low',status:'observed'});
+  Object.assign(f.profile.detail.effective,{model:'applied',effort:'high',status:'observed'});
+  const p=profileFor(f.bundle,f.actor);
+  assert.equal(p.requested.model.text,'asked');assert.equal(p.effective.model.text,'applied');assert.equal(p.actual.model.text,'actual-model');
+});
+test('different context lines vary; disagreeing evidence for the same line conflicts', () => {
+  const {profileFor}=require('../scripts/trace_web/app.js'),f=profileFixture();
+  f.profile.detail.contexts.push({line:5,model:'other-model',effort:null});
+  let p=profileFor(f.bundle,f.actor);assert.equal(p.actual.model.state,'varies');assert.equal(p.actual.effort.state,'partial');
+  const other=structuredClone(f.profile);other.id='conflict';other.detail.contexts[0].model='conflicting-model';f.bundle.events.push(other);
+  p=profileFor(f.bundle,f.actor);assert.equal(p.actual.model.state,'conflict');
+});
+test('an actor with another unobserved usage interval is only partially observed', () => {
+  const {profileFor}=require('../scripts/trace_web/app.js'),f=profileFixture();
+  f.bundle.events.push({...f.usage,id:'usage-later'});
+  const p=profileFor(f.bundle,f.actor);assert.equal(p.actual.model.state,'partial');assert.equal(p.covered,1);assert.equal(p.intervals,2);
+});
+test('repeated evidence enriches unknown request values without adding tokens or changing actual profile', () => {
+  const {profileFor,usageUnits}=require('../scripts/trace_web/app.js'),f=profileFixture();
+  const later=structuredClone(f.profile);later.id='enriched';later.detail.requested.model='native-request';later.detail.requested.status='observed';f.bundle.events.push(later);
+  const p=profileFor(f.bundle,f.actor);assert.equal(p.requested.model.text,'native-request');assert.equal(p.actual.model.state,'known');
+  assert.equal(usageUnits(f.bundle).length,1);
+});
+
+test('observed native defaults remain distinct from unknown and registered actor requests', () => {
+  const {profileFor}=require('../scripts/trace_web/app.js'),f=profileFixture();
+  f.profile.detail.requested.status='observed';f.profile.detail.effective.status='observed';
+  let p=profileFor(f.bundle,f.actor);
+  assert.equal(p.requested.model.state,'unspecified');assert.equal(p.requested.model.text,'native 기본값 요청');
+  assert.equal(p.effective.model.text,'적용값 미제공');assert.equal(p.actual.model.text,'actual-model');
+  const later=structuredClone(f.profile);later.id='contradiction';later.detail.requested.model='explicit-model';f.bundle.events.push(later);
+  p=profileFor(f.bundle,f.actor);assert.equal(p.requested.model.state,'conflict');
+});

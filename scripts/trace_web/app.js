@@ -4,7 +4,7 @@ const labels = {
   user_request: '사용자 요청', decision: '결정·이유 요약', assignment: '업무 배정',
   instruction: '전달 지시', tool_call: '명령·도구 입력', tool_result: '도구 결과',
   question: '질문', approval_request: '승인 요청 · 결정 미확인',
-  approval_resolution: '승인 처리', handoff: '결과 인계', verification: '검증 판정', explanation: '명시된 설명', completion: '요청 마감', usage: '토큰 측정', usage_group: '논리 작업 묶음', revision: '기록 정정'
+  approval_resolution: '승인 처리', handoff: '결과 인계', verification: '검증 판정', explanation: '명시된 설명', completion: '요청 마감', usage: '토큰 측정', usage_group: '논리 작업 묶음', revision: '기록 정정', profile: '실행 프로필 관측'
 };
 const show = value => JSON.stringify(value, null, 2) ?? String(value);
 const known = value => value === null || value === undefined || value === '' ? '미확인' : value;
@@ -102,6 +102,64 @@ function closeoutLines(closeout) {
 }
 
 // Only explicitly attributed, non-cumulative measurements are eligible for totals.
+function profileFor(bundle, actor) {
+  const owner = actor.owner_actor_id || actor.id;
+  const usage = bundle.events.filter(e => e.kind === 'usage' && e.actor_id === owner &&
+    (!actor.observation_id || e.id === actor.observation_id));
+  const usageIds = new Set(usage.map(e => e.id));
+  const evidence = bundle.events.filter(e => e.kind === 'profile' && e.source === 'trace.native-profile.v1' &&
+    e.actor_id === owner && e.detail?.version === 1 && usageIds.has(e.detail?.usage_event_id));
+  const stages = { requested: new Map(), effective: new Map(), actual: new Map() };
+  const covered = new Set();
+  function add(map, id, value) { if (!map.has(id)) map.set(id, []); map.get(id).push(value); }
+  for (const e of evidence) {
+    const d = e.detail;
+    for (const name of ['requested', 'effective']) add(stages[name], d.usage_event_id, d[name]);
+    for (const context of d.contexts) {
+      add(stages.actual, d.measurement_key + ':' + context.line, context); covered.add(d.usage_event_id);
+    }
+  }
+  function field(map, name, missing, stageName) {
+    let partial = missing, conflict = false, unspecified = false;
+    const all = new Set();
+    for (const rows of map.values()) {
+      const selected = stageName === 'actual' ? rows : rows.filter(r => r?.status === 'observed');
+      const nativeNull = stageName !== 'actual' && selected.some(r => r[name] == null);
+      const values = new Set(selected.map(r => r?.[name]).filter(v => typeof v === 'string' && v));
+      if (!values.size && !nativeNull) partial = true;
+      if (values.size > 1 || nativeNull && values.size) conflict = true;
+      unspecified ||= nativeNull;
+      for (const v of values) all.add(v);
+    }
+    const values = [...all].sort();
+    const unset = stageName === 'requested' ? 'native 기본값 요청' : '적용값 미제공';
+    const state = conflict ? 'conflict' : values.length > 1 || unspecified && values.length ? 'varies' :
+      !values.length && !unspecified ? 'unavailable' : partial ? 'partial' : unspecified ? 'unspecified' : 'known';
+    const text = state === 'unavailable' ? '미확인' : [...values, ...(unspecified ? [unset] : [])].join(' / ') +
+      (state === 'conflict' ? ' · 근거 상충' : state === 'varies' ? ' · 구간별 상이' : state === 'partial' ? ' · 일부 미확인' : '');
+    return { values, state, text };
+  }
+  const result = { evidence, covered: covered.size, intervals: usage.length };
+  for (const name of ['requested', 'effective', 'actual']) {
+    const missing = usage.some(e => name === 'actual' ? !covered.has(e.id) : !stages[name].has(e.id));
+    result[name] = Object.fromEntries(['model', 'effort'].map(key => [key, field(stages[name], key, missing, name)]));
+  }
+  // Actor registration describes the actor, not every subsequent dispatch.
+  if (!actor.observation_id) {
+    for (const key of ['model', 'effort']) if (result.requested[key].state === 'unavailable' && actor.requested?.[key]) {
+      result.requested[key] = { values: [actor.requested[key]], state: 'registered', text: actor.requested[key] + ' · 등록값' };
+    }
+  }
+  result.warnings = [];
+  for (const name of ['requested', 'effective']) for (const key of ['model', 'effort']) {
+    const a = result[name][key], b = result.actual[key];
+    if (['known', 'registered'].includes(a.state) && b.state === 'known' && a.values[0] !== b.values[0]) {
+      result.warnings.push((name === 'requested' ? '요청' : '실행환경 적용') + ' ' + key + '와 실제 관측값이 다릅니다.');
+    }
+  }
+  return result;
+}
+function profileLine(stage) { return '모델 ' + stage.model.text + ' · effort ' + stage.effort.text; }
 function effectiveBundle(bundle) {
   return bundle.effective_events ? { ...bundle, original_events: bundle.events, events: bundle.effective_events } : bundle;
 }
@@ -212,7 +270,7 @@ function durationText(request) {
   const seconds = Math.round((Date.parse(b) - Date.parse(a)) / 1000);
   return seconds < 60 ? `${seconds}초` : `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
 }
-if (typeof module !== 'undefined') module.exports = { effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
+if (typeof module !== 'undefined') module.exports = { profileFor, profileLine, effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
 if (typeof document !== 'undefined') startViewer();
 
 function startViewer() {
@@ -336,13 +394,13 @@ function startViewer() {
   }
   function paint(e, role) { const color = roleCatalog[role] || { color: '#718096', background: '#f2f4f7' }; e.style.setProperty('--role-color', color.color); e.style.setProperty('--role-bg', color.background); }
   function agentCard(actor, index, bundle, actors, usage) {
+    const profile = profileFor(bundle, actor);
     const own = bundle.events.filter(e => e.actor_id === actor.id), instructions = own.filter(e => e.kind === 'instruction');
     const decisions = own.filter(e => e.kind === 'decision'), plans = decisions.filter(e => !e.detail?.limits?.length);
     const selected = actor.parent_id ? instructions[0] : (plans[0] || decisions[0]);
     const text = selected ? extractBody(selected.detail, selected.kind) : null;
     const d = lazyDisclosure('', body => {
-      const actual = node('p', '확인 모델: ' + known(actor.observed?.model), 'muted');
-      body.append(actual, node('p', usage.label, 'muted'));
+      body.append(profileDetails(profile, actor), node('p', usage.label, 'muted'));
       const grid = node('div', undefined, 'mini-grid');
       for (const [label, value] of [['입력', usage.input], ['출력', usage.output], ['합계', usage.total]]) {
         const cell = node('div', label, 'mini-stat'); cell.append(node('strong', tokenText(value))); grid.append(cell);
@@ -372,9 +430,23 @@ function startViewer() {
     if (predecessor) head.append(node('p', '후속 배정 · ' + (actors.get(predecessor)?.display_role || predecessor), 'muted'));
     head.append(node('p', actor.parent_id ? instructionExcerpt(selected) : text && !text.structured ? brief(text.text) : '명시된 계획 기록이 없습니다.', 'card-copy'));
     const bottom = node('div', undefined, 'card-bottom');
-    bottom.append(node('strong', usage.kind === 'attributed' ? `${tokenText(usage.total)} tokens` : '토큰 · 배정별 미확인'), node('span', actor.observed?.model || '모델 미확인'));
-    head.append(bottom, node('p', '지시·사용량·명령 펼치기 ↗', 'card-open'));
+    bottom.append(node('strong', usage.kind === 'attributed' ? `${tokenText(usage.total)} tokens` : '토큰 · 배정별 미확인'));
+    head.append(bottom, node('p', '요청: ' + profileLine(profile.requested), 'profile-line muted'),
+      node('p', '실제 관측: ' + profileLine(profile.actual), 'profile-line'), node('p', '지시·사용량·명령 펼치기 ↗', 'card-open'));
     return d;
+  }
+  function profileDetails(profile, actor) {
+    return lazyDisclosure('모델·effort의 요청·적용·관측 근거', body => {
+      for (const [name, title] of [['requested', '요청'], ['effective', '실행환경 적용'], ['actual', '실제 관측']]) {
+        body.append(node('p', title + ': ' + profileLine(profile[name])));
+      }
+      for (const warning of profile.warnings) body.append(node('p', warning, 'warning'));
+      body.append(node('p', `원본 턴 관측 ${profile.covered}/${profile.intervals}개 측정 구간. 실행환경 적용값과 provider의 실제 관측값은 구분합니다.`, 'notice'));
+      if (actor.observed?.model || actor.observed?.effort) body.append(node('p', '원래 수입값 · 이 표시의 실제 관측 근거로 사용하지 않음: ' + show(actor.observed), 'muted'));
+      body.append(lazyDisclosure('프로필 원문·출처·입력 해시', raw => raw.append(node('pre', show({
+        events: profile.evidence, evidence: data.collections.filter(c => c.source === 'trace.native-profile-evidence.v1' && profile.evidence.some(e => e.id === c.source_id))
+      })))));
+    }, 'plain-disclosure');
   }
   function renderFlow(bundle, actors, measured) {
     const section = $('workflow'); section.className = 'section-panel';
@@ -441,7 +513,9 @@ function startViewer() {
         body.append(node('p', '측정 구간이 연결된 배정은 각각 표시합니다. 미연결 담당자의 추가 작업은 누락되어 있을 수 있습니다.', 'notice'));
         for (const r of group.rows) {
           const task = node('article', undefined, 'task-usage'); task.dataset.actorId = r.actor.id;
-          task.append(node('h4', r.actor.display_task), node('p', r.actor.observed?.model || '모델 미확인', 'muted'));
+          const profile = profileFor(bundle, r.actor);
+          task.append(node('h4', r.actor.display_task), node('p', '실제 관측: ' + profileLine(profile.actual), 'profile-line'));
+          task.append(profileDetails(profile, r.actor));
           const grid = node('div', undefined, 'mini-grid');
           for (const [label, key] of [['입력', 'input'], ['출력', 'output'], ['합계', 'total']]) {
             const cell = node('div', label, 'mini-stat'); cell.append(node('strong', tokenText(r.kind === 'attributed' ? r[key] : null))); grid.append(cell);

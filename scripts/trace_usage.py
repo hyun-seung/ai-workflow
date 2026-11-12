@@ -296,6 +296,10 @@ def import_usage(store, filename, actor_id=None, task_title=None):
                     measurement_key=u['measurement_key'], input_path=str(path),
                     input_sha256=hashlib.sha256(raw).hexdigest(), native_source=origin,
                     actor_mapping='explicit' if actor_id is not None else 'native_turn_actor' if u['scope'] == 'native_turn' else 'native_dispatch_actor')
-    store.import_bundle(dict(schema_version=1, requests=[], actors=[], events=[event], collections=[evidence]))
+    from trace_profiles import build as build_profile
+    profile = build_profile(record, event, path, raw)
+    store.import_bundle(dict(schema_version=1, requests=[], actors=[],
+                            events=[event] + ([profile[0]] if profile else []),
+                            collections=[evidence] + ([profile[1]] if profile else [])))
     return dict(event_id=event['id'], request_id=u['request_id'], actor_id=owner,
                 measurement_key=u['measurement_key'])

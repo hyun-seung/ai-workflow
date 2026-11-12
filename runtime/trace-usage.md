@@ -62,3 +62,5 @@ node --test tests/test_trace_frontend.cjs
 가상 자료로 재처리·다른 snapshot·교차 요청/actor·겹친 구간·generic 복원 우회·숫자·출처·실패 후 재시도를 검증한다. 실제 적용 전에는 비공개 백업과 사본 검사를 수행하고 기존 원문·actor·다른 요청의 보존, 수입 결과와 요청/역할/작업 합계를 대조한다.
 
 여러 닫힌 구간의 논리 작업 묶음과 표준 관측의 원본 보존 정정은 [작업 묶음·정정 규칙](trace-amendments.md)을 따른다. 원천 토큰 측정값의 수정은 지원하지 않는다.
+
+`observed_contexts`가 있는 native 메타데이터는 같은 사용량 구간에 [실행 프로필](execution-profiles.md)을 추가 수입한다. 기존 actor·토큰 수치는 보존하며 profile 관측은 합계에 재가산하지 않는다.

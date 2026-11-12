@@ -18,10 +18,11 @@ from trace_observation import (SOURCE as OBSERVATION_SOURCE,
                                uses_input_contract, validate_input as validate_observation_input)
 
 import trace_amendments as amendments
+import trace_profiles as profiles
 
 MAX_BYTES = 8 * 1024 * 1024
 KINDS = {'user_request', 'decision', 'assignment', 'instruction', 'tool_call', 'tool_result',
-         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion', 'usage', 'usage_group', 'revision'}
+         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion', 'usage', 'usage_group', 'revision', 'profile'}
 FORBIDDEN = {'analysis', 'reasoning', 'thinking', 'chain_of_thought'}
 ROLE_IDS = {'coordinator', 'architect', 'designer', 'backend', 'frontend', 'verifier'}
 
@@ -121,12 +122,16 @@ class Store:
         # an invalid field or turn its source marker into an untyped legacy row.
         if isinstance(bundle.get('events'), list):
             for event in bundle['events']:
+                if isinstance(event, dict) and profiles.uses_contract(event):
+                    profiles.validate_event(event)
                 if isinstance(event, dict) and amendments.uses_contract(event):
                     amendments.validate_event(event)
                 if isinstance(event, dict) and uses_contract(event):
                     validate_observation_event(event)
         if isinstance(bundle.get('collections'), list):
             for collection in bundle['collections']:
+                if isinstance(collection, dict) and profiles.uses_evidence(collection):
+                    profiles.validate_evidence_input(collection)
                 if isinstance(collection, dict) and amendments.uses_input(collection):
                     amendments.validate_input(collection)
                 if isinstance(collection, dict) and uses_input_contract(collection):
@@ -171,6 +176,8 @@ class Store:
                     if row.get('kind') not in KINDS: raise ValueError('Unsupported event kind')
                     if row.get('actor_id') is not None: ident(row['actor_id'])
                     if 'detail' not in row: raise ValueError('Event detail missing')
+                    if profiles.uses_contract(row):
+                        profiles.validate_event(row)
                     if amendments.uses_contract(row):
                         amendments.validate_event(row)
                     if uses_contract(row):
@@ -223,6 +230,8 @@ class Store:
                 ref = row.get('actor_id') if kind == 'event' else row.get('parent_id') if kind == 'actor' else None
                 if ref and not self.db.execute("SELECT 1 FROM records WHERE kind='actor' AND id=? AND request_id=?",(ref,rid)).fetchone():
                     raise ValueError('Unknown actor/parent '+ref)
+                if kind == 'event' and profiles.uses_contract(row):
+                    profiles.validate_store(self, row)
                 if kind == 'event' and row.get('kind') == 'usage':
                     validate_usage_store(self, row)
                 if kind == 'event' and uses_contract(row):
@@ -253,6 +262,8 @@ class Store:
                     raise ValueError('Unknown collection request')
                 if collection['source'] == 'trace.native-usage-evidence':
                     validate_evidence(self, collection)
+                if profiles.uses_evidence(collection):
+                    profiles.validate_evidence(self, collection)
                 if amendments.uses_input(collection):
                     amendments.validate_evidence(self, collection)
                 if uses_input_contract(collection):

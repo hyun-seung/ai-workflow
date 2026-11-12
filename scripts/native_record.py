@@ -133,7 +133,7 @@ def tokens(info, field="total_token_usage"):
     return result, None
 
 
-def launch_requested(snapshot, target):
+def launch_requested(snapshot, target, stage="requested"):
     """An explicit worker-show receipt is optional; CLI expectations are not launch facts."""
     unknown = {"model": None, "effort": None, "source": None, "status": "unavailable"}
     if snapshot is None:
@@ -160,12 +160,17 @@ def launch_requested(snapshot, target):
                 dispatch['taskId'] != target['task_id'] or worker['dispatchId'] != target['dispatch_id'] or
                 dispatch['processIncarnation'] != expected_incarnation or requested['agent'] != 'codex'):
             raise ValueError('launch_snapshot_identity_mismatch')
+        if stage not in ('requested', 'effective'): raise ValueError('invalid_profile_stage')
+        if stage == 'effective':
+            if 'effective' not in worker['startOptions']['launch']: return unknown
+            requested = worker['startOptions']['launch']['effective']
+            if requested['agent'] != 'codex': raise ValueError('invalid_effective_agent')
         values = {k: requested[k] for k in ('model', 'effort')}
         if any(v is not None and label(v) is None for v in values.values()):
             raise ValueError('invalid_requested_profile')
     except (KeyError, TypeError, ValueError, UnicodeError, RecursionError, AttributeError):
         raise ValueError('invalid_or_mismatched_launch_snapshot') from None
-    return dict(values, status='observed', source={'kind': 'orca.worker-show.launch.requested',
+    return dict(values, status='observed', source={'kind': 'orca.worker-show.launch.' + stage,
                 'path': str(path), 'sha256': hashlib.sha256(raw).hexdigest()})
 
 
@@ -321,7 +326,7 @@ def inspect_session(project, session_file, session_id, task_id, dispatch_id, exp
             "environment": "orca", "provider": "codex", "project": str(project), "binding": target,
             "session": meta, "source": {"path": str(path), "sha256": data["sha256"], "bytes": size,
                                          "lines": n, "assignment_end_exclusive": end},
-            "requested": requested, "expected": {k: expected.get(k) for k in FIELDS}, "observed_contexts": selected,
+            "requested": requested, "launch_effective": launch_requested(worker_snapshot, target, "effective"), "expected": {k: expected.get(k) for k in FIELDS}, "observed_contexts": selected,
             "verification": {"status": verdict, "checks": checks}, "usage": usage,
             "request_context": {"request_id": request_id, "role": role, "source": 'explicit_coordinator_input'},
             "dispatch_usage": dispatch_usage,

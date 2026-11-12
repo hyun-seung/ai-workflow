@@ -320,6 +320,20 @@ class NativeRecordTests(unittest.TestCase):
         self.assertIsNone(result['requested']['model'])
         self.assertEqual(result['observed_contexts'][0]['values']['model'], 'example-model')
 
+    def test_runtime_effective_profile_is_separate_from_requested_and_context(self):
+        path=self.snapshot('requested-model','low');snapshot=json.loads(path.read_text())
+        snapshot['result']['worker']['startOptions']['launch']['effective']=dict(agent='codex',model='runtime-model',effort='medium')
+        path.write_text(json.dumps(snapshot));result=self.inspect(worker_snapshot=path)
+        self.assertEqual(result['requested']['model'],'requested-model')
+        self.assertEqual(result['launch_effective']['model'],'runtime-model')
+        self.assertEqual(result['launch_effective']['effort'],'medium')
+        self.assertEqual(result['launch_effective']['source']['kind'],'orca.worker-show.launch.effective')
+        self.assertEqual(result['observed_contexts'][0]['values']['model'],'example-model')
+
+    def test_absent_effective_stage_does_not_copy_requested_or_actual(self):
+        result=self.inspect(worker_snapshot=self.snapshot('example-model','low'))
+        self.assertEqual(result['launch_effective'],dict(model=None,effort=None,status='unavailable',source=None))
+
     def test_native_model_mismatch_is_checked_separately(self):
         result = self.inspect(worker_snapshot=self.snapshot('other-model', 'low'))
         self.assertEqual(result['verification']['checks']['launch_model']['status'], 'fail')

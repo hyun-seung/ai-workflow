@@ -89,3 +89,5 @@ python3 -m unittest discover -s tests -p test_dispatch_usage.py -v
 가상 기록으로 연결 불일치·자동 검토 세션 제외·모드 변경·미측정·누적 중복·후속 배정·개인정보 제외·비공개 저장과 CLI 반환 코드를 검사한다. Codex CLI 0.167.0의 보존된 실제 기록에서 대신 승인 적용과 과거 사용자 승인 불일치도 재현했고, Orca 1.4.256의 해당 종료 worker snapshot으로 시작 요청값 연결을 확인했다. 새로운 버전이나 다음 실제 위임의 형식은 다시 확인해야 한다.
 
 보존된 실제 기록에서는 첫 배정·같은 세션의 후속 배정을 원본 누적 구간과 대조했고, 종료 worker의 [완료 처리기](completion.md) 호출·재호출로 저장과 replay를 확인했다. 이 수집기의 자체 회귀와 구간 대조이며 독립 검토자의 판정은 아니다. 전역 hook, 새 세션 경로의 공식 조회, native 공통 어댑터는 남아 있다. 결과는 trace bundle 자체가 아니므로 `import-usage` 연결기를 사용한다. 상세 우선순위는 [개선 목록](harness-roadmap.md)을 따른다.
+
+optional worker snapshot의 요청값과 `launch_effective` 및 턴 컨텍스트 관측의 구분·화면 연결은 [프로필 가이드](execution-profiles.md)를 따른다. 효과 단계가 없는 오래된 snapshot은 unavailable이다.
