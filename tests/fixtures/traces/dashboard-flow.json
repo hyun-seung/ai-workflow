@@ -1,0 +1,1439 @@
+{
+  "schema_version": 1,
+  "requests": [
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "sample-request",
+      "title": "가상 요청 · 대시보드 흐름 검증",
+      "sample": true,
+      "status": "running",
+      "summary": "Synthetic fixture: 계획과 배정 → 역할별 작업 → 검증 결과를 확인합니다."
+    }
+  ],
+  "actors": [
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-coordinator",
+      "request_id": "sample-request",
+      "role": "coordinator",
+      "environment": "orca",
+      "provider": "example",
+      "requested": {
+        "model": "example-model",
+        "effort": "high"
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-worker",
+      "request_id": "sample-request",
+      "role": "frontend",
+      "parent_id": "sample-coordinator",
+      "environment": "orca",
+      "provider": "example",
+      "task_title": "긴 작업 제목 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 레이아웃과 상호작용 검증 ",
+      "requested": {
+        "model": "synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-",
+        "effort": "high"
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-unmeasured",
+      "request_id": "sample-request",
+      "role": "verifier",
+      "parent_id": "sample-coordinator",
+      "environment": "orca",
+      "provider": "example",
+      "task_title": "아직 측정되지 않은 검증",
+      "requested": {
+        "model": "synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-synthetic-very-long-model-name-",
+        "effort": "high"
+      }
+    }
+  ],
+  "events": [
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-0",
+      "request_id": "sample-request",
+      "actor_id": "sample-coordinator",
+      "kind": "user_request",
+      "detail": "가상 요청입니다."
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-1",
+      "request_id": "sample-request",
+      "actor_id": "sample-coordinator",
+      "kind": "decision",
+      "detail": {
+        "summary": "작은 변경이므로 단일 담당자에게 배정",
+        "recorded_retrospectively": true
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-2",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "instruction",
+      "detail": {
+        "text": "요구사항을 검토하고 결과를 설명하세요.",
+        "basis": "sample-request"
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-3",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "tool_call",
+      "detail": {
+        "name": "shell",
+        "input": {
+          "cmd": "echo \"<script>alert(1)</script>\""
+        },
+        "state": "running"
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-0",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-0",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 0",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-0",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:0",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:00:00Z",
+            "finished_at": "2026-01-01T00:01:00Z"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-1",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-1",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 1",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-1",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:1",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:03:00Z",
+            "finished_at": "2026-01-01T00:04:00Z"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-2",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-2",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 2",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-2",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:2",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:00:30Z",
+            "finished_at": "2026-01-01T00:02:00Z"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-3",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-3",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 3",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-3",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:3",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": null,
+            "finished_at": null
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-4",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-4",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 4",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-4",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:4",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:02:00Z",
+            "finished_at": "2026-01-01T00:01:00Z"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-5",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-5",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 5",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-5",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:5",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:02:00",
+            "finished_at": "2026-01-01T00:03:00"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-6",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-6",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 6",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-6",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:6",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:04:00Z",
+            "finished_at": "2026-01-01T00:04:00Z"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "id": "synthetic-group",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage_group",
+      "source": "synthetic",
+      "time": null,
+      "completeness": "complete",
+      "detail": {
+        "version": 1,
+        "recorded_by_actor_id": "sample-coordinator",
+        "task_id": "logical-ui",
+        "title": "최초 가상 제목",
+        "role": "frontend",
+        "measurement_event_ids": [
+          "usage-0"
+        ]
+      }
+    },
+    {
+      "id": "synthetic-command",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "tool_call",
+      "time": null,
+      "detail": {
+        "input": {
+          "cmd": "echo \"<img src=x onerror=alert(1)>\""
+        }
+      },
+      "completeness": "partial"
+    }
+  ],
+  "usage_groups": [
+    {
+      "event_id": "synthetic-group",
+      "actor_id": "sample-worker",
+      "version": 1,
+      "recorded_by_actor_id": "sample-coordinator",
+      "task_id": "logical-ui",
+      "title": "정정된 화면 구현 · 여러 구간의 공백 보존",
+      "role": "frontend",
+      "measurement_event_ids": [
+        "usage-0",
+        "usage-1"
+      ],
+      "measurements": {
+        "input_tokens": 200,
+        "output_tokens": 40,
+        "cached_input_tokens": 140,
+        "reasoning_output_tokens": 10,
+        "total_tokens": 240
+      }
+    }
+  ],
+  "effective_events": [
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-0",
+      "request_id": "sample-request",
+      "actor_id": "sample-coordinator",
+      "kind": "user_request",
+      "detail": "가상 요청입니다."
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-1",
+      "request_id": "sample-request",
+      "actor_id": "sample-coordinator",
+      "kind": "decision",
+      "detail": {
+        "summary": "작은 변경이므로 단일 담당자에게 배정",
+        "recorded_retrospectively": true
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-2",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "instruction",
+      "detail": {
+        "text": "요구사항을 검토하고 결과를 설명하세요.",
+        "basis": "sample-request"
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "example",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "complete",
+      "id": "sample-event-3",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "tool_call",
+      "detail": {
+        "name": "shell",
+        "input": {
+          "cmd": "echo \"<script>alert(1)</script>\""
+        },
+        "state": "running"
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-0",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-0",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 0",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-0",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:0",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:00:00Z",
+            "finished_at": "2026-01-01T00:01:00Z"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-1",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-1",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 1",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-1",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:1",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:03:00Z",
+            "finished_at": "2026-01-01T00:04:00Z"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-2",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-2",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 2",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-2",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:2",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:00:30Z",
+            "finished_at": "2026-01-01T00:02:00Z"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-3",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-3",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 3",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-3",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:3",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": null,
+            "finished_at": null
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-4",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-4",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 4",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-4",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:4",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:02:00Z",
+            "finished_at": "2026-01-01T00:01:00Z"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-5",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-5",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 5",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-5",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:5",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:02:00",
+            "finished_at": "2026-01-01T00:03:00"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "source": "synthetic",
+      "source_id": "usage-6",
+      "time": "2026-01-02T00:00:00Z",
+      "completeness": "partial",
+      "id": "usage-6",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage",
+      "detail": {
+        "task_title": "가상 물리 작업 6",
+        "usage": {
+          "version": 1,
+          "status": "measured",
+          "scope": "dispatch",
+          "task_attributed": true,
+          "request_id": "sample-request",
+          "role": "frontend",
+          "task_id": "task-6",
+          "dispatch_id": "sample-worker",
+          "actor_id": "sample-worker",
+          "session_id": "session_example",
+          "source": "codex.token_count.cumulative_delta.v1",
+          "measurement_key": "synthetic:6",
+          "measurements": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cached_input_tokens": 70,
+            "reasoning_output_tokens": 5,
+            "total_tokens": 120
+          },
+          "issues": [],
+          "interval": {
+            "native_turn_id": "turn_example",
+            "start_line": 2,
+            "assignment_line": 4,
+            "end_line": 7,
+            "started_at": "2026-01-01T00:04:00Z",
+            "finished_at": "2026-01-01T00:04:00Z"
+          },
+          "baseline": {
+            "line": null,
+            "time": null,
+            "method": "zero_reconciled_with_first_usage",
+            "values": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 0
+            }
+          },
+          "final": {
+            "line": 6,
+            "time": "2026-01-01T00:00:59Z",
+            "values": {
+              "input_tokens": 100,
+              "output_tokens": 20,
+              "cached_input_tokens": 70,
+              "reasoning_output_tokens": 5,
+              "total_tokens": 120
+            }
+          },
+          "increments": [
+            {
+              "line": 6,
+              "time": "2026-01-01T00:00:59Z",
+              "values": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cached_input_tokens": 70,
+                "reasoning_output_tokens": 5,
+                "total_tokens": 120
+              }
+            }
+          ],
+          "request_binding": "explicit"
+        }
+      }
+    },
+    {
+      "id": "synthetic-group",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "usage_group",
+      "source": "synthetic",
+      "time": null,
+      "completeness": "complete",
+      "detail": {
+        "version": 1,
+        "recorded_by_actor_id": "sample-coordinator",
+        "task_id": "logical-ui",
+        "title": "정정된 화면 구현 · 여러 구간의 공백 보존",
+        "role": "frontend",
+        "measurement_event_ids": [
+          "usage-0",
+          "usage-1"
+        ]
+      }
+    },
+    {
+      "id": "synthetic-command",
+      "request_id": "sample-request",
+      "actor_id": "sample-worker",
+      "kind": "tool_call",
+      "time": null,
+      "detail": {
+        "input": {
+          "cmd": "echo \"<img src=x onerror=alert(1)>\""
+        }
+      },
+      "completeness": "partial"
+    }
+  ],
+  "event_revisions": {
+    "synthetic-group": [
+      {
+        "id": "synthetic-revision",
+        "kind": "revision",
+        "detail": {
+          "reason": "Synthetic: 같은 업무의 두 구간을 명시 연결",
+          "replacement": {
+            "id": "synthetic-group",
+            "request_id": "sample-request",
+            "actor_id": "sample-worker",
+            "kind": "usage_group",
+            "source": "synthetic",
+            "time": null,
+            "completeness": "complete",
+            "detail": {
+              "version": 1,
+              "recorded_by_actor_id": "sample-coordinator",
+              "task_id": "logical-ui",
+              "title": "정정된 화면 구현 · 여러 구간의 공백 보존",
+              "role": "frontend",
+              "measurement_event_ids": [
+                "usage-0",
+                "usage-1"
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "closeout": {
+    "current": false,
+    "time": null,
+    "detail": {
+      "status": "needs_followup",
+      "verification": "partial",
+      "summary": "가상 결과: 추가 확인 필요",
+      "recording_status": "partial",
+      "assignments": []
+    }
+  },
+  "collections": [
+    {
+      "source": "synthetic",
+      "source_id": "synthetic-example",
+      "completeness": "partial"
+    }
+  ]
+}

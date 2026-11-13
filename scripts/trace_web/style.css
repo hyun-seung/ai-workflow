@@ -149,3 +149,24 @@ footer { text-align: right; color: #7b8a9f; font-size: 11px; margin-top: 20px; }
 @media (max-width:1200px) { .layout { grid-template-columns: 210px minmax(0,1fr); gap: 16px; } #summary,.section-panel { padding: 20px; } .flow-board { grid-template-columns: 1fr; } .flow-arrow { transform: rotate(90deg); margin: 0 auto 10px; } .phase { width: 100%; } .assignment-cards { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; } }
 @media (max-width:768px) { .app-header { padding: 20px 16px; gap: 10px; } h1 { font-size: 20px; } .brand-mark { width: 42px; flex-basis: 42px; height: 48px; } .brand-mark i { left: 10px; width: 21px; height: 21px; } .header-note { font-size: 11px; } .eyebrow { font-size: 9px; } .refresh { padding: 8px 12px; } .refresh span { display: none; } .layout { display: block; padding: 0 16px 24px; } aside { position: static; padding: 0; margin-bottom: 12px; } #request-browser { border: 1px solid #dfe6f1; background: white; border-radius: 10px; } #request-browser > summary { display: list-item; } .nav-heading { display: none; } #requests { padding: 0 8px; } h2 { font-size: 19px; } #summary,.section-panel { padding: 18px; } .title-row { display: block; } .title-row .status-pill { display: inline-block; margin-top: 10px; } #metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin: 12px 0 18px; } .metric { padding: 14px; } .metric-value { font-size: 22px; } .metric-note { font-size: 10px; } .assignment-cards { display: block; } .section-heading { gap: 10px; } .section-heading h3 { font-size: 16px; } #filters { grid-template-columns: 1fr 1fr; } .filter-count { grid-column: 1/-1; justify-content: space-between; } th,td { padding: 10px 7px; } .optional-column { display: none; } select { font-size: 16px; } }
 @media (prefers-reduced-motion:no-preference) { button { transition: background .15s,border-color .15s; } }
+.logical-tasks { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 20px 0; align-items: start; }
+.logical-task { border-left: 4px solid var(--role-color); background: var(--role-bg); }
+.logical-task > summary > span, .logical-task > summary > strong, .logical-task > summary > small { display: block; }
+.logical-title { margin: 6px 0; font-size: 14px; }
+.logical-task > .details-content { background: white; padding-top: 12px; }
+.measurement-chart { overflow-x: auto; margin-top: 16px; padding: 10px 14px; border: 1px solid #dfe6f1; border-radius: 10px; }
+.measurement-plot { min-width: 540px; padding-right: 30px; }
+.measurement-lane { margin: 14px 0; }
+.lane-label { font-size: 12px; border-left: 4px solid var(--role-color); padding-left: 8px; }
+.measurement-link { display: block; width: 100%; margin: 8px 0; padding: 10px 12px; text-align: left; color: #233148; background: #fff; border: 1px solid #cbd5e3; }
+.measurement-link:hover, .measurement-link:active { color: #233148; background: #fff; border-color: #233148; }
+.measurement-link:focus, .measurement-link.focused-segment { outline: 3px solid #233148; outline-offset: 3px; }
+.segment-label { display: block; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
+.segment-precision { display: block; color: #233148; font-size: 12px; margin-top: 4px; }
+.measurement-track { display: block; position: relative; height: 24px; margin: 8px 12px 0; border-bottom: 1px solid #cbd5e3; }
+.measurement-segment { position: absolute; display: block; top: 2px; height: 18px; min-width: 0; border-radius: 3px; background: var(--role-color); }
+.measurement-segment.point { background: transparent; color: #233148; text-indent: -6px; line-height: 18px; font-size: 16px; }
+.measurement-link:focus .measurement-track, .measurement-link.focused-segment .measurement-track, .measurement-link:active .measurement-track { outline: 2px solid #233148; outline-offset: 3px; }
+.selected-member { outline: 3px solid #233148; outline-offset: 3px; border-radius: 4px; }
+@media (max-width:768px) { .logical-tasks { grid-template-columns: 1fr; } .card-top { flex-wrap: wrap; } }
+@media (max-width:768px) { .measurement-link .segment-label, .measurement-link .segment-precision, .measurement-lane .lane-label { max-width: 190px; } }

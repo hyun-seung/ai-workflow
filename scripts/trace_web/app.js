@@ -264,13 +264,58 @@ function flowGroups(bundle) {
   return { roots: bundle.actors.filter(a => !a.parent_id), workers: bundle.actors.filter(a => a.parent_id),
     decisions: bundle.events.filter(e => e.kind === 'decision'), assignments: bundle.events.filter(e => e.kind === 'assignment') };
 }
+// Only explicit, timezone-bearing usage intervals position measurements.
+function instant(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
+  const day = Number(value.slice(8, 10)), month = Number(value.slice(5, 7)), year = Number(value.slice(0, 4));
+  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate()) return null;
+  if (Number(value.slice(11, 13)) > 23 || Number(value.slice(14, 16)) > 59 || Number(value.slice(17, 19)) > 59) return null;
+  const time = Date.parse(value); return Number.isFinite(time) ? time : null;
+}
+function compareInstants(a, b) {
+  const first = instant(a), second = instant(b);
+  if (first === null || second === null) return null;
+  if (first !== second) return Math.sign(first - second);
+  const remainder = value => (value.match(/\.(\d+)/)?.[1] || '').slice(3);
+  const x = remainder(a), y = remainder(b), size = Math.max(x.length, y.length);
+  return x.padEnd(size, '0').localeCompare(y.padEnd(size, '0'));
+}
+function segmentLabel(row, index) {
+  return `구간 ${index + 1} · ${row.actor.display_task || '제목 미확인'} · ${tokenText(row.kind === 'attributed' ? row.total : null)} tokens`;
+}
+function measurementInterval(row) {
+  const interval = row.actor.usage_event?.detail?.usage?.interval;
+  const start = instant(interval?.started_at), end = instant(interval?.finished_at);
+  const reason = start === null || end === null ? '시작·종료 시각 미확인 (timezone 포함 필요)' : compareInstants(interval.finished_at, interval.started_at) < 0 ? '종료가 시작보다 앞선 기록' : null;
+  return { start, end, valid: !reason, point: !reason && start === end, reason };
+}
+function logicalTasks(bundle, measured) {
+  const claimed = new Set(), tasks = [];
+  for (const group of bundle.usage_groups || []) {
+    const rows = measured.rows.filter(row => group.measurement_event_ids?.includes(row.actor.observation_id) &&
+      row.actor.owner_actor_id === group.actor_id && row.actor.display_role_id === group.role && !claimed.has(row.actor.id));
+    if (!rows.length) continue;
+    rows.forEach(row => claimed.add(row.actor.id));
+    tasks.push({ id: group.event_id, title: group.title, role: group.role, rows, group });
+  }
+  for (const row of measured.rows) if (!claimed.has(row.actor.id)) tasks.push({ id: row.actor.id,
+    title: row.actor.display_task || '수입된 배정', role: row.actor.display_role_id, rows: [row], group: null });
+  return tasks;
+}
+function measurementTimeline(tasks) {
+  const rows = tasks.flatMap(task => task.rows.map(row => ({ task, row, ...measurementInterval(row) })));
+  const valid = rows.filter(row => row.valid);
+  return { rows, start: valid.length ? Math.min(...valid.map(row => row.start)) : null,
+    end: valid.length ? Math.max(...valid.map(row => row.end)) : null };
+}
 function durationText(request) {
   const a = request.execution?.started_at, b = request.execution?.finished_at;
-  if (!a || !b || !Number.isFinite(Date.parse(a)) || !Number.isFinite(Date.parse(b)) || Date.parse(b) < Date.parse(a)) return null;
+  const order = compareInstants(b, a);
+  if (order === null || order < 0) return null;
   const seconds = Math.round((Date.parse(b) - Date.parse(a)) / 1000);
   return seconds < 60 ? `${seconds}초` : `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
 }
-if (typeof module !== 'undefined') module.exports = { profileFor, profileLine, effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
+if (typeof module !== 'undefined') module.exports = { compareInstants, segmentLabel, instant, measurementInterval, logicalTasks, measurementTimeline, profileFor, profileLine, effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
 if (typeof document !== 'undefined') startViewer();
 
 function startViewer() {
@@ -499,6 +544,87 @@ function startViewer() {
       if (row.kind === 'reference') body.append(node('p', row.label + ' · 요청/역할/작업 합계 제외', 'warning'));
     }, 'plain-disclosure');
   }
+  function renderTasks(bundle, measured, section) {
+    const tasks = logicalTasks(bundle, measured), timeline = measurementTimeline(tasks);
+    const actors = new Map(displayActors(bundle).map(actor => [actor.id, actor]));
+    section.append(node('h3', '작업 묶음과 측정 시간 흐름'), node('p', '명시 묶음만 연결합니다. 토큰 합계는 물리 측정을 한 번만 합산합니다.', 'notice'));
+    const chart = node('div', undefined, 'measurement-chart');
+    chart.tabIndex = 0; chart.setAttribute('role', 'region'); chart.setAttribute('aria-label', '측정 시간 흐름 · 내부 가로 스크롤 가능');
+    const plot = node('div', undefined, 'measurement-plot');
+    if (timeline.start !== null) plot.append(node('p', `${displayTime(new Date(timeline.start).toISOString())} → ${displayTime(new Date(timeline.end).toISOString())}`, 'muted'));
+    else plot.append(node('p', '위치를 표시할 유효 측정 시각이 없습니다.', 'empty'));
+    const taskList = node('div', undefined, 'logical-tasks');
+    tasks.forEach((task, index) => {
+      const detail = lazyDisclosure('', body => {
+        if (task.group) {
+          const event = bundle.events.find(e => e.id === task.group.event_id);
+          if (event) body.append(eventList([event], actors));
+          body.append(disclosure('현재 묶음 구성·합계 원문', node('pre', show(task.group))));
+        }
+        for (const [memberIndex, row] of task.rows.entries()) {
+          const member = node('article', undefined, 'task-usage'), interval = measurementInterval(row);
+          member.id = `logical-task-${index}-member-${memberIndex}`; member.tabIndex = -1;
+          member.append(node('h4', segmentLabel(row, memberIndex)),
+            node('p', `${row.label} · 입력 ${tokenText(row.input)} · 출력 ${tokenText(row.output)}`, 'muted'),
+            node('p', interval.valid ? `${displayTime(row.actor.usage.interval.started_at)} → ${displayTime(row.actor.usage.interval.finished_at)}${interval.point ? ' · 같은 밀리초로 표시' : ''}` : interval.reason, 'muted'),
+            tokenDetails(row), profileDetails(profileFor(bundle, row.actor), row.actor));
+          if (interval.valid) member.append(node('p', `원본 구간: ${row.actor.usage.interval.started_at} → ${row.actor.usage.interval.finished_at}`, 'body-text'));
+          const events = bundle.events.filter(e => e.actor_id === (row.actor.owner_actor_id || row.actor.id) && ['instruction', 'assignment', 'tool_call', 'tool_result', 'handoff'].includes(e.kind));
+          member.append(evidenceDetails('담당자 지시·명령·결과 (해당 구간 귀속 미확인)', events, actors));
+          if (row.actor.usage_event) member.append(eventList([row.actor.usage_event], actors));
+          body.append(member);
+        }
+      }, 'logical-task');
+      detail.id = `logical-task-${index}`; paint(detail, task.role);
+      const m = task.group?.measurements;
+      const total = m ? m.total_tokens : task.rows[0].kind === 'attributed' ? task.rows[0].total : null;
+      const intervals = task.rows.map(measurementInterval), valid = intervals.filter(i => i.valid).length;
+      detail.firstChild.append(node('span', roleCatalog[task.role]?.label || '역할 미분류', 'card-role'),
+        node('strong', task.title || '제목 미확인', 'logical-title'),
+        node('span', `${tokenText(total)} tokens · ${task.rows.length}개 ${task.group ? '측정 구간 · 명시 묶음' : task.rows[0].actor.observation_id ? '물리 측정' : '미측정 담당자'}`, 'muted'),
+        node('small', `시각 확인 ${valid} · 미확인 ${intervals.length - valid} · 상세 펼치기`));
+      if (bundle.event_revisions?.[task.id]?.length) detail.firstChild.append(node('span', '정정됨 · 이력은 상세에서 확인', 'warning'));
+      taskList.append(detail);
+      const validRows = timeline.rows.filter(r => r.task === task && r.valid);
+      if (!validRows.length) return;
+      const lane = node('div', undefined, 'measurement-lane'); paint(lane, task.role);
+      lane.append(node('p', `${roleCatalog[task.role]?.label || '역할 미분류'} · ${task.title}`, 'lane-label'));
+      // A full-width labelled control keeps short/point intervals reachable without stretching time.
+      for (const segment of validRows) {
+        const memberIndex = task.rows.indexOf(segment.row), memberId = `logical-task-${index}-member-${memberIndex}`;
+        const label = segmentLabel(segment.row, memberIndex);
+        const control = button('', () => {
+          const enterMember = () => {
+            const member = document.getElementById(memberId);
+            if (!member) return;
+            taskList.querySelectorAll('.selected-member').forEach(e => e.classList.remove('selected-member'));
+            member.classList.add('selected-member'); member.scrollIntoView({ block: 'start' }); member.focus();
+          };
+          if (!detail.dataset.loaded) detail.addEventListener('toggle', enterMember, { once: true });
+          detail.open = true; enterMember();
+        });
+        control.className = 'measurement-link'; control.setAttribute('aria-controls', memberId);
+        control.addEventListener('focus', () => control.classList.add('focused-segment'));
+        control.addEventListener('blur', () => control.classList.remove('focused-segment'));
+        control.append(node('span', label, 'segment-label'));
+        const track = node('span', undefined, 'measurement-track');
+        const bar = node('span', segment.point ? '◆' : '', 'measurement-segment' + (segment.point ? ' point' : ''));
+        bar.setAttribute('aria-hidden', 'true');
+        const span = timeline.end - timeline.start;
+        bar.style.left = `${span ? (segment.start - timeline.start) / span * 100 : 0}%`;
+        bar.style.width = `${span ? (segment.end - segment.start) / span * 100 : 0}%`;
+        const interval = segment.row.actor.usage.interval;
+        const precision = segment.point ? '같은 밀리초로 표시 · 밀리초 미만 차이는 원문 확인' : `${(segment.end - segment.start) / 1000}초 (밀리초 정밀도)`;
+        control.setAttribute('aria-label', `${label} · ${roleCatalog[task.role]?.label || '역할 미분류'} · 원본 ${interval.started_at} → ${interval.finished_at} · ${precision} · 이 멤버 상세 열기`);
+        control.append(node('span', precision, 'segment-precision')); track.append(bar); control.append(track); lane.append(control);
+      }
+      plot.append(lane);
+    });
+    chart.append(plot); section.append(chart,
+      node('p', '막대는 기록된 측정 구간이며 공백을 메우지 않습니다. 겹침은 기록의 겹침일 뿐 병렬 스케줄링이나 요청 전체 처리시간을 확정하지 않습니다. 구간 라벨이나 막대를 클릭하거나 Tab·Enter로 해당 멤버 상세를 엽니다. 차트 위치·길이는 밀리초 정밀도입니다.', 'notice'),
+      node('p', `시각 미확인 영역: ${timeline.rows.filter(row => !row.valid).length}개 · 아래 작업 상세에 보존합니다. 같은 밀리초로 표시되는 구간은 ◆이며 실제 동일 시각으로 단정하지 않습니다. 길이를 늘리지 않으며 세부 시각은 원문에서 확인합니다.`, 'notice'), taskList);
+    if (!tasks.length) section.append(node('p', '수입된 작업이나 담당자가 없습니다.', 'empty'));
+  }
   function renderUsage(bundle, measured) {
     const section = $('usage'); section.className = 'section-panel';
     const heading = node('div', undefined, 'section-heading'), h = node('div');
@@ -506,7 +632,7 @@ function startViewer() {
     const total = node('div', undefined, 'request-token-total');
     total.append(node('span', '이 요청의 측정된 총 토큰'), node('strong', tokenText(measured.total)),
       node('small', `입력 ${tokenText(measured.input)} · 출력 ${tokenText(measured.output)} · 측정 ${measured.covered}/${measured.rows.length}개 작업`));
-    section.append(total, node('h4', '역할별 사용량'));
+    section.append(total); renderTasks(bundle, measured, section); section.append(node('h4', '역할별 사용량'));
     const roles = node('div', undefined, 'role-usage-grid');
     for (const group of roleUsage(measured)) {
       const card = lazyDisclosure('', body => {

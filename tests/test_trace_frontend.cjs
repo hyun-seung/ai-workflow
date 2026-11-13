@@ -244,3 +244,61 @@ test('observed native defaults remain distinct from unknown and registered actor
   const later=structuredClone(f.profile);later.id='contradiction';later.detail.requested.model='explicit-model';f.bundle.events.push(later);
   p=profileFor(f.bundle,f.actor);assert.equal(p.requested.model.state,'conflict');
 });
+
+test('logical tasks consume current explicit groups once, retain physical and unmeasured rows, and never add totals', () => {
+  const {logicalTasks,effectiveBundle,usageUnits,roleUsage}=require('../scripts/trace_web/app.js');
+  const fixture=require('./fixtures/traces/dashboard-flow.json');
+  const bundle=effectiveBundle(fixture), before=JSON.stringify(bundle), measured=usageSummary(usageUnits(bundle));
+  const tasks=logicalTasks(bundle,measured), grouped=tasks.filter(t=>t.group);
+  assert.equal(grouped.length,1);assert.equal(grouped[0].title,'정정된 화면 구현 · 여러 구간의 공백 보존');
+  assert.deepEqual(grouped[0].rows.map(r=>r.actor.observation_id),['usage-0','usage-1']);
+  assert.equal(tasks.flatMap(t=>t.rows).length,measured.rows.length);
+  assert.equal(new Set(tasks.flatMap(t=>t.rows.map(r=>r.actor.id))).size,measured.rows.length);
+  assert.ok(tasks.some(t=>t.rows[0].actor.id==='sample-unmeasured'));
+  assert.ok(tasks.some(t=>!t.group && t.rows[0].actor.id==='usage-2'));
+  const ungrouped={...bundle,usage_groups:[]};
+  assert.equal(usageSummary(usageUnits(ungrouped)).total,measured.total);
+  assert.deepEqual(roleUsage(usageSummary(usageUnits(ungrouped))),roleUsage(measured));
+  assert.equal(measured.total,840);assert.equal(JSON.stringify(bundle),before);
+  assert.equal(bundle.original_events.find(e=>e.id==='synthetic-group').detail.title,'최초 가상 제목');
+  assert.match(bundle.event_revisions['synthetic-group'][0].detail.reason,/Synthetic/);
+});
+test('timeline uses only timezone-bearing interval bounds, keeps gaps, overlaps and zero-duration points', () => {
+  const {logicalTasks,effectiveBundle,usageUnits,measurementTimeline,instant}=require('../scripts/trace_web/app.js');
+  const bundle=effectiveBundle(require('./fixtures/traces/dashboard-flow.json'));
+  const view=measurementTimeline(logicalTasks(bundle,usageSummary(usageUnits(bundle))));
+  assert.equal(view.rows.filter(r=>r.valid).length,4);
+  assert.equal(view.rows.filter(r=>!r.valid).length,5); // three invalid intervals plus two unmeasured actors
+  assert.equal(view.rows.filter(r=>r.point).length,1);
+  const grouped=view.rows.filter(r=>r.task.group);
+  assert.equal(grouped[1].start-grouped[0].end,120000);
+  const overlap=view.rows.find(r=>r.row.actor.id==='usage-2');
+  assert.ok(overlap.start < grouped[0].end && overlap.end > grouped[0].start);
+  assert.equal(view.end-view.start,240000);
+  assert.equal(durationText(bundle.requests[0]),null);
+  for(const bad of [null,'bad','2026-01-01T00:00:00','2026-02-30T00:00:00Z','2026-01-01T24:00:00Z']) assert.equal(instant(bad),null);
+  assert.equal(instant('2026-01-01T09:00:00+09:00'),instant('2026-01-01T00:00:00Z'));
+  assert.equal(durationText({execution:{started_at:'2026-01-01T00:00:00',finished_at:'2026-01-01T00:01:00'}}),null);
+  assert.deepEqual(measurementTimeline([]),{rows:[],start:null,end:null});
+});
+
+test('millisecond chart points do not assert identical sub-millisecond instants; reversed fractional bounds stay unknown', () => {
+  const {measurementInterval,compareInstants}=require('../scripts/trace_web/app.js');
+  const row=(a,b)=>({actor:{usage_event:{detail:{usage:{interval:{started_at:a,finished_at:b}}}}}});
+  const a='2026-01-01T00:00:00.000001Z',b='2026-01-01T00:00:00.000999Z';
+  assert.equal(measurementInterval(row(a,b)).valid,true);
+  assert.equal(measurementInterval(row(a,b)).point,true); // position is only millisecond precision
+  assert.ok(compareInstants(a,b)<0);
+  assert.equal(measurementInterval(row(b,a)).valid,false);
+  assert.equal(durationText({execution:{started_at:b,finished_at:a}}),null);
+  assert.equal(durationText({execution:{started_at:a,finished_at:b}}),'0초');
+  assert.equal(compareInstants(a,'2026-01-01T09:00:00.000001+09:00'),0);
+  assert.equal(compareInstants(a,'2026-01-01T00:00:00.0000010Z'),0);
+  assert.equal(measurementInterval(row(a,'2026-01-01T00:00:00.001Z')).point,false);
+});
+test('adjacent segment identity uses member title and individual attributed tokens without group totals', () => {
+  const {segmentLabel}=require('../scripts/trace_web/app.js');
+  const row={actor:{display_task:'가상 물리 작업 <literal>'},kind:'attributed',total:120};
+  assert.equal(segmentLabel(row,1),'구간 2 · 가상 물리 작업 <literal> · 120 tokens');
+  assert.equal(segmentLabel({...row,kind:'reference'},0),'구간 1 · 가상 물리 작업 <literal> · — tokens');
+});
