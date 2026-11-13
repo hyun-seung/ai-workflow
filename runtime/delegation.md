@@ -62,9 +62,11 @@ python3 scripts/dispatch_guard.py \
 
 종료가 확인된 관리 대상의 다음 업무는 새 operation으로 `followup --previous <operation-id> --spec-file <path>`를 사용한다. 같은 요청의 누적 한도를 소비하고 공식 `send --to dispatch:<id>`로 전달한다. 현재는 이전 worker의 실제 종료 후 후속 업무만 지원하며, 같은 선행 배정에서 이어진 후속 업무·재시도 중 하나라도 실행 또는 불명 상태면 추가 배정을 거부한다. 오래된 선행 operation을 다시 지정해도 이 점유 검사를 적용한다. 새 모델을 지정하는 후속 전송은 지원하지 않는다.
 
-실패한 배정의 종료가 확인되면 `retry --previous <operation-id>`로 같은 native Task와 `--retry-of`를 사용한다. 새 operation이므로 누적 한도에 포함한다. Orca의 실패 연쇄·회로 차단을 새 Task로 우회하지 않으며 자동 재시도하지 않는다. 사용자의 재시도 지시 범위와 공식 recovery 가이드를 먼저 확인한다.
+실패하거나 명시적으로 중단한 배정의 정확한 종료가 확인되면 `retry --previous <operation-id>`로 같은 native Task와 `--retry-of`를 사용한다. 성공한 배정에는 retry를 사용하지 않는다. retry 응답의 native Task/Run이 원래 연결과 다르면 unknown으로 보존하고 재호출하지 않는다. 새 operation이므로 누적 한도에 포함한다. Orca의 실패 연쇄·회로 차단을 새 Task로 우회하지 않으며 자동 재시도하지 않는다. 사용자의 재시도 지시 범위와 공식 recovery 가이드를 먼저 확인한다.
 
 ## 오류·재시작·확인 범위
+
+공식 중단 응답의 `stopped`만으로 종료를 인정하지 않는다. 현재 지원하는 native 조합은 worker의 `stopped/process_stopped`, dispatch의 `failed/lastFailure=stopped`, 정확한 로컬 worker의 `exited` 관측이 함께 있는 경우다. 이때 원래 중단 상태를 기록하고 같은 Task의 재시도를 허용한다. 미확인 종료는 계속 자리를 차지한다.
 
 ```sh
 python3 scripts/dispatch_guard.py \

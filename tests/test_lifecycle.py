@@ -134,6 +134,18 @@ class LifecycleTests(unittest.TestCase):
                 wc.apply(self.plan,'orca-example')
         self.assertTrue(self.source.exists())
 
+    def test_stopped_worker_requires_matching_native_stop_and_exact_exit(self):
+        s=snapshot()
+        s['result']['dispatch'].update(status='failed',lastFailure='stopped')
+        s['result']['worker'].update(state='stopped',stage='process_stopped')
+        io.exited(s,'task_example','ctx_example')
+        for section,field,value in [('dispatch','status','completed'),('dispatch','lastFailure',None),
+                                     ('worker','stage','working'),('observation','exactWorker',False),
+                                     ('observation','status','running')]:
+            invalid=copy.deepcopy(s);invalid['result'][section][field]=value
+            with self.subTest(section=section,field=field),self.assertRaisesRegex(ValueError,'exit_unconfirmed'):
+                io.exited(invalid,'task_example','ctx_example')
+
     def test_active_workspace_or_changed_registration_stops(self):
         self.prepare()
         for field,value in (('agents',[{'state':'working'}]),('unverifiableTerminalCount',1),('childWorktreeIds',['child'])):

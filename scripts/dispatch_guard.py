@@ -109,8 +109,8 @@ class Ledger:
                 previous = data['operations'].get(plan['previous'])
                 if not previous or previous['request_id'] != request_id or previous['state'] != 'released':
                     raise LimitReached('predecessor_exit_not_confirmed')
-                if plan['action'] == 'retry' and previous.get('outcome') != 'failed':
-                    raise ValueError('retry_requires_failed_predecessor')
+                if plan['action'] == 'retry' and previous.get('outcome') not in {'failed', 'cancelled', 'stopped'}:
+                    raise ValueError('retry_requires_failed_or_cancelled_or_stopped_predecessor')
                 if previous.get('dispatch_id') != plan['previous_dispatch']:
                     raise ValueError('predecessor_binding_changed')
                 origin = lineage(data['operations'], plan['previous'])
@@ -135,6 +135,11 @@ class Ledger:
             else:
                 binding = receipt_binding(receipt)
                 if binding:
+                    if (operation['plan']['action'] == 'retry' and
+                            (binding['task_id'], binding['run_id']) !=
+                            (operation['plan'].get('previous_task'), operation['plan'].get('previous_run'))):
+                        self.write(data)
+                        raise ValueError('retry_native_binding_mismatch')
                     if any(o is not operation and o.get('dispatch_id') == binding['dispatch_id'] for o in data['operations'].values()):
                         self.write(data)
                         raise ValueError('native_dispatch_already_accounted')
