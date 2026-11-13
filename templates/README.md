@@ -7,9 +7,22 @@
 | [task-input.md](task-input.md) | 사용자 또는 조율자가 한 담당자에게 전달하는 작업 |
 | [task-result.md](task-result.md) | 담당자가 제출하는 산출물·검증·미해결 사항 |
 | [task-report.md](task-report.md) | 조율자가 여러 작업을 종합하는 선택적 보고서 |
+| [guidance-review.md](guidance-review.md) | 공식 모범 사례를 주기적으로 점검할 때 재사용하는 요청문 |
+| [guidance-review-automation.md](guidance-review-automation.md) | Orca 예약에서 읽는 실행 요청: 원본 보존·로컬 보고서·적용 전 패치 |
 | [가상 예시](../examples/task-contract.md) | 개발과 글쓰기 작업의 입력·결과 연결 |
 
-## 최소 계약
+## 직접 요청하는 작은 작업
+
+위임·실행 기록을 연결하지 않는 단일 작업은 아래 네 줄이면 충분하다. 이미 요청에서 명확한 항목은 반복 작성하거나 사용자에게 다시 묻지 않는다. 복잡한 작업의 계획·대화 분리는 [세션 운용](../runtime/session-practices.md)을 따른다.
+
+```text
+목표: 무엇을 바꾸거나 알아낼지
+참고: 관련 파일·오류·예시와 확인된 사실
+제약: 지킬 조건과 작업 범위
+완료: 관찰 가능한 결과와 확인 방법
+```
+
+## 위임·기록용 최소 계약
 
 | 구분 | 필수 항목 | 기준 |
 | --- | --- | --- |

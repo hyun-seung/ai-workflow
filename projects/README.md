@@ -4,6 +4,21 @@
 
 새 프로젝트나 임시 실험 폴더를 만드는 판단과 완료 후 보관·정리는 [작업 공간 생성·보관·정리](../runtime/workspace-lifecycle.md)를 따른다. 기존 프로젝트 지침을 연결하는 것과 새 공간을 생성하는 것을 구분한다.
 
+## 도구별 지침 연결
+
+| 용도 | Codex | Claude Code |
+| --- | --- | --- |
+| 프로젝트 지침 | 루트와 필요한 하위 폴더의 `AGENTS.md` | `CLAUDE.md`; 지원 버전·설정에서는 `AGENTS.md`도 직접 로드 |
+| 프로젝트 설정 | `.codex/config.toml` | `.claude/settings.json` |
+| 프로젝트 스킬 | `.agents/skills/` | `.claude/skills/` |
+| 주제별 절차 | 필요한 문서를 링크하고 작업에 맞게 읽기 | `.claude/rules/`의 경로별 규칙 또는 필요한 문서 링크 |
+
+폴더를 모두 만들 필요는 없다. Codex의 하위 지침은 상위 지침을 함께 읽고 충돌할 때 더 구체적인 지침을 적용하며, 파일 발견 범위·크기 제한은 [공식 AGENTS.md 문서](https://learn.chatgpt.com/docs/agent-configuration/agents-md)를 확인한다. 스킬 위치는 [공식 사용자화 문서](https://learn.chatgpt.com/docs/customization/overview)를 따른다. 이 저장소의 `roles/`는 공통 역할 문서이며 도구의 native agent 정의로 자동 등록되지 않는다.
+
+Claude Code의 직접 `AGENTS.md` 로드는 v2.1.277 이상에서 도입됐고, 상위 `CLAUDE.md`·설정·내장 플러그인 상태에 따라 달라진다. 지원되지 않거나 기존 `CLAUDE.md`를 유지해야 하면 그 파일에서 `@AGENTS.md`로 연결할 수 있다. 실제 로드 여부를 확인하고 같은 규칙을 두 파일에 복제하지 않는다. import는 본문을 함께 로드하므로 토큰 절감 수단은 아니다. [Claude 메모리](https://code.claude.com/docs/en/memory), [설정 폴더](https://code.claude.com/docs/en/claude-directory) 기준이며, 실제 설치 검증을 대신하지 않는다.
+
+공유할 결정·검증 명령은 해당 프로젝트 문서에 남기고 상시 지침에는 필요한 링크만 둔다. 민감한 내부 자료는 공개 저장소로 옮기지 않고 승인된 비공개 문서와 접근 경로를 연결한다.
+
 ## 상위 폴더 아래 복수 저장소
 
 가상 구조:

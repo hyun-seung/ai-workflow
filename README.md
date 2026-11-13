@@ -16,6 +16,8 @@
 | [projects/](projects/README.md), [templates/project.startup.json](templates/project.startup.json) | 상위 폴더와 자식 저장소의 프로젝트 지침 연결 |
 | [roles/](roles/README.md) | 각 역할의 책임·결과물·검증 기준 |
 | [AGENTS.md](AGENTS.md), [principles/privacy.md](principles/privacy.md) | 모든 역할에 전달하는 공통 원칙 |
+| [runtime/session-practices.md](runtime/session-practices.md) | 대화 분리·계획·캐시·검증의 실무 기준 |
+| [runtime/guidance-maintenance.md](runtime/guidance-maintenance.md) | 공식 문서 주간 점검·변경안 제안; 로컬 Orca 예약 시험 완료, 자동 적용·병합 없음 |
 | [templates/project.workflow.json](templates/project.workflow.json) | 대상 프로젝트의 `.ai-workflow.json`으로 사용할 설정 양식 |
 | [schema/workflow.schema.json](schema/workflow.schema.json) | 설정 파일의 필드·타입·허용값 |
 | [scripts/workflow.py](scripts/workflow.py) | 설정 검증, 적용값 확인, Codex 실행, 로컬 기록 집계 |
