@@ -10,6 +10,8 @@
 
 실제 관측은 공급자의 턴 컨텍스트에 기록된 값이다. 공급자 내부 라우팅이나 물리 서버의 모델을 별도 계측했다는 뜻은 아니다. snapshot·값이 없으면 미확인이다. native 요청이 관측됐지만 모델을 명시하지 않은 null은 `native 기본값 요청`으로 표시하며 실제 모델을 추측하지 않는다. 적용 단계의 관측된 null은 `적용값 미제공`이다.
 
+[라우팅 선택을 명시 연결한 배정](routing-dispatch.md)은 `finish_worker.py`의 관리 operation 연결에서 선택한 모델·effort를 기대값으로 가져온다. 완료 metadata의 세 단계를 대조해 하나라도 누락되면 `routing_profile=unverified`, 불일치면 fail로 반환하며 요청값으로 실제 관측을 채우지 않는다. 이는 가상 native 응답으로 검사한 신규 연결이며 아래 기존 수집 경로의 실제 관측 검증과 구분한다.
+
 ## 추가 관측과 수입
 
 [native 검사기](native-record.md)는 optional worker snapshot을 정확한 task/dispatch/Orca process incarnation과 대조한다. `requested`는 기존 계약을 유지하고 `launch_effective`를 추가한다. 오래된 snapshot에 effective 단계가 없으면 unavailable이다. CLI 기대값은 프로필을 바꾸거나 실행 사실로 승격되지 않는다.

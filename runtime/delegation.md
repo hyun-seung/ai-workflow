@@ -80,3 +80,5 @@ python3 scripts/dispatch_guard.py \
 가상 응답 검증과 실제 native 실행 검증을 구분한다. 미지원 receipt 형식은 `unknown`으로 보존하고 성공으로 추정하지 않는다. [병렬 작업 판단](parallelism.md)은 이 수량 제한과 함께 적용한다.
 
 등록된 Orca·Codex 배정의 토큰 자동 수집을 준비할 때 `--usage-role`, `--usage-actor-id`, `--usage-task-title`을 함께 명시한다. native 호출 전에 계획에 고정하며 측정값은 입력받지 않는다. 프로젝트 hook의 설치·신뢰와 [실제 완료 이벤트 검증](completion-hook.md)이 별도로 필요하다. 옵션이 없는 기존 배정은 자동 수집 대상으로 승격하지 않는다.
+
+수용한 라우팅 선택을 연결하려면 [명시 위임·프로필 연결](routing-dispatch.md)의 네 `--routing-*` 옵션을 함께 사용한다. 현재 worktree의 새 Codex worker만 지원하며, 정확한 선택·명시 모델/effort와 일회 실행 바인딩을 검사한다. 역할 기본 프로필·직접 처리 선택을 worker로 자동 변환하지 않는다. 옵션이 없으면 기존 관리 실행 경로다. 이 새 연결의 검증은 가상 native 응답이며 실제 배정·전환 검증은 남아 있다.

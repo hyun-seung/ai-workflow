@@ -205,11 +205,13 @@ def invoke(cli, plan, text):
     return receipt, result.returncode
 
 
-def launch(ledger, request_id, operation_id, plan, text, limits, cli):
+def launch(ledger, request_id, operation_id, plan, text, limits, cli, before_invoke=None):
     operation, fresh = ledger.reserve(request_id, operation_id, plan, limits)
     if not fresh:
         return dict(operation, replay=True)
     try:
+        if before_invoke is not None:
+            before_invoke()
         receipt, code = invoke(cli, plan, text)
     except (OSError, subprocess.TimeoutExpired):
         receipt, code = {'error': {'code': 'transport_outcome_unknown'}}, None
@@ -268,6 +270,10 @@ def main(argv=None):
         q.add_argument('--agent',default='codex')
         q.add_argument('--model');q.add_argument('--effort')
         q.add_argument('--usage-role');q.add_argument('--usage-actor-id');q.add_argument('--usage-task-title')
+        q.add_argument('--routing-choice-file',type=Path)
+        q.add_argument('--routing-revision',type=int)
+        q.add_argument('--routing-proposal')
+        q.add_argument('--routing-proposal-version',type=int)
         q.add_argument('--subject',default='Follow-up assignment')
         q.add_argument('--writes',action='append',default=[])
         q.add_argument('--depends-on',action='append',default=[])
@@ -292,7 +298,12 @@ def main(argv=None):
             remembered=ledger.read()['requests'].get(args.request_id,{})
             policy['limits']={k:(v if v is not None else remembered.get(k)) for k,v in policy['limits'].items()}
             plan,text=make_plan(args,ledger)
-            op=launch(ledger,args.request_id,args.operation_id,plan,text,policy['limits'],cli)
+            choice_fields = (args.routing_choice_file, args.routing_revision, args.routing_proposal, args.routing_proposal_version)
+            if any(value is not None for value in choice_fields):
+                from routing_dispatch import launch_selected
+                op=launch_selected(args,ledger,plan,text,policy['limits'],cli,launch)
+            else:
+                op=launch(ledger,args.request_id,args.operation_id,plan,text,policy['limits'],cli)
         print(json.dumps({k:op.get(k) for k in ('state','task_id','dispatch_id','run_id','outcome','replay','release')},ensure_ascii=False))
         if op.get('receipt') and not op.get('replay'):
             # Preserve native next/recovery instructions; no hidden retries.

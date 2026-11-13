@@ -6,7 +6,9 @@
 
 현재는 **환경 가이드 선택·연결 확인**, 단일 Codex 역할 실행·기록·집계, 관리 경로의 위임 한도, 명시적으로 수입한 실행 기록의 SQLite 대시보드를 제공합니다. Orca 네이티브 위임·결과 반환과 새 Codex worker의 대신 승인 적용은 제한된 실제 작업에서 확인했습니다. 닫힌 단일 native 턴의 배정별 토큰을 완료 기록에 저장하고, 지정된 DB에 중복 없이 연결해 요청·역할·작업별로 표시합니다. 조율자 등 누락된 역할의 전체 수집, 자동 업무 분해, Paseo 실제 위임, 복수 저장소 통합은 남아 있습니다. [하네스 개선 상태와 다음 작업](runtime/harness-roadmap.md)에 구현·운영 규칙·미검증을 구분했습니다.
 
-학습 대화에는 튜터 지침과 공식 근거·연관 Q&A 기준을 제공합니다. 요청 라우팅은 별도 AI 호출 없는 로컬 추천 검사 도구까지 구현했으며, 앱 입력 연결·선택 저장·자동 위임·모델 전환은 아직 연결하지 않았습니다. 튜터의 대표 응답은 작성 AI의 자체 점검을 수행했고 독립 정확도·학습 효과·비용 절감은 미검증입니다. [통합 개발 순서](learning/development.md)를 기준으로 진행합니다.
+학습 대화에는 튜터 지침과 공식 근거·연관 Q&A 기준을 제공합니다. 요청 라우팅은 별도 AI 호출 없는 로컬 추천 검사·선택 기록·선택한 역할 지침 준비까지 구현했습니다. 앱 입력·선택 UI·같은 AI에 역할 적용·현재 대화의 모델 전환·자동 위임은 아직 연결하지 않았습니다. 튜터의 대표 응답은 작성 AI의 자체 점검을 수행했고 독립 정확도·학습 효과·비용 절감은 미검증입니다. [통합 개발 순서](learning/development.md)를 기준으로 진행합니다.
+
+수용한 worker 선택을 [기존 관리 실행기에 명시 연결](runtime/routing-dispatch.md)하는 경로도 제공합니다. 한 동의를 한 실행에 묶고 선택한 모델·effort를 정확히 전달하며 완료 시 요청·적용·실제 관측을 대조합니다. 이 신규 연결은 가상 응답으로 검증했으며 실제 배정·전환 검증은 남아 있습니다.
 
 ## 무엇을 바꾸면 되나요?
 
@@ -20,6 +22,8 @@
 | [learning/](learning/README.md), [통합 개발 순서](learning/development.md) | 튜터 사용법·출처 기준·심화 방식과 자체 평가·다음 작업 |
 | [runtime/request-routing.md](runtime/request-routing.md), [짧은 진입 지침](runtime/routing-brief.md) | 직접 처리·역할/설정 추천·위임 제어·적용 범위·최소 토큰 원칙 |
 | [scripts/request_router.py](scripts/request_router.py), [입출력 안내](runtime/request-router.md) | 짧은 목록과 구조화된 판단의 로컬 검사. 모델 호출·실행·설정 저장 없음 |
+| [scripts/routing_choices.py](scripts/routing_choices.py), [선택 기록 안내](runtime/routing-choices.md) | 비공개 요청별 수용·거절·취소·만료와 선택한 역할 지침 준비. 같은 AI에 실제 적용은 미연결 |
+| [runtime/routing-dispatch.md](runtime/routing-dispatch.md) | 수용한 worker 선택과 관리 실행의 opt-in 연결·동의 중복 방지·완료 프로필 대조. 실제 전환 검증은 남음 |
 | [AGENTS.md](AGENTS.md), [principles/privacy.md](principles/privacy.md) | 모든 역할에 전달하는 공통 원칙 |
 | [templates/project.workflow.json](templates/project.workflow.json) | 대상 프로젝트의 `.ai-workflow.json`으로 사용할 설정 양식 |
 | [schema/workflow.schema.json](schema/workflow.schema.json) | 설정 파일의 필드·타입·허용값 |
@@ -52,6 +56,10 @@
 라우팅 자체의 토큰 비용 최소화를 핵심 제약으로 둡니다. 기본 경로는 라우팅 전용 추가 모델 호출 없이 확정 제어·기존 선택을 재사용하고, 필요한 의미 판단은 현재 AI의 응답에서 수행하도록 설계합니다. 추천이 없으면 바로 본문을 답하며 모든 역할 문서를 매번 읽지 않습니다. 실제 절감 효과는 아직 미측정입니다.
 
 튜터 개발과 추천 평가·Orca 입력 연결·사용자 선택·위임/모델 전환·비용 비교는 [통합 개발 순서](learning/development.md)에 따라 단계적으로 진행합니다.
+
+[Orca 안의 Codex 입력 어댑터](runtime/orca-routing-input.md)는 준비 단계입니다. 원문을 저장하지 않고 정확한 대상의 명시 상태만 짧게 전달합니다. 프로젝트 hook 설치·신뢰와 실제 native 입력 수신은 아직 검증하지 않았습니다.
+
+[사용자 선택 기록](runtime/routing-choices.md)은 요청·추천 버전을 대조해 수용·거절·취소를 보관합니다. 수용한 현재 AI용 역할의 지침만 준비하고, 명시한 후속 대화에는 역할 본문을 다시 읽지 않고 선택을 재사용할 수 있습니다. 앱에 주입하거나 모델·effort·위임을 실행하지 않습니다. 입력 어댑터와 선택 UI의 자동 연결은 남아 있습니다.
 
 ### 개념을 배우고 싶을 때
 
