@@ -40,9 +40,12 @@ class WorkflowTests(unittest.TestCase):
     def write(self, path, data):
         path.write_text(json.dumps(data), encoding="utf-8")
 
-    def test_repository_defaults_load_all_six_roles(self):
+    def test_repository_defaults_load_work_and_learning_roles(self):
         config = workflow.load_config(ROOT, self.project)
-        self.assertEqual(len(config["roles"]), 6)
+        self.assertEqual(set(config["roles"]), {
+            "coordinator", "architect", "designer", "backend", "frontend", "verifier",
+            "tutor", "learning-concepts", "learning-visuals", "learning-connections",
+        })
         for name in config["roles"]:
             command, prompt, _, _ = workflow.prepare_run(config, self.project, name, "Example task")
             self.assertIn("Example task", prompt)

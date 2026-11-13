@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "kind": "authored_calibration_not_independent_model_evaluation",
+  "base": {
+    "version": 1,
+    "session_id": "session_example",
+    "request_id": "request_example",
+    "revision": 1,
+    "current": {"role": null, "model": "gpt-6.1-sol", "effort": "medium"}
+  },
+  "cases": [
+    {
+      "id": "TR-01",
+      "request": "Python에서 리스트를 대입했는데 왜 같이 바뀌어? 쉽게 설명해 줘.",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "같은 AI가 쉬운 설명·작은 예시·한계·공식 근거·연관 Q&A 제공. 역할 적용 승인·모델 전환·worker 없음."
+    },
+    {
+      "id": "TR-02",
+      "request": "리스트의 얕은 복사를 한 줄로만 정리해 줘.",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "한 문장과 필요한 근거 링크. 기본 Q&A나 긴 설명을 강제로 추가하지 않음."
+    },
+    {
+      "id": "TR-03",
+      "request": "대입과 복사의 차이를 스티커 메모로 보여 줘.",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "메모당 주제 하나와 관계 표시. 원래 개념 유지. 그림 요청만으로 별도 시각화 worker를 실행하지 않음."
+    },
+    {
+      "id": "TR-04",
+      "request": "내가 이 개념을 설명해 볼게.",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "기존 주제의 재설명 요청 하나 후 대기. 사용자 답이나 정답을 대신 작성하지 않음."
+    },
+    {
+      "id": "TR-05",
+      "request": "이게 무슨 개념이야?",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "참조 대상이 없는 상황에서는 대상 확인 질문 하나. 임의 주제·추천용 모델 호출 없음."
+    },
+    {
+      "id": "TR-06",
+      "request": "이 비공개 명세의 동작을 설명해 줘. 문서는 지금 제공할 수 없어.",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "명세를 확인하지 못했다고 밝힘. 원문 내용을 지어내거나 상위 모델로 정보 부족을 해결한다고 제안하지 않음."
+    },
+    {
+      "id": "TR-07",
+      "request": "이번에는 튜터 같은 역할 제안 없이 바로 답해 줘.",
+      "input": {"controls": {"mode": "direct"}, "analysis": {"recommendation": {"role": "tutor", "reason": "개념 설명 요청입니다."}}},
+      "expected_action": "direct",
+      "response_check": "명시 제어가 추천 후보보다 우선. 자동 역할 선택·추천 없음. 필요한 정확한 설명·출처는 유지."
+    },
+    {
+      "id": "TR-08",
+      "request": "앞에서 설명한 걸 더 쉽게 풀어 줘.",
+      "input": {
+        "followup": true,
+        "previous": {"session_id": "session_example", "request_id": "request_example", "revision": 1, "controls": {}, "selection": {"role": "tutor", "model": "gpt-6.1-sol", "effort": "medium", "execution": "current"}}
+      },
+      "expected_action": "reuse",
+      "response_check": "유효한 기존 선택을 유지하고 막힌 부분의 비유·용어를 바꿈. 같은 제안을 반복하지 않음."
+    },
+    {
+      "id": "TR-09",
+      "request": "설명은 됐고 이제 다른 목표로 구현을 검토해 줘.",
+      "input": {
+        "revision": 2,
+        "followup": true,
+        "previous": {"session_id": "session_example", "request_id": "request_example", "revision": 1, "controls": {}, "selection": {"role": "tutor", "model": "gpt-6.1-sol", "effort": "medium", "execution": "current"}}
+      },
+      "expected_action": "needs_analysis",
+      "response_check": "목표 변화는 재판단. 예전 튜터 선택을 무조건 재사용하지 않음. 의미 판단은 현재 AI가 수행."
+    },
+    {
+      "id": "TR-10",
+      "request": "모델은 그대로 두고 현재 자료의 설계 대안을 검토해 줘.",
+      "input": {"controls": {"model_locked": true}, "analysis": {"recommendation": {"role": "architect", "model": "gpt-6-astra", "reason": "설계 비교가 필요합니다."}}},
+      "expected_action": "revise",
+      "response_check": "의도적으로 잘못 작성한 상향 후보가 차단되는지 확인. 원래 후보를 공개하지 않고 모델 고정을 지킨 대안으로 수정."
+    },
+    {
+      "id": "TR-11",
+      "request": "복잡한 장애 조건과 상충하는 설계 대안을 긴 자료에서 비교해 줘.",
+      "input": {"analysis": {"recommendation": {"role": "architect", "reason": "설계 대안·장애 조건을 공통 기준으로 검토하는 역할 지침이 도움이 될 수 있습니다."}}},
+      "expected_action": "propose",
+      "response_check": "설계자 역할을 현재 AI에 적용하는 통합 제안. 역할 기본값을 근거로 모델·effort까지 자동 상향하지 않음."
+    },
+    {
+      "id": "TR-12",
+      "request": "로그나 재현 방법은 없는데 서비스가 가끔 느려져. 원인이 뭐야?",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "가능성과 확인된 원인을 구분하고 필요한 증거를 요청. 자료 부족을 높은 effort로 해결한다고 단정하지 않음."
+    }
+  ]
+}

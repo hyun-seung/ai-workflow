@@ -48,6 +48,12 @@
 | 백엔드 개발자 | GPT-6.1 Sol | Medium | 복잡한 동시성·트랜잭션·장애 분석은 High. 범위가 명확한 작은 수정은 Terra와 비교 |
 | 프론트엔드 개발자 | GPT-6.1 Sol | Medium | 기능·상태·API 연동을 중심으로 사용하고, 단순 화면 수정은 Terra와 비교 |
 | 검증자 | GPT-6.1 Sol | Medium | 복잡한 코드·요구사항·연동 검토는 High. 화면 중심 확인은 Terra, 중요한 설계·보안·동시성 검토는 Astra를 선택적으로 사용 |
+| 학습 튜터 (`tutor`) | GPT-6.1 Sol | Medium | 쉬운 설명·대화 통합. 단순 정의는 Low, 복잡한 원리·상충 자료는 High 검토 |
+| 개념 해설 (`learning-concepts`) | GPT-6.1 Sol | Medium | 핵심·예시·제1원리 준비. 복잡한 도출·낯선 전문 주제는 High 검토 |
+| 학습 시각화 (`learning-visuals`) | GPT-6.1 Terra | Medium | 확정 개념의 메모·지도·도식 구성. 실제 가독성과 관계 정확성을 별도 확인 |
+| 연관 질문 해설 (`learning-connections`) | GPT-6.1 Sol | Medium | 연관 질문·답변·공식 근거 준비. 본문과의 중복·충돌과 출처는 튜터가 최종 확인 |
+
+학습 역할은 [별도 진입점](../learning/README.md)으로 추가했다. 위 실행값은 기존 역할의 설정을 재사용한 시작 제안이며 학습 품질·속도를 비교 측정한 최적값이 아니다. 대화 지침을 읽는 것만으로 현재 세션의 모델·effort가 변경되지는 않는다.
 
 모델 식별자는 Sol이 `gpt-6.1-sol`, Terra가 `gpt-6.1-terra`, Astra가 `gpt-6-astra`다. Low/Medium/High/Extra High는 설정에서 각각 `low`/`medium`/`high`/`xhigh`로 지정한다. 도구별 지원 범위와 실제 적용값을 확인한다.
 

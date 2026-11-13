@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>튜터 시각 설명 자체 점검</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:20px;font:16px/1.55 var(--font-sans,system-ui);background:var(--background,#fff);color:var(--foreground,#18181b)}main{max-width:840px;margin:auto}h1{font-size:23px;margin:0 0 4px}h2{font-size:20px;margin:18px 0 12px}p{margin:8px 0}nav{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}button{font:inherit;padding:8px 12px;border:1px solid var(--border,#d4d4d8);border-radius:9px;background:var(--card,#fff);color:var(--card-foreground,#18181b);cursor:pointer}button[aria-selected=true],button:hover{background:var(--accent,#e8edff);color:var(--accent-foreground,#172554)}button:focus-visible,a:focus-visible{outline:3px solid var(--ring,#2563eb);outline-offset:3px}.hint,footer{font-size:13px;color:var(--muted-foreground,#62626b)}a{color:var(--primary,#1d4ed8);overflow-wrap:anywhere}article{padding:14px;border:1px solid var(--border,#d4d4d8);border-radius:12px;background:var(--card,#fff);color:var(--card-foreground,#18181b)}.notes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.notes h3{margin:5px 0;font-size:18px}.label{font-size:12px;color:var(--muted-foreground,#62626b)}.root{text-align:center;border:2px solid var(--border,#a1a1aa);border-radius:10px;padding:12px;font-weight:700}.branches{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:0}.branches article{border-top:4px solid var(--chart-1,#2563eb)}.flow{display:grid;gap:8px;max-width:540px;margin:auto;text-align:center}.arrow{font-size:14px;color:var(--muted-foreground,#62626b)}.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}.sheet{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sheet h3{font-size:16px;margin:0 0 4px}.sheet p{margin:0;font-size:15px}.wide{grid-column:1/-1}code{font-family:var(--font-mono,monospace);overflow-wrap:anywhere}footer{margin-top:16px;border-top:1px solid var(--border,#d4d4d8);padding-top:10px}[hidden]{display:none!important}@media(max-width:540px){body{padding:14px}.notes,.branches{grid-template-columns:1fr}.branches{border-left:2px solid var(--chart-1,#2563eb);margin-top:10px}#map svg{display:none}.branches article{margin-left:18px;border-left:3px solid var(--chart-1,#2563eb);border-top:1px solid var(--border,#d4d4d8)}.sheet{grid-template-columns:1fr 1fr}.wide{grid-column:1/-1}.split{gap:8px}h1{font-size:21px}}
+</style>
+<main>
+<h1>같은 개념, 다른 설명 방식</h1>
+<p class="hint">가상 요청에 대한 자체 평가용 그림 · 원문을 재구성한 구성 · 2026-11-13 확인</p>
+<nav role="tablist" aria-label="설명 방식">
+<button id="tab-notes" role="tab" aria-controls="notes" aria-selected="true">스티커 메모</button>
+<button id="tab-map" role="tab" aria-controls="map" aria-selected="false">마인드맵</button>
+<button id="tab-flow" role="tab" aria-controls="flow" aria-selected="false">도식</button>
+<button id="tab-sheet" role="tab" aria-controls="sheet" aria-selected="false">한 장 시트</button>
+</nav>
+<section id="notes" role="tabpanel" aria-labelledby="tab-notes">
+<h2>HTTP 캐시: 세 주제를 나눠 보기</h2>
+<div class="notes">
+<article><span class="label">01 · 저장</span><h3>응답 보관</h3><p>보관할 수 있는 조건부터 확인.</p></article>
+<article><span class="label">02 · 재사용</span><h3>조건에 맞게 사용</h3><p>저장되어 있다는 것만으로 충분하지 않음.</p></article>
+<article><span class="label">03 · 검증</span><h3>필요한 경우 확인</h3><p>서버에 확인한 뒤 재사용.</p></article>
+</div>
+<p class="hint">관계: 저장은 재사용 후보를 만들고, 재사용 조건에 따라 검증이 필요할 수 있다. 모든 요청의 고정 순서가 아니다.</p>
+<p><a href="https://www.rfc-editor.org/rfc/rfc9111.html#section-4">RFC 9111 §4 · 재사용 조건</a></p>
+</section>
+<section id="map" role="tabpanel" aria-labelledby="tab-map" hidden>
+<h2>Python: 복사 방식의 분류</h2>
+<div class="root">이름 연결과 객체 복사</div>
+<svg viewBox="0 0 840 28" width="100%" height="28" aria-label="중심에서 세 분류로 가지가 나뉨" role="img" style="display:block;color:var(--chart-1,#2563eb)"><path d="M420 0V14M140 28V14H700V28M420 14V28" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+<div class="branches"><article><b>대입</b><p>같은 객체</p></article><article><b>얕은 복사</b><p>바깥 객체 새로<br>안쪽 참조 공유 가능</p></article><article><b>깊은 복사</b><p>중첩 구조 재귀 복사<br>예외 있음</p></article></div>
+<p class="hint">중심의 하위 분류다. 왼쪽에서 오른쪽으로 진행하는 단계가 아니다.</p>
+<p><a href="https://docs.python.org/3/library/copy.html">Python 공식 copy · 대입과 복사</a></p>
+</section>
+<section id="flow" role="tabpanel" aria-labelledby="tab-flow" hidden>
+<h2>PostgreSQL: 확정과 취소의 분기</h2>
+<div class="flow"><article><b>BEGIN</b><br>경계 시작</article><div class="arrow">↓ 작업 수행</div><article>변경 작업</article><div class="arrow">↓ 결과에 따라 선택</div><div class="split"><article><span class="label">성공 · 확정할 때</span><p><b>COMMIT</b></p></article><article><span class="label">취소할 때</span><p><b>ROLLBACK</b></p></article></div></div>
+<p class="hint">기본 제어 흐름이다. 모든 오류가 자동으로 ROLLBACK 명령을 실행한다는 뜻은 아니다.</p>
+<p><a href="https://www.postgresql.org/docs/current/tutorial-transactions.html">PostgreSQL 공식 튜토리얼 · Transactions</a></p>
+</section>
+<section id="sheet" role="tabpanel" aria-labelledby="tab-sheet" hidden>
+<h2>HTTP 캐시: 한 장 학습 시트</h2>
+<div class="sheet"><article class="wide"><h3>개념</h3><p>보관한 응답을 조건에 맞게 재사용.</p></article><article class="wide"><h3>읽는 순서</h3><p>정의 → 저장/재사용 조건 → 신선도 → 검증</p></article><article><h3>핵심 값</h3><p>수명·현재 나이<br>단위: 초</p></article><article><h3>판단</h3><p><code>수명 &gt; 나이</code>이면 fresh<br>같으면 fresh 아님</p></article><article><h3>직접 만든 예시</h3><p>60초 &gt; 20초 → fresh</p></article><article><h3>한계</h3><p>fresh여도 다른 재사용 조건 확인.</p></article></div>
+<p><a href="https://www.rfc-editor.org/rfc/rfc9111.html#section-4.2">RFC 9111 §4.2 · 신선도</a> · <a href="https://www.rfc-editor.org/rfc/rfc9111.html#section-4">§4 · 재사용 조건</a></p>
+</section>
+<footer>그림·수치 예시는 직접 구성했다. 독립 품질 평가·학습 효과·토큰 절감의 측정 결과가 아니다.</footer>
+</main>
+<script>
+const ids=['notes','map','flow','sheet'];
+function show(id){if(!ids.includes(id))id='notes';for(const key of ids){document.getElementById(key).hidden=key!==id;const tab=document.getElementById('tab-'+key);tab.setAttribute('aria-selected',String(key===id));tab.tabIndex=key===id?0:-1;}history.replaceState(null,'','#'+id);}
+for(const id of ids){const tab=document.getElementById('tab-'+id);tab.addEventListener('click',()=>show(id));tab.addEventListener('keydown',event=>{let i=ids.indexOf(id);if(event.key==='ArrowRight')i=(i+1)%ids.length;else if(event.key==='ArrowLeft')i=(i+ids.length-1)%ids.length;else if(event.key==='Home')i=0;else if(event.key==='End')i=ids.length-1;else return;event.preventDefault();show(ids[i]);document.getElementById('tab-'+ids[i]).focus();});}
+show(location.hash.slice(1));
+</script>
+</html>

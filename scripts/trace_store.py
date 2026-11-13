@@ -10,6 +10,7 @@ import sqlite3
 import stat
 from datetime import datetime, timezone
 from run_records import validate_records_dir
+from dispatch_usage import ROLE_IDS
 from trace_closeout import closeout_view, validate_detail
 from trace_usage import validate_event as validate_usage_event, validate_store as validate_usage_store, validate_evidence, validate_legacy_actor
 from trace_observation import (SOURCE as OBSERVATION_SOURCE,
@@ -24,7 +25,6 @@ MAX_BYTES = 8 * 1024 * 1024
 KINDS = {'user_request', 'decision', 'assignment', 'instruction', 'tool_call', 'tool_result',
          'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion', 'usage', 'usage_group', 'revision', 'profile'}
 FORBIDDEN = {'analysis', 'reasoning', 'thinking', 'chain_of_thought'}
-ROLE_IDS = {'coordinator', 'architect', 'designer', 'backend', 'frontend', 'verifier'}
 
 
 def clean(value):

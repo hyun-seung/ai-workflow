@@ -6,6 +6,8 @@
 
 현재는 **환경 가이드 선택·연결 확인**, 단일 Codex 역할 실행·기록·집계, 관리 경로의 위임 한도, 명시적으로 수입한 실행 기록의 SQLite 대시보드를 제공합니다. Orca 네이티브 위임·결과 반환과 새 Codex worker의 대신 승인 적용은 제한된 실제 작업에서 확인했습니다. 닫힌 단일 native 턴의 배정별 토큰을 완료 기록에 저장하고, 지정된 DB에 중복 없이 연결해 요청·역할·작업별로 표시합니다. 조율자 등 누락된 역할의 전체 수집, 자동 업무 분해, Paseo 실제 위임, 복수 저장소 통합은 남아 있습니다. [하네스 개선 상태와 다음 작업](runtime/harness-roadmap.md)에 구현·운영 규칙·미검증을 구분했습니다.
 
+학습 대화에는 튜터 지침과 공식 근거·연관 Q&A 기준을 제공합니다. 요청 라우팅은 별도 AI 호출 없는 로컬 추천 검사 도구까지 구현했으며, 앱 입력 연결·선택 저장·자동 위임·모델 전환은 아직 연결하지 않았습니다. 튜터의 대표 응답은 작성 AI의 자체 점검을 수행했고 독립 정확도·학습 효과·비용 절감은 미검증입니다. [통합 개발 순서](learning/development.md)를 기준으로 진행합니다.
+
 ## 무엇을 바꾸면 되나요?
 
 | 경로 | 용도 |
@@ -15,6 +17,9 @@
 | [runtime/environments/](runtime/environments/README.md), [scripts/startup.py](scripts/startup.py) | 세션 근거·연결 확인 후 Orca/Paseo 가이드 선택 |
 | [projects/](projects/README.md), [templates/project.startup.json](templates/project.startup.json) | 상위 폴더와 자식 저장소의 프로젝트 지침 연결 |
 | [roles/](roles/README.md) | 각 역할의 책임·결과물·검증 기준 |
+| [learning/](learning/README.md), [통합 개발 순서](learning/development.md) | 튜터 사용법·출처 기준·심화 방식과 자체 평가·다음 작업 |
+| [runtime/request-routing.md](runtime/request-routing.md), [짧은 진입 지침](runtime/routing-brief.md) | 직접 처리·역할/설정 추천·위임 제어·적용 범위·최소 토큰 원칙 |
+| [scripts/request_router.py](scripts/request_router.py), [입출력 안내](runtime/request-router.md) | 짧은 목록과 구조화된 판단의 로컬 검사. 모델 호출·실행·설정 저장 없음 |
 | [AGENTS.md](AGENTS.md), [principles/privacy.md](principles/privacy.md) | 모든 역할에 전달하는 공통 원칙 |
 | [templates/project.workflow.json](templates/project.workflow.json) | 대상 프로젝트의 `.ai-workflow.json`으로 사용할 설정 양식 |
 | [schema/workflow.schema.json](schema/workflow.schema.json) | 설정 파일의 필드·타입·허용값 |
@@ -37,6 +42,24 @@
 | [examples/task-contract.md](examples/task-contract.md) | 개발·글쓰기 작업의 가상 입력과 결과 |
 
 ## 사용하기
+
+### 처리 방식을 직접 제어하기
+
+[요청 라우팅과 사용자 제어](runtime/request-routing.md)에 직접 처리·제안 후 선택·허용 범위 내 자동 처리의 의미를 정의했습니다. “이번에는 바로 답해”, “튜터 방식으로 하되 새 에이전트는 만들지 마”, “이 대화에서는 모델과 effort를 고정해”처럼 역할·설정·위임과 적용 범위를 구분합니다. 작은 요청과 후속 질문에는 불필요한 제안을 반복하지 않습니다.
+
+현재는 **사용자 제어 계약과 [추천 전용 로컬 도구](runtime/request-router.md)**를 제공합니다. `python3 scripts/request_router.py catalog`로 짧은 역할·프로필 목록을 확인하고 `python3 scripts/request_router.py route < examples/request-route.json`으로 제어와 현재 AI의 추천 결과를 검사합니다. 직접 처리·같은 요청의 선택 재사용·변경 제안·제어 충돌을 구분하며 모델 호출·위임·설정 저장은 하지 않습니다. 의미 판단은 현재 AI가 담당합니다. 앱 입력 연결·선택 UI·승인 저장·모델 전환과 실제 추천 품질 검증은 남아 있습니다. 새 제어 개념을 기존 `harness.json`의 지원 필드로 해석하지 않습니다.
+
+라우팅 자체의 토큰 비용 최소화를 핵심 제약으로 둡니다. 기본 경로는 라우팅 전용 추가 모델 호출 없이 확정 제어·기존 선택을 재사용하고, 필요한 의미 판단은 현재 AI의 응답에서 수행하도록 설계합니다. 추천이 없으면 바로 본문을 답하며 모든 역할 문서를 매번 읽지 않습니다. 실제 절감 효과는 아직 미측정입니다.
+
+튜터 개발과 추천 평가·Orca 입력 연결·사용자 선택·위임/모델 전환·비용 비교는 [통합 개발 순서](learning/development.md)에 따라 단계적으로 진행합니다.
+
+### 개념을 배우고 싶을 때
+
+“이게 무슨 개념이야?” 같은 학습 요청은 **[학습 튜터(`tutor`)](learning/README.md)**라는 별도 진입점으로 처리합니다. 쉬운 설명·핵심부터 시작해 스티커 메모, 제1원리, 파인만 기법, 한 장 학습 시트, 마인드맵·도식으로 전환합니다. 이어서 궁금할 만한 **연관 질문과 답변**도 함께 제공하며, **공식 문서를 우선 확인해 핵심 설명과 각 답변에 근거 링크**를 연결합니다. 재구성한 설명·비유와 원문 인용을 구분합니다.
+
+이 저장소에서는 `AGENTS.md`가 튜터 지침을 연결합니다. 다른 대화·프로젝트에는 튜터 문서를 명시적으로 연결하세요. 필요한 경우 개념 해설·학습 시각화·연관 질문 해설 자료를 병렬로 준비하고 튜터가 통합합니다. 앱의 전역 자동 라우팅이나 지속 문답 실행기를 설치한 것은 아닙니다. [사용 예시·병렬 조건·구현 범위](learning/README.md)를 확인하세요.
+
+### 프로젝트 작업을 시작할 때
 
 먼저 프로젝트를 명시하고 환경 가이드를 선택합니다. 이 명령은 모델을 호출하거나 앱을 시작하지 않습니다.
 
@@ -87,7 +110,7 @@ python3 scripts/workflow.py run --project ../my-project --role coordinator --tas
 python3 scripts/workflow.py run --project ../my-project --role backend --task "완료 여부로 목록을 필터링하는 API를 구현하고 테스트해줘"
 ```
 
-역할 ID는 `coordinator`, `architect`, `designer`, `backend`, `frontend`, `verifier`입니다. 역할 추가는 `workflow.json`에서, 기존 역할의 프로젝트별 변경은 `.ai-workflow.json`에서 합니다.
+작업 역할 ID는 `coordinator`, `architect`, `designer`, `backend`, `frontend`, `verifier`입니다. 학습 역할은 `tutor`, `learning-concepts`, `learning-visuals`, `learning-connections`입니다. 역할 추가는 `workflow.json`에서, 기존 역할의 프로젝트별 변경은 `.ai-workflow.json`에서 합니다.
 
 작업에 필요한 작은 파일이나 줄 범위가 이미 정해졌다면 `--context-file src/example.py:10:40`으로 내용을 함께 전달할 수 있습니다. 경로는 대상 프로젝트 기준이며 자동 탐색하지 않습니다. 충분한 자료가 전달되면 중복 읽기를 줄이도록 지시하지만, 토큰 절감은 실제 사용량과 검증 결과로 확인해야 합니다. [범위·제한과 비교 방법](runtime/execution-records.md)을 참고하세요.
 

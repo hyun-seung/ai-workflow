@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "session_id": "session_example",
+  "request_id": "request_example",
+  "revision": 1,
+  "current": {"role": null, "model": "gpt-6.1-sol", "effort": "medium"},
+  "controls": {"model_locked": true, "effort_locked": true, "delegation": "forbid"},
+  "analysis": {
+    "recommendation": {
+      "role": "architect",
+      "reason": "설계 대안과 장애 조건을 같은 기준으로 비교하는 데 역할 지침이 도움이 될 수 있습니다."
+    }
+  }
+}

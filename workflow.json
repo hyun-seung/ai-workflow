@@ -4,6 +4,30 @@
   "adapter": "codex",
   "instructions": ["AGENTS.md", "principles/privacy.md"],
   "roles": {
+    "tutor": {
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "sandbox": "read-only",
+      "instructions": ["roles/tutor.md"]
+    },
+    "learning-concepts": {
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "sandbox": "read-only",
+      "instructions": ["roles/learning-concepts.md"]
+    },
+    "learning-visuals": {
+      "model": "gpt-6.1-terra",
+      "effort": "medium",
+      "sandbox": "read-only",
+      "instructions": ["roles/learning-visuals.md"]
+    },
+    "learning-connections": {
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "sandbox": "read-only",
+      "instructions": ["roles/learning-connections.md"]
+    },
     "coordinator": {
       "model": "gpt-6.1-sol",
       "effort": "low",
