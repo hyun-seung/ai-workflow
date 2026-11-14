@@ -16,6 +16,7 @@
 | [projects/](projects/README.md), [templates/project.startup.json](templates/project.startup.json) | 상위 폴더와 자식 저장소의 프로젝트 지침 연결 |
 | [roles/](roles/README.md) | 각 역할의 책임·결과물·검증 기준 |
 | [skills/](skills/README.md), [역할 스킬 유지관리](runtime/skill-maintenance.md) | 역할별 적용 스킬, 고정 원본의 로컬 설치·선택, 주간 신규·인기·대체 검토와 복구 가능한 은퇴 |
+| [Web 역할 시험 화면](examples/role-ui-trial/README.md), [시험 서버](scripts/role_ui_trial.py) | 가상 업무 화면·loopback API로 경계 데이터·초점·실패/재시도·중복 요청을 브라우저에서 재현 |
 | [AGENTS.md](AGENTS.md), [principles/privacy.md](principles/privacy.md) | 모든 역할에 전달하는 공통 원칙 |
 | [runtime/session-practices.md](runtime/session-practices.md) | 대화 분리·계획·캐시·검증의 실무 기준 |
 | [runtime/guidance-maintenance.md](runtime/guidance-maintenance.md) | 공식 문서 주간 점검·변경안 제안; 로컬 Orca 예약 시험 완료, 자동 적용·병합 없음 |

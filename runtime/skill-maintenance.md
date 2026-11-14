@@ -66,6 +66,8 @@ python3 scripts/skill_catalog.py check
 
 초기에는 선택·원문 사용 모드와 비활성/보관/복원 경로를 로컬에서 검증한다. 실제 Web/native 화면과 API를 동반한 시험은 대상 프로젝트에서 수행하며 미실시를 완료로 포함하지 않는다.
 
+프로젝트 적용 전 Web 시험에는 [가상 화면과 로컬 API](../examples/role-ui-trial/README.md)를 재사용할 수 있다. 캡처·실행 증거는 `local/role-skills/trials/`에 보관하고 유지관리의 `runs/` 기준선에 섞지 않는다. 알려진 fixture의 통과만으로 전체 스킬을 active로 올리지 않는다.
+
 ## 예약과 환경
 
 적용 대상은 명시한 로컬 Orca 작업 공간이다. 주간 시각·timezone·자동화 ID·CLI와 installer의 실제 경로는 `local/role-skills/registration.json`에 둔다. 비활성 상태에서 수동 시험 후 활성화한다. 결과는 Orca Automations의 실행 이력과 각 실행 세션에서 확인한다. 현재 대화나 외부 메신저로 알림을 보내지는 않는다. 기기·Orca가 오프라인이거나 지정 workspace가 삭제되면 실행되지 않을 수 있고, 다른 checkout으로 자동 이동하지 않는다.
