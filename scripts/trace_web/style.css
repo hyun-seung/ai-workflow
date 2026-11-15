@@ -5,6 +5,11 @@ button, select { font: inherit; }
 button, summary, select { -webkit-tap-highlight-color: transparent; }
 button, select { color: inherit; background: white; border: 1px solid #cbd5e3; border-radius: 9px; min-height: 44px; padding: 9px 13px; }
 button, summary { cursor: pointer; }
+.card-skills { font-size: 12px; color: #455771; font-weight: 400; }
+.skill-entry { border-left: 3px solid #c9d3ed; padding: 4px 12px; margin: 14px 0; min-width: 0; }
+.skill-entry h4 { margin: 4px 0; }
+.skill-entry p { margin: 6px 0; }
+.skill-state { font-weight: 600; }
 button:hover { background: #eef3ff; border-color: #93a9df; }
 button:focus-visible, summary:focus-visible, select:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 3px solid #3956cc; outline-offset: 3px; }
 h1, h2, h3, h4, p { margin: 0; }

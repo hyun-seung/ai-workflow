@@ -4,7 +4,7 @@ const labels = {
   user_request: '사용자 요청', decision: '결정·이유 요약', assignment: '업무 배정',
   instruction: '전달 지시', tool_call: '명령·도구 입력', tool_result: '도구 결과',
   question: '질문', approval_request: '승인 요청 · 결정 미확인',
-  approval_resolution: '승인 처리', handoff: '결과 인계', verification: '검증 판정', explanation: '명시된 설명', completion: '요청 마감', usage: '토큰 측정', usage_group: '논리 작업 묶음', revision: '기록 정정', profile: '실행 프로필 관측'
+  approval_resolution: '승인 처리', handoff: '결과 인계', verification: '검증 판정', explanation: '명시된 설명', completion: '요청 마감', usage: '토큰 측정', usage_group: '논리 작업 묶음', revision: '기록 정정', profile: '실행 프로필 관측', skill_use: '스킬 사용 기록'
 };
 const show = value => JSON.stringify(value, null, 2) ?? String(value);
 const known = value => value === null || value === undefined || value === '' ? '미확인' : value;
@@ -19,6 +19,21 @@ const roleCatalog = {
 };
 function roleKey(value) {
   return Object.hasOwn(roleCatalog, value) ? value : Object.keys(roleCatalog).find(key => roleCatalog[key].label === value) || null;
+}
+const skillStages = { selected: '선택', read: '문서 참고', applied: '작업 적용', executed: '도구 실행' };
+const skillResults = { unverified: '미검증', pass: '통과 기록', fail: '실패 기록', partial: '부분 확인' };
+function skillUses(bundle, actorId) {
+  return (bundle.events || []).filter(e => e.kind === 'skill_use' && e.actor_id === actorId).map(event => {
+    const d = event.detail || {}, skill = d.skill || {}, result = d.result || {};
+    const valid = event.source === 'trace.skill-use.v1' && d.version === 1 &&
+      typeof skill.id === 'string' && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(skill.source_ref || '') &&
+      ['skill', 'reference-only'].includes(skill.mode) && Object.hasOwn(skillStages, d.stage) &&
+      Object.hasOwn(skillResults, result.status) && !(skill.mode === 'reference-only' && d.stage === 'executed') &&
+      (result.status === 'unverified' || ['applied', 'executed'].includes(d.stage) && d.evidence_event_ids?.length > 0);
+    return { event, detail: d, skill, valid,
+      stage: valid ? skillStages[d.stage] : '기록 형식 미확인',
+      result: valid ? skillResults[result.status] : '미검증' };
+  });
 }
 function displayActors(bundle) {
   // Explicit additive labels preserve old source roles; conflicting labels stay unresolved.
@@ -315,12 +330,12 @@ function durationText(request) {
   const seconds = Math.round((Date.parse(b) - Date.parse(a)) / 1000);
   return seconds < 60 ? `${seconds}초` : `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
 }
-if (typeof module !== 'undefined') module.exports = { compareInstants, segmentLabel, instant, measurementInterval, logicalTasks, measurementTimeline, profileFor, profileLine, effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
+if (typeof module !== 'undefined') module.exports = { skillUses, compareInstants, segmentLabel, instant, measurementInterval, logicalTasks, measurementTimeline, profileFor, profileLine, effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
 if (typeof document !== 'undefined') startViewer();
 
 function startViewer() {
   const $ = id => document.getElementById(id), mobile = matchMedia('(max-width: 768px)');
-  let data = null, selectedId = null, selectionVersion = 0, listVersion = 0, listCount = 0;
+  let data = null, selectedId = null, selectionVersion = 0, listVersion = 0, listCount = 0, skillVersion = 0;
   function node(tag, text, className) {
     const e = document.createElement(tag);
     if (text !== undefined) e.textContent = text;
@@ -440,12 +455,30 @@ function startViewer() {
   function paint(e, role) { const color = roleCatalog[role] || { color: '#718096', background: '#f2f4f7' }; e.style.setProperty('--role-color', color.color); e.style.setProperty('--role-bg', color.background); }
   function agentCard(actor, index, bundle, actors, usage) {
     const profile = profileFor(bundle, actor);
+    const skills = skillUses(bundle, actor.id);
     const own = bundle.events.filter(e => e.actor_id === actor.id), instructions = own.filter(e => e.kind === 'instruction');
     const decisions = own.filter(e => e.kind === 'decision'), plans = decisions.filter(e => !e.detail?.limits?.length);
     const selected = actor.parent_id ? instructions[0] : (plans[0] || decisions[0]);
     const text = selected ? extractBody(selected.detail, selected.kind) : null;
     const d = lazyDisclosure('', body => {
       body.append(profileDetails(profile, actor), node('p', usage.label, 'muted'));
+      body.append(lazyDisclosure(`스킬 사용 근거 (${skills.length})`, target => {
+        target.append(node('p', '명시적으로 기록한 내용입니다. 설치 목록이나 문서 연결만으로 실제 사용·품질을 인증하지 않습니다.', 'notice'));
+        if (!skills.length) target.append(node('p', '스킬 사용 미기록 · 사용하지 않았다는 뜻은 아닙니다.', 'muted'));
+        for (const item of skills) {
+          const section = node('article', undefined, 'skill-entry');
+          section.append(node('h4', item.skill.id || '스킬 미확인'), node('p', `${item.stage} · ${item.result}`, 'skill-state'));
+          if (item.valid) {
+            const detail = item.detail;
+            section.append(node('p', `기록 당시 역할: ${roleCatalog[detail.role]?.label || '미확인'} · ${item.skill.mode === 'reference-only' ? '참고 문서만 사용' : '스킬 지침'}`, 'muted'),
+              node('p', detail.purpose), node('p', detail.result.summary),
+              node('p', `원본 버전: ${item.skill.source_ref}`, 'muted'), node('p', `출처: ${item.skill.source_url}`, 'muted'));
+            const ids = new Set(detail.evidence_event_ids || []);
+            section.append(evidenceDetails('연결된 결과·검증 기록', bundle.events.filter(e => ids.has(e.id)), actors));
+          }
+          target.append(section);
+        }
+      }, 'skill-use-details'));
       const grid = node('div', undefined, 'mini-grid');
       for (const [label, value] of [['입력', usage.input], ['출력', usage.output], ['합계', usage.total]]) {
         const cell = node('div', label, 'mini-stat'); cell.append(node('strong', tokenText(value))); grid.append(cell);
@@ -471,6 +504,7 @@ function startViewer() {
     top.append(node('span', actor.display_role, 'card-role'), pill(actor.status));
     const parent = actors.get(actor.parent_id), predecessor = bundle.closeout?.detail.assignments.find(a => a.actor_id === actor.id)?.previous_actor_id;
     head.append(top, node('p', actor.display_task, 'card-task'), node('p', parent ? `${parent.display_role} → ${actor.display_role}` : '최상위 실행 · 조율 기록 확인', 'card-path'));
+    head.append(node('p', skills.length ? `스킬 기록 ${skills.length}개 · 카드를 펼쳐 근거 확인` : '스킬 사용 미기록', 'card-skills'));
     if (actor.display_role_conflict) head.append(node('p', '역할 지정이 서로 충돌합니다. 원문 근거를 확인하세요.', 'warning'));
     if (predecessor) head.append(node('p', '후속 배정 · ' + (actors.get(predecessor)?.display_role || predecessor), 'muted'));
     head.append(node('p', actor.parent_id ? instructionExcerpt(selected) : text && !text.structured ? brief(text.text) : '명시된 계획 기록이 없습니다.', 'card-copy'));
@@ -713,7 +747,51 @@ function startViewer() {
   $('all-records').addEventListener('toggle', renderTimeline);
   $('role').onchange = $('kind').onchange = renderTimeline;
   $('reset').onclick = () => { $('role').value = ''; $('kind').value = ''; renderTimeline(); };
-  $('refresh').onclick = () => list(true);
+  async function loadSkills(restoreFocus = false) {
+    const version = ++skillVersion, target = $('skill-library-body'), panel = $('skill-library'), active = document.activeElement;
+    const status = $('skill-library-status'); status.setAttribute('role', 'status'); status.textContent = '스킬 점검 정보 불러오는 중…';
+    try {
+      const snapshot = await get('/api/skills');
+      if (version !== skillVersion) return;
+      target.replaceChildren();
+      status.textContent = snapshot.status === 'connected' ? '연결된 관리 라이브러리 · 읽기 전용' : '관리 라이브러리가 이 서버에 연결되지 않았습니다.';
+      target.append(node('p', '설치 상태와 요청별 실제 사용 기록은 별개입니다. 이 화면에서는 스킬을 변경하거나 실행하지 않습니다.', 'notice'));
+      const review = snapshot.review;
+      if (snapshot.invalid_reviews) target.append(node('p', `형식을 확인하지 못한 검토 보고서 ${snapshot.invalid_reviews}개 · 아래 결과를 전체 최신 검토로 단정하지 마세요.`, 'warning'));
+      if (review) {
+        const states = { complete: '검토 완료', partial: '일부 확인', failed: '검토 실패' };
+        target.append(node('h3', '최근 연결된 정기 검토'), node('p', `${states[review.status] || '상태 미확인'} · ${displayTime(review.reviewed_at)}`), node('p', review.summary));
+        const decisions = { add: '추가 판단', update: '업데이트 판단', hold: '보류', disabled: '비활성화 판단', retired: '보관 판단', error: '확인 실패' };
+        for (const item of review.candidates) {
+          const entry = node('article', undefined, 'skill-entry');
+          entry.append(node('h4', `${item.id} · ${decisions[item.decision] || '미확인'}`), node('p', item.reason), node('p', `검토 버전: ${item.source_ref || '미확인'}`, 'muted'));
+          target.append(entry);
+        }
+        target.append(node('p', '검토 판단이며 실제 설치·변경 여부는 아래 등록 상태와 변경 이력에서 확인합니다.', 'muted'));
+      } else target.append(node('p', '정기 검토 요약 미연결 · 점검이 수행되지 않았다는 뜻은 아닙니다.', 'muted'));
+      target.append(node('h3', '등록된 스킬'));
+      const states = { pilot: '시범 사용', active: '활성', disabled: '비활성', retired: '보관', not_installed: '미설치' };
+      for (const skill of snapshot.skills || []) {
+        const entry = node('article', undefined, 'skill-entry');
+        entry.append(node('h4', skill.id), node('p', `${states[skill.status] || '미확인'} · ${skill.mode === 'reference-only' ? '참고 문서 전용' : '스킬 지침'}`),
+          node('p', skill.roles.map(role => roleCatalog[role]?.label || role).join(' · '), 'muted'),
+          node('p', `버전: ${skill.source_ref}`, 'muted'), node('p', `설치 무결성: ${skill.integrity === 'verified' ? '파일 일치' : skill.integrity === 'failed' ? '불일치·확인 필요' : '미설치'}`, skill.integrity === 'failed' ? 'warning' : 'muted'));
+        target.append(entry);
+      }
+      target.append(lazyDisclosure('등록 변경 이력', body => {
+        if (!snapshot.history?.length) body.append(node('p', '연결된 변경 이력이 없습니다.', 'muted'));
+        for (const item of [...snapshot.history].reverse()) body.append(node('p', `${displayTime(item.at)} · ${item.id} · ${item.action} · ${typeof item.reason === 'string' ? item.reason : show(item.reason)}`));
+      }));
+    } catch (error) {
+      if (version !== skillVersion) return;
+      status.setAttribute('role', 'alert'); status.textContent = '스킬 점검 정보를 읽지 못했습니다. 연결을 확인한 뒤 다시 조회해 주세요.';
+      target.replaceChildren(button('스킬 점검 다시 조회', () => loadSkills(true)));
+    } finally {
+      if (restoreFocus && version === skillVersion && (document.activeElement === active || document.activeElement === document.body)) panel.querySelector('summary').focus();
+    }
+  }
+  $('skill-library').addEventListener('toggle', () => { if ($('skill-library').open) loadSkills(); });
+  $('refresh').onclick = () => { list(true); if ($('skill-library').open) loadSkills(); };
   mobile.addEventListener('change', syncNavigation);
   list();
 }

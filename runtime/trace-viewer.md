@@ -22,6 +22,8 @@ python3 scripts/trace_viewer.py --db /private/path/traces/workflow.sqlite3 serve
 
 브라우저 주소는 `http://127.0.0.1:8765`다. localhost 별칭·다른 Host/Origin은 허용하지 않는다. 서버 종료는 Ctrl-C다. 검증을 위해 시작한 서버·탭은 검증 뒤 종료한다. 외부 자산·텔레메트리·쓰기·실행·승인 UI는 없다. 가상 fixture는 실제 관측이 아니다.
 
+역할 카드의 [스킬 사용 내역과 관리 상태](trace-skills.md)는 명시 `skill_use` 이벤트로 연결한다. `serve --skills-root /path/to/ai-workflow`를 지정하면 읽기 전용 라이브러리·정기 검토 영역도 연결한다. 설치 목록에서 과거 사용을 추정하거나 스킬을 실행하는 기능은 없다.
+
 ## 요청별 대시보드
 
 검색 없이 최신 요청을 먼저 선택한다. 접수 시각이 있는 요청은 그 시각의 내림차순이며, 시각 없는 요청은 그 아래에 최근 등록순으로 표시한다. 상태 갱신이나 같은 자료의 재수입은 등록 순서를 바꾸지 않는다. 화면은 최대 100개 요청을 조회한다. CLI의 `list --q`와 API 검색은 유지한다.

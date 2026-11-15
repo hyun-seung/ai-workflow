@@ -1,6 +1,20 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { skillUses } = require('../scripts/trace_web/app.js');
+test('skill records preserve declared stages and never infer missing usage', () => {
+  const fixture = require('./fixtures/traces/skill-flow.json');
+  assert.equal(skillUses(fixture, 'skill-coordinator').length, 0);
+  assert.deepEqual(skillUses(fixture, 'skill-frontend').map(x => [x.stage,x.result]), [['작업 적용','통과 기록'],['선택','미검증']]);
+  const reference = skillUses(fixture, 'skill-verifier')[0];
+  assert.equal(reference.stage, '문서 참고');assert.equal(reference.result, '미검증');
+  const bad = structuredClone(fixture);
+  bad.events.find(e => e.id === 'skill-reference').detail.stage = 'executed';
+  assert.equal(skillUses(bad,'skill-verifier')[0].valid,false);
+  assert.equal(skillUses(bad,'skill-verifier')[0].result,'미검증');
+  bad.events.find(e => e.id === 'skill-selected').detail.result.status = 'pass';
+  assert.equal(skillUses(bad,'skill-frontend')[1].valid,false);
+});
 const { extractBody, displayTime, eventWarnings, filterEvents, collectionWarning, statusText, closeoutLines } = require('../scripts/trace_web/app.js');
 
 test('native bodies preserve literal whitespace and inert HTML', () => {

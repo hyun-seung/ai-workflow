@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "requests": [
+    {
+      "source": "synthetic.skill-demo",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "skill-demo",
+      "source_id": "skill-demo",
+      "title": "가상 요청: 역할별 스킬 적용과 검증 흐름",
+      "status": "completed",
+      "sample": true,
+      "summary": "역할 카드에서 선택·참고·적용을 구분하고 원본 버전과 검증 근거를 확인하는 가상 기록입니다."
+    }
+  ],
+  "actors": [
+    {
+      "source": "synthetic.skill-demo",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "skill-coordinator",
+      "request_id": "skill-demo",
+      "source_id": "skill-coordinator",
+      "role": "coordinator",
+      "task_title": "범위와 완료 기준 전달",
+      "parent_id": null,
+      "status": "completed"
+    },
+    {
+      "source": "synthetic.skill-demo",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "skill-frontend",
+      "request_id": "skill-demo",
+      "source_id": "skill-frontend",
+      "role": "frontend",
+      "task_title": "긴 문구와 조회 실패 복구 개선",
+      "parent_id": "skill-coordinator",
+      "status": "completed"
+    },
+    {
+      "source": "synthetic.skill-demo",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "skill-verifier",
+      "request_id": "skill-demo",
+      "source_id": "skill-verifier",
+      "role": "verifier",
+      "task_title": "키보드·경계 상태 확인",
+      "parent_id": "skill-coordinator",
+      "status": "completed"
+    }
+  ],
+  "events": [
+    {
+      "source": "synthetic.skill-demo",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "skill-demo-request",
+      "source_id": "skill-demo-request",
+      "request_id": "skill-demo",
+      "actor_id": "skill-coordinator",
+      "kind": "user_request",
+      "detail": {
+        "text": "대시보드에서 역할별 스킬 사용과 결과를 구분해 확인한다."
+      }
+    },
+    {
+      "source": "synthetic.skill-demo",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "skill-demo-instruction",
+      "source_id": "skill-demo-instruction",
+      "request_id": "skill-demo",
+      "actor_id": "skill-frontend",
+      "kind": "instruction",
+      "detail": {
+        "text": "기존 화면 구조를 유지하며 긴 텍스트와 조회 재시도를 확인한다."
+      }
+    },
+    {
+      "source": "synthetic.skill-demo",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "skill-demo-result",
+      "source_id": "skill-demo-result",
+      "request_id": "skill-demo",
+      "actor_id": "skill-frontend",
+      "kind": "verification",
+      "detail": {
+        "summary": "가상 검증: 긴 문구·키보드·재시도 확인. 실제 실행 결과가 아닙니다."
+      }
+    },
+    {
+      "source": "trace.skill-use.v1",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "skill-applied",
+      "source_id": "skill-applied",
+      "request_id": "skill-demo",
+      "actor_id": "skill-frontend",
+      "kind": "skill_use",
+      "detail": {
+        "version": 1,
+        "skill": {
+          "id": "example-skill-applied",
+          "source_url": "https://github.com/example/skills",
+          "source_ref": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "mode": "skill"
+        },
+        "role": "frontend",
+        "stage": "applied",
+        "purpose": "가상 예시: 코드와 실제 화면을 대조하는 규칙 적용",
+        "result": {
+          "status": "pass",
+          "summary": "가상 기록 · 스킬 품질 인증이 아닙니다."
+        },
+        "evidence_event_ids": [
+          "skill-demo-result"
+        ]
+      }
+    },
+    {
+      "source": "trace.skill-use.v1",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "skill-selected",
+      "source_id": "skill-selected",
+      "request_id": "skill-demo",
+      "actor_id": "skill-frontend",
+      "kind": "skill_use",
+      "detail": {
+        "version": 1,
+        "skill": {
+          "id": "example-skill-selected",
+          "source_url": "https://github.com/example/skills",
+          "source_ref": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "mode": "skill"
+        },
+        "role": "frontend",
+        "stage": "selected",
+        "purpose": "가상 예시: 이번 역할에 필요한 지침 확인",
+        "result": {
+          "status": "unverified",
+          "summary": "가상 기록 · 스킬 품질 인증이 아닙니다."
+        },
+        "evidence_event_ids": []
+      }
+    },
+    {
+      "source": "trace.skill-use.v1",
+      "time": "2026-01-01T00:00:00Z",
+      "completeness": "partial",
+      "id": "skill-reference",
+      "source_id": "skill-reference",
+      "request_id": "skill-demo",
+      "actor_id": "skill-verifier",
+      "kind": "skill_use",
+      "detail": {
+        "version": 1,
+        "skill": {
+          "id": "example-skill-reference",
+          "source_url": "https://github.com/example/skills",
+          "source_ref": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "mode": "reference-only"
+        },
+        "role": "verifier",
+        "stage": "read",
+        "purpose": "가상 예시: 이번 역할에 필요한 지침 확인",
+        "result": {
+          "status": "unverified",
+          "summary": "가상 기록 · 스킬 품질 인증이 아닙니다."
+        },
+        "evidence_event_ids": []
+      }
+    }
+  ]
+}

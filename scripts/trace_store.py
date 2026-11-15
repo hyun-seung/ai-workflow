@@ -19,10 +19,11 @@ from trace_observation import (SOURCE as OBSERVATION_SOURCE,
 
 import trace_amendments as amendments
 import trace_profiles as profiles
+import trace_skills as skills
 
 MAX_BYTES = 8 * 1024 * 1024
 KINDS = {'user_request', 'decision', 'assignment', 'instruction', 'tool_call', 'tool_result',
-         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion', 'usage', 'usage_group', 'revision', 'profile'}
+         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion', 'usage', 'usage_group', 'revision', 'profile', 'skill_use'}
 FORBIDDEN = {'analysis', 'reasoning', 'thinking', 'chain_of_thought'}
 ROLE_IDS = {'coordinator', 'architect', 'designer', 'backend', 'frontend', 'verifier'}
 
@@ -122,6 +123,8 @@ class Store:
         # an invalid field or turn its source marker into an untyped legacy row.
         if isinstance(bundle.get('events'), list):
             for event in bundle['events']:
+                if isinstance(event, dict) and skills.uses_contract(event):
+                    skills.validate_event(event)
                 if isinstance(event, dict) and profiles.uses_contract(event):
                     profiles.validate_event(event)
                 if isinstance(event, dict) and amendments.uses_contract(event):
@@ -178,6 +181,8 @@ class Store:
                     if 'detail' not in row: raise ValueError('Event detail missing')
                     if profiles.uses_contract(row):
                         profiles.validate_event(row)
+                    if skills.uses_contract(row):
+                        skills.validate_event(row)
                     if amendments.uses_contract(row):
                         amendments.validate_event(row)
                     if uses_contract(row):
@@ -232,6 +237,8 @@ class Store:
                     raise ValueError('Unknown actor/parent '+ref)
                 if kind == 'event' and profiles.uses_contract(row):
                     profiles.validate_store(self, row)
+                if kind == 'event' and skills.uses_contract(row):
+                    skills.validate_store(self, row)
                 if kind == 'event' and row.get('kind') == 'usage':
                     validate_usage_store(self, row)
                 if kind == 'event' and uses_contract(row):

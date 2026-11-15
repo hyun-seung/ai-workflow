@@ -11,11 +11,12 @@ from trace_closeout import close_request
 from trace_usage import import_usage
 from trace_observation import import_observation
 from trace_amendments import import_amendment, event_state
+from trace_skills import library_snapshot
 
 ASSETS = Path(__file__).with_name('trace_web')
 
 
-def handler_for(db_path):
+def handler_for(db_path, skills_root=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args): pass  # private request/search contents never logged
 
@@ -44,6 +45,8 @@ def handler_for(db_path):
             try:
                 query = parse_qs(path.query, strict_parsing=True)
                 if any(len(v)!=1 for v in query.values()): raise ValueError('Repeated query key')
+                if path.path == '/api/skills' and not query:
+                    self.reply(200, library_snapshot(skills_root)); return
                 store = Store(db_path, readonly=True)
                 if path.path == '/api/requests' and not set(query)-{'q','limit'}:
                     result = store.requests(query.get('q',[''])[0], int(query.get('limit',['100'])[0]))
@@ -79,12 +82,13 @@ def main():
     l = sub.add_parser('list'); l.add_argument('--q',default=''); l.add_argument('--limit',type=int,default=100)
     e = sub.add_parser('export'); e.add_argument('--request-id',required=True); e.add_argument('--format', choices=('json','jsonl'), default='json')
     s = sub.add_parser('serve'); s.add_argument('--port',type=int,default=8765)
+    s.add_argument('--skills-root', help='Explicit ai-workflow managed-library root; read-only')
     args = p.parse_args()
     try:
         if args.command == 'serve':
             store = Store(args.db,readonly=True); store.close()
             if not 1<=args.port<=65535: raise ValueError('Invalid port')
-            server = HTTPServer(('127.0.0.1',args.port),handler_for(args.db))
+            server = HTTPServer(('127.0.0.1',args.port),handler_for(args.db, args.skills_root))
             print(f'http://127.0.0.1:{server.server_port}',flush=True)
             try: server.serve_forever()
             except KeyboardInterrupt: pass
