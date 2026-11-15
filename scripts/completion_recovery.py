@@ -12,7 +12,7 @@ import completion_hook as hook
 from lifecycle_io import digest, locked, now, private_file, read_json, save
 from native_record import identifier
 from trace_store import Store, stamp
-from trace_usage import event_id, validate_usage
+from trace_usage import event_id, validate_usage, validate_event
 
 MAX_ITEMS = 1000
 
@@ -131,6 +131,66 @@ def read_audit(config, key, row):
     return data
 
 
+def coordinator_coverage(store, request_ids):
+    """Validate only saved observations in the selected DB snapshot; open no source."""
+    count, errors = 0, []
+    for rid in sorted(request_ids):
+        for eid, body in store.db.execute(
+                "SELECT id,body FROM records WHERE kind='event' AND request_id=?", (rid,)):
+            try:
+                event = json.loads(body)
+                if event.get('source') != 'trace.native-usage': continue
+                usage = event.get('detail', {}).get('usage', {})
+                if not isinstance(usage, dict): raise ValueError('invalid_coordinator_observation')
+                if usage.get('scope') == 'dispatch' and usage.get('role') != 'coordinator': continue
+                validate_event(event)
+                if (event.get('id') != eid or event.get('kind') != 'usage' or event.get('completeness') != 'partial' or
+                        event['request_id'] != rid or usage['scope'] != 'native_turn' or
+                        usage['role'] != 'coordinator' or event['actor_id'] != usage['actor_id']):
+                    raise ValueError('coordinator_observation_binding_mismatch')
+                found = store.db.execute("SELECT body FROM records WHERE kind='actor' AND id=? AND request_id=?",
+                                         (event['actor_id'], rid)).fetchone()
+                actor = json.loads(found[0]) if found else {}
+                if (actor.get('id') != event['actor_id'] or actor.get('request_id') != rid or
+                        actor.get('role') != 'coordinator' or actor.get('parent_id') is not None):
+                    raise ValueError('coordinator_observation_actor_mismatch')
+                count += 1
+            except (ValueError, KeyError, TypeError, AttributeError, RecursionError) as error:
+                errors.append(dict(event_id=eid, reason=issue(error)))
+    return count, errors
+
+
+def retryable_pending(config, key, row, op):
+    if 'snapshot' not in row: return
+    snapshot = row['snapshot']
+    if not isinstance(snapshot, dict): raise ValueError('invalid_saved_metadata')
+    usage = snapshot.get('dispatch_usage'); validate_usage(usage)
+    event = row['binding']['event']; collection = op['plan']['usage_collection']
+    if (usage['scope'] != 'dispatch' or usage['request_id'] != op['request_id'] or
+            usage['role'] != collection['role'] or usage['task_id'] != op['task_id'] or
+            usage['dispatch_id'] != op['dispatch_id'] or usage['session_id'] != event['session_id'] or
+            usage['interval']['native_turn_id'] != event['turn_id']):
+        raise ValueError('recovery_usage_binding_mismatch')
+
+
+def actions(operations, rows):
+    result = []
+    for op in operations:
+        oid = op['operation_id']
+        observed = [r for r in rows if r.get('operation_id') == oid]
+        if op['status'] in {'missing', 'not_ready'}:
+            result.append(dict(operation_id=oid, action='provide_explicit_source' if op['status'] == 'missing'
+                               else 'inspect_native_receipt', reason=op['reason']))
+        for row in observed:
+            if row['status'] == 'collected': continue
+            result.append(dict(operation_id=oid, receipt_key=row['receipt_key'],
+                               action='retry_saved_receipt' if row['status'] == 'pending' and
+                               op['status'] == 'pending' and len(observed) == 1 else
+                               'inspect_native_receipt' if row['reason'] == 'operation_not_ready_for_collection'
+                               else 'inspect_binding_or_storage', reason=row['reason']))
+    return result
+
+
 def inspect(config, request_id=None):
     if request_id is not None: identifier(request_id)
     ops = catalog(config)
@@ -157,6 +217,7 @@ def inspect(config, request_id=None):
                     item.update(status='collected', reason='saved_receipt_and_usage_verified')
                 else:
                     pending(config, key, row)
+                    retryable_pending(config, key, row, op)
                     item.update(status='pending', reason='saved_import_intent' if 'snapshot' in row else 'turn_not_closed_or_collection_incomplete')
                 audit = read_audit(config, key, row)
                 if audit:
@@ -165,6 +226,9 @@ def inspect(config, request_id=None):
                 item.update(status='needs_attention', reason=issue(error))
                 if 'operation_id' not in item: errors.append(dict(receipt_key=key, reason=issue(error)))
             rows.append(item)
+        coordinator_count, coordinator_errors = coordinator_coverage(
+            store, {request_id} if request_id is not None else
+            {item['operation']['request_id'] for item in selected.values()})
     finally: store.close()
     operations = []
     for oid, item in selected.items():
@@ -175,8 +239,17 @@ def inspect(config, request_id=None):
                                reason='no_received_stop_receipt' if status == 'missing' else 'launch_not_confirmed' if status == 'not_ready' else None,
                                received_receipts=len(observed)))
     counts = {name:sum(o['status'] == name for o in operations) for name in ('collected', 'pending', 'missing', 'not_ready', 'needs_attention')}
-    state = 'no_registered_operations' if not operations and not errors else 'attention_required' if errors or any(o['status'] != 'collected' for o in operations) else 'observed_receipts_verified'
+    state = 'no_registered_operations' if not operations and not errors and not coordinator_errors else 'attention_required' if errors or coordinator_errors or any(o['status'] != 'collected' for o in operations) else 'observed_receipts_verified'
+    request_state = 'no_registered_operations' if not operations and not coordinator_errors else 'attention_required' if coordinator_errors or any(
+        o['status'] != 'collected' for o in operations) else 'observed_receipts_verified'
     return dict(version=1, observed_at=now(), status=state,
+                request_status=request_state, unassociated_receipts=errors,
+                suggested_actions=actions(operations, rows),
+                coordinator_observation_errors=coordinator_errors,
+                coverage_summary=dict(registered_worker_operations=len(operations),
+                                      verified_worker_receipts=sum(r['status'] == 'collected' for r in rows),
+                                      recorded_coordinator_turns=coordinator_count,
+                                      unassociated_receipts=len(errors), full_usage_complete=False),
                 coverage='registered_operations_and_received_Stop_events_only', full_usage_complete=False,
                 expected_operations=len(operations), counts=counts, operations=operations, receipts=rows, receipt_errors=errors)
 
@@ -187,6 +260,9 @@ def retry(config, operation_id, key):
     row = receipt(config, key); ops = catalog(config)
     if operation_id not in ops or not ops[operation_id]['ready']: raise ValueError('operation_not_ready_for_collection')
     bound(row, operation_id, ops[operation_id]['operation'])
+    if row['status'] == 'pending':
+        pending(config, key, row)
+        retryable_pending(config, key, row, ops[operation_id]['operation'])
     path = audit_path(config, key)
     with locked(path.with_suffix('.lock'), config['project']):
         previous = read_audit(config, key, row)

@@ -1,5 +1,9 @@
 # 완료 수집 상태 점검과 명시 재처리
 
+`request_status`는 선택 요청의 배정과 저장된 조율자 관측을 진단한다. `unassociated_receipts`는 연결되지 않은 이벤트를 숨기지 않고 별도로 표시하며 `suggested_actions`는 검증된 pending의 단건 재처리 등 후속 행동을 안내한다. `coverage_summary`는 등록 worker 수·확인 영수증 수·DB에서 검증된 조율자 턴 수를 구분한다. 잘못된 조율자 관측은 `coordinator_observation_errors`에 남기고 집계에서 제외하며 해당 선택 범위의 `status`와 `request_status`를 `attention_required`로 만들고 상태 CLI는 1을 반환한다. 명시적으로 다른 요청을 선택했을 때는 그 오류를 섞지 않는다. 기존 전역 `status`·CLI 종료 코드는 유지하므로 전역 주의 상태와 선택 요청의 상태가 다를 수 있다.
+
+상태 점검은 원본 세션을 읽지 않는다. 작업 수용 뒤 현재 원본을 다시 검사하고 보관·정리·DB 마감까지 묶으려면 [요청 단위 일괄 마감](request-completion.md)을 사용한다.
+
 등록된 배정과 이미 받은 Stop 영수증을 대조한다. [완료 hook](completion-hook.md)은 그대로 사용하고, 새 도구는 조율자가 필요할 때 한 번 실행한다. 상시 서버·주기 폴링·에이전트 추가·세션 폴더 탐색은 없다.
 
 ## 상태 점검

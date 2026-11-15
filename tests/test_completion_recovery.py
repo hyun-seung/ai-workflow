@@ -1,4 +1,6 @@
 import copy
+import contextlib
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -33,6 +35,157 @@ class RecoveryTests(unittest.TestCase):
     def cli(self, *args):
         return subprocess.run([sys.executable, str(Path(recovery.__file__)), '--config', str(self.config_path), *args],
                               capture_output=True, text=True, timeout=10)
+
+    def test_additive_missing_pending_and_collected_coverage(self):
+        status = self.status()
+        self.assertEqual(status['request_status'], 'attention_required')
+        self.assertEqual(status['suggested_actions'][0]['action'], 'provide_explicit_source')
+        self.assertEqual(status['coverage_summary']['registered_worker_operations'], 1)
+        final = self.rows.pop(); self.write_source(); self.run_hook()
+        self.assertEqual(self.status()['suggested_actions'][0]['action'], 'retry_saved_receipt')
+        self.rows.append(final); self.write_source(); self.retry()
+        self.source.unlink()
+        status = self.status()
+        self.assertEqual(status['request_status'], 'observed_receipts_verified')
+        self.assertEqual(status['coverage_summary']['verified_worker_receipts'], 1)
+        self.assertEqual(status['coverage_summary']['recorded_coordinator_turns'], 0)
+        self.assertFalse(status['coverage_summary']['full_usage_complete'])
+        self.assertEqual(status['suggested_actions'], [])
+
+    def test_unassociated_error_does_not_mask_selected_request_coverage(self):
+        self.run_hook()
+        path = Path(self.config['directory']) / ('0' * 64 + '.receipt.json')
+        self.save(path, {})
+        status = self.status(request_id='sample-request')
+        self.assertEqual(status['status'], 'attention_required')
+        self.assertEqual(status['request_status'], 'observed_receipts_verified')
+        self.assertEqual(status['unassociated_receipts'], status['receipt_errors'])
+        self.assertEqual(status['coverage_summary']['unassociated_receipts'], 1)
+        self.assertEqual(status['suggested_actions'], [])
+
+    def test_malformed_pending_snapshot_with_matching_hash_is_not_retryable(self):
+        with patch.object(hook, 'append_usage', side_effect=ValueError('import_failure')):
+            with self.assertRaises(ValueError): self.run_hook()
+        path = self.receipts()[0]; row = json.loads(path.read_text())
+        row['snapshot'] = {}; row['record_sha256'] = digest({})
+        self.save(Path(row['record_path']), {}); self.save(path, row)
+        status = self.status()
+        self.assertEqual(status['operations'][0]['status'], 'needs_attention')
+        self.assertEqual(status['suggested_actions'][0]['action'], 'inspect_binding_or_storage')
+        with patch.object(hook, 'collect', side_effect=AssertionError('must not retry malformed intent')):
+            with self.assertRaises(ValueError): self.retry()
+
+    def test_invalid_pending_audit_cannot_offer_retry(self):
+        self.rows.pop(); self.write_source(); self.run_hook()
+        path = recovery.audit_path(self.config, self.key()); path.parent.mkdir(mode=0o700, exist_ok=True)
+        self.save(path, {})
+        self.assertEqual(self.status()['suggested_actions'][0]['action'], 'inspect_binding_or_storage')
+
+    def test_not_ready_and_no_registered_operations_actions(self):
+        self.operation['state'] = 'launching'; self.write_ledger()
+        self.assertEqual(self.status()['suggested_actions'][0]['action'], 'inspect_native_receipt')
+        self.operation['plan'].pop('usage_collection'); self.write_ledger()
+        self.assertEqual(self.status()['request_status'], 'no_registered_operations')
+
+    def test_ambiguous_receipts_do_not_offer_automatic_retry(self):
+        self.rows.pop(); self.write_source(); self.run_hook()
+        path = self.receipts()[0]; row = json.loads(path.read_text())
+        row['binding']['event']['turn_id'] = 'another_turn'
+        key = digest(dict(session=self.payload['session_id'], turn='another_turn'))
+        self.save(path.parent / (key + '.receipt.json'), row)
+        status = self.status()
+        self.assertEqual(status['counts']['pending'], 1)
+        self.assertEqual(len(status['suggested_actions']), 2)
+        self.assertTrue(all(a['action'] == 'inspect_binding_or_storage' for a in status['suggested_actions']))
+
+    def test_coordinator_count_validates_selected_saved_db_observations_only(self):
+        self.run_hook()
+        worker = self.usage()[0]; event = copy.deepcopy(worker)
+        u = event['detail']['usage']
+        u.update(version=2, scope='native_turn', role='coordinator', actor_id='sample-coordinator',
+                 dispatch_id=None, request_binding='explicit_native_turn', message_sha256='a'*64)
+        u['interval']['binding_line'] = u['interval'].pop('assignment_line')
+        event.update(actor_id='sample-coordinator', id=recovery.event_id(u['measurement_key']))
+        # Replace the virtual worker observation to avoid inventing a second physical interval.
+        self.store.db.execute("UPDATE records SET body=? WHERE kind='event' AND id=?",
+                              (json.dumps(event), worker['id'])); self.store.db.commit()
+        with patch.object(hook, 'read_session', side_effect=AssertionError('no source reads')):
+            status = self.status(request_id='sample-request')
+        self.assertEqual(status['coverage_summary']['recorded_coordinator_turns'], 1)
+        self.assertEqual(status['coordinator_observation_errors'], [])
+        u['status'] = 'unavailable'
+        self.store.db.execute("UPDATE records SET body=? WHERE kind='event' AND id=?",
+                              (json.dumps(event), worker['id'])); self.store.db.commit()
+        status = self.status(request_id='sample-request')
+        self.assertEqual(status['coverage_summary']['recorded_coordinator_turns'], 0)
+        self.assertEqual(len(status['coordinator_observation_errors']), 1)
+        # A different request's corrupt record must not enter selected-request coverage.
+        self.store.db.execute("UPDATE records SET request_id='other-request' WHERE kind='event' AND id=?",
+                              (worker['id'],)); self.store.db.commit()
+        self.assertEqual(self.status(request_id='sample-request')['coordinator_observation_errors'], [])
+
+    def insert_coordinator_observation(self, valid=False, request_id='sample-request'):
+        if valid:
+            event = copy.deepcopy(self.usage()[0]); event.pop('detail_sha256', None)
+            u = event['detail']['usage']
+            u.update(version=2, scope='native_turn', role='coordinator', actor_id='sample-coordinator',
+                     session_id='coordinator-test', dispatch_id=None, request_binding='explicit_native_turn',
+                     message_sha256='a'*64)
+            u['interval']['binding_line'] = u['interval'].pop('assignment_line')
+            u['measurement_key'] = 'codex.session:coordinator-test:turn:'+u['interval']['native_turn_id']
+            event.update(actor_id='sample-coordinator', id=recovery.event_id(u['measurement_key']),
+                         source_id=u['measurement_key'])
+            recovery.validate_event(event)
+        else:
+            event = dict(id='invalid-coordinator', request_id=request_id, actor_id='sample-coordinator',
+                         kind='usage', source='trace.native-usage',
+                         detail=dict(usage=dict(scope='native_turn', role='coordinator')))
+        with self.store.db:
+            self.store.db.execute("INSERT INTO records(kind,id,request_id,body) VALUES ('event',?,?,?)",
+                                  (event['id'], request_id, json.dumps(event)))
+
+    def status_cli(self, selected=True):
+        args = ['--config', str(self.config_path), 'status']
+        if selected: args += ['--request-id', 'sample-request']
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output): exit_code = recovery.main(args)
+        return exit_code, json.loads(output.getvalue())
+
+    def test_selected_coordinator_corruption_requires_attention_and_cli_exit_one(self):
+        self.run_hook(); self.insert_coordinator_observation()
+        for selected in (True, False):
+            code, status = self.status_cli(selected)
+            self.assertEqual(code, 1)
+            self.assertEqual(status['status'], 'attention_required')
+            self.assertEqual(status['request_status'], 'attention_required')
+            self.assertEqual(status['unassociated_receipts'], [])
+        # Unassociated events remain visible beside the coordinator error.
+        self.save(Path(self.config['directory'])/('0'*64+'.receipt.json'), {})
+        for selected in (True, False):
+            code, status = self.status_cli(selected)
+            self.assertEqual(code, 1)
+            self.assertEqual(status['status'], 'attention_required')
+            self.assertEqual(status['request_status'], 'attention_required')
+            self.assertEqual(len(status['coordinator_observation_errors']), 1)
+            self.assertEqual(len(status['unassociated_receipts']), 1)
+            self.assertEqual(status['coverage_summary']['verified_worker_receipts'], 1)
+
+    def test_other_request_coordinator_corruption_does_not_contaminate_selection(self):
+        self.run_hook(); self.insert_coordinator_observation(request_id='other-request')
+        code, status = self.status_cli()
+        self.assertEqual(code, 0)
+        self.assertEqual(status['status'], 'observed_receipts_verified')
+        self.assertEqual(status['request_status'], 'observed_receipts_verified')
+        self.assertEqual(status['coordinator_observation_errors'], [])
+
+    def test_valid_saved_coordinator_observation_preserves_success_and_count(self):
+        self.run_hook(); self.insert_coordinator_observation(valid=True)
+        code, status = self.status_cli()
+        self.assertEqual(code, 0)
+        self.assertEqual(status['status'], 'observed_receipts_verified')
+        self.assertEqual(status['request_status'], 'observed_receipts_verified')
+        self.assertEqual(status['coverage_summary']['recorded_coordinator_turns'], 1)
+        self.assertEqual(status['coordinator_observation_errors'], [])
 
     def test_status_reports_missing_without_reading_source_or_mutating_database(self):
         before = self.data()
@@ -154,7 +307,9 @@ h.collect(h.load_config(sys.argv[2]),json.loads(sys.argv[4]),attempts=1,delay=0)
         other = self.store.request('request-two'); u = next(e for e in other['events'] if e['kind'] == 'usage')
         self.assertEqual(u['detail']['usage']['measurements']['total_tokens'], 230)
         self.assertEqual(self.status()['counts']['collected'], 2)
-        self.assertEqual(self.status(request_id='request-two')['expected_operations'], 1)
+        selected = self.status(request_id='request-two')
+        self.assertEqual(selected['expected_operations'], 1)
+        self.assertEqual(selected['coverage_summary']['verified_worker_receipts'], 1)
 
     def test_aborted_or_unclosed_turn_is_not_promoted_to_zero_or_collected(self):
         self.rows[-1] = boundary('turn_aborted'); self.write_source(); self.run_hook()
