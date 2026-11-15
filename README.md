@@ -6,9 +6,11 @@
 
 현재는 **환경 가이드 선택·연결 확인**, 단일 Codex 역할 실행·기록·집계, 관리 경로의 위임 한도, 명시적으로 수입한 실행 기록의 SQLite 대시보드를 제공합니다. Orca 네이티브 위임·결과 반환과 새 Codex worker의 대신 승인 적용은 제한된 실제 작업에서 확인했습니다. 닫힌 단일 native 턴의 배정별 토큰을 완료 기록에 저장하고, 지정된 DB에 중복 없이 연결해 요청·역할·작업별로 표시합니다. 조율자 등 누락된 역할의 전체 수집, 자동 업무 분해, Paseo 실제 위임, 복수 저장소 통합은 남아 있습니다. [하네스 개선 상태와 다음 작업](runtime/harness-roadmap.md)에 구현·운영 규칙·미검증을 구분했습니다.
 
-학습 대화에는 튜터 지침과 공식 근거·연관 Q&A 기준을 제공합니다. 요청 라우팅은 별도 AI 호출 없는 로컬 추천 검사·선택 기록·선택한 역할 지침 준비까지 구현했습니다. 앱 입력·선택 UI·같은 AI에 역할 적용·현재 대화의 모델 전환·자동 위임은 아직 연결하지 않았습니다. 튜터의 대표 응답은 작성 AI의 자체 점검을 수행했고 독립 정확도·학습 효과·비용 절감은 미검증입니다. [통합 개발 순서](learning/development.md)를 기준으로 진행합니다.
+학습 대화에는 튜터 지침과 공식 근거·연관 Q&A 기준을 제공합니다. 요청 라우팅은 별도 분류 AI 호출 없이 현재 AI의 판단을 추천·선택·역할 지침·명시 위임·취소/종료·완료 수집에 연결합니다. 앱의 구조화된 상태 자동 전달·선택 UI·역할 자동 주입·현재 대화의 모델 전환·자동 위임은 아직 연결하지 않았습니다. 튜터의 대표 응답은 작성 AI의 자체 점검을 수행했고 독립 정확도·학습 효과·비용 절감은 미검증입니다. [통합 개발 순서](learning/development.md)를 기준으로 진행합니다.
 
-수용한 worker 선택을 [기존 관리 실행기에 명시 연결](runtime/routing-dispatch.md)하는 경로도 제공합니다. 한 동의를 한 실행에 묶고 선택한 모델·effort를 정확히 전달하며 완료 시 요청·적용·실제 관측을 대조합니다. 이 신규 연결은 가상 응답으로 검증했으며 실제 배정·전환 검증은 남아 있습니다.
+수용한 worker 선택을 [기존 관리 실행기에 명시 연결](runtime/routing-dispatch.md)하는 경로도 제공합니다. 한 동의를 한 실행에 묶고 선택한 모델·effort를 정확히 전달하며 완료 시 요청·적용·실제 관측을 대조합니다. [실제 한 건](runtime/routing-integration-check.md)에서 역할 수신·Sol/medium 요청/실행환경 적용값·중복 재조회·정확한 종료를 확인했습니다. 공급자 실제 관측·토큰·앱 입력 hook은 미확인입니다.
+
+기본 진입은 **지침이 연결된 현재 AI가 요청을 읽고 짧게 판단·제안하며 대화에서 선택을 받는 방식**입니다. 같은 AI의 역할은 필요한 지침을 읽어 적용합니다. native hook·별도 선택 UI를 선행 조건으로 두지 않으며, 해당 연결은 상태 자동 전달·측정 수집의 선택적 고도화입니다. 현재 대화의 모델/effort 전환에는 별도 공식 적용 경로가 필요합니다.
 
 ## 무엇을 바꾸면 되나요?
 
@@ -22,8 +24,12 @@
 | [learning/](learning/README.md), [통합 개발 순서](learning/development.md) | 튜터 사용법·출처 기준·심화 방식과 자체 평가·다음 작업 |
 | [runtime/request-routing.md](runtime/request-routing.md), [짧은 진입 지침](runtime/routing-brief.md) | 직접 처리·역할/설정 추천·위임 제어·적용 범위·최소 토큰 원칙 |
 | [scripts/request_router.py](scripts/request_router.py), [입출력 안내](runtime/request-router.md) | 짧은 목록과 구조화된 판단의 로컬 검사. 모델 호출·실행·설정 저장 없음 |
-| [scripts/routing_choices.py](scripts/routing_choices.py), [선택 기록 안내](runtime/routing-choices.md) | 비공개 요청별 수용·거절·취소·만료와 선택한 역할 지침 준비. 같은 AI에 실제 적용은 미연결 |
-| [runtime/routing-dispatch.md](runtime/routing-dispatch.md) | 수용한 worker 선택과 관리 실행의 opt-in 연결·동의 중복 방지·완료 프로필 대조. 실제 전환 검증은 남음 |
+| [scripts/routing_choices.py](scripts/routing_choices.py), [선택 기록 안내](runtime/routing-choices.md) | 비공개 요청별 수용·거절·취소·만료와 선택한 역할 지침 준비. 앱의 자동 지침 주입은 미연결 |
+| [scripts/routing_flow.py](scripts/routing_flow.py), [공통 진입 흐름](runtime/routing-flow.md) | 추천·선택·역할 지침·명시 위임·취소/종료·완료 수집/비교 자료 연결. 거절·실행·측정 중복 방지, 미지원 프로필 전환 구분 |
+| [runtime/routing-dispatch.md](runtime/routing-dispatch.md), [실제 검증](runtime/routing-integration-check.md) | 수용한 worker 선택과 관리 실행의 opt-in 연결. 실제 요청/적용·재조회/종료 확인, 공급자 관측·토큰·앱 자동 입력은 미확인 |
+| [scripts/compare_routing.py](scripts/compare_routing.py), [비교 안내](runtime/routing-comparison.md) | 기존 측정 파일의 직접/라우팅 한 쌍 비교. 누락·품질 미확인은 절감 판정 보류. 자동화 허용 없음 |
+| [시간·단가 추정 안내](runtime/routing-metrics.md) | 선택적인 v2 입력의 요청 시간·관측 모델 단가 추정. 원본/요금 자동 탐색·실제 청구 인증 없음 |
+| [짧은 운영 안내](runtime/routing-quickstart.md), [비교·평가 준비 묶음](experiments/routing-pilot/README.md) | 최소 사용 흐름, 네 가지 가상 입력·고정 완료 기준·평가 양식. 실제 비교 결과와 구분 |
 | [AGENTS.md](AGENTS.md), [principles/privacy.md](principles/privacy.md) | 모든 역할에 전달하는 공통 원칙 |
 | [templates/project.workflow.json](templates/project.workflow.json) | 대상 프로젝트의 `.ai-workflow.json`으로 사용할 설정 양식 |
 | [schema/workflow.schema.json](schema/workflow.schema.json) | 설정 파일의 필드·타입·허용값 |
@@ -47,19 +53,23 @@
 
 ## 사용하기
 
+처음 운영할 때는 [짧은 사용 흐름](runtime/routing-quickstart.md), 비용·품질을 평가할 때는 [비교 준비 묶음](experiments/routing-pilot/README.md)을 확인합니다. 일반 입력에 이 자료를 모두 주입하지 않습니다.
+
 ### 처리 방식을 직접 제어하기
 
 [요청 라우팅과 사용자 제어](runtime/request-routing.md)에 직접 처리·제안 후 선택·허용 범위 내 자동 처리의 의미를 정의했습니다. “이번에는 바로 답해”, “튜터 방식으로 하되 새 에이전트는 만들지 마”, “이 대화에서는 모델과 effort를 고정해”처럼 역할·설정·위임과 적용 범위를 구분합니다. 작은 요청과 후속 질문에는 불필요한 제안을 반복하지 않습니다.
 
-현재는 **사용자 제어 계약과 [추천 전용 로컬 도구](runtime/request-router.md)**를 제공합니다. `python3 scripts/request_router.py catalog`로 짧은 역할·프로필 목록을 확인하고 `python3 scripts/request_router.py route < examples/request-route.json`으로 제어와 현재 AI의 추천 결과를 검사합니다. 직접 처리·같은 요청의 선택 재사용·변경 제안·제어 충돌을 구분하며 모델 호출·위임·설정 저장은 하지 않습니다. 의미 판단은 현재 AI가 담당합니다. 앱 입력 연결·선택 UI·승인 저장·모델 전환과 실제 추천 품질 검증은 남아 있습니다. 새 제어 개념을 기존 `harness.json`의 지원 필드로 해석하지 않습니다.
+현재는 **사용자 제어 계약·[추천 검사](runtime/request-router.md)·[공통 진입 흐름](runtime/routing-flow.md)**을 제공합니다. `python3 scripts/request_router.py catalog`로 짧은 역할·프로필 목록을 확인하고 `python3 scripts/request_router.py route < examples/request-route.json`으로 현재 AI의 판단을 검사합니다. 추천 검사 자체는 실행하지 않으며 공통 진입점이 요청별 선택·역할 지침과 별도 수용한 관리 실행·완료 수집을 연결합니다. 앱 입력 자동 연결·선택 UI·현재 대화의 모델 전환과 실제 추천 품질 검증은 남아 있습니다. 새 제어 개념을 기존 `harness.json`의 지원 필드로 해석하지 않습니다.
 
 라우팅 자체의 토큰 비용 최소화를 핵심 제약으로 둡니다. 기본 경로는 라우팅 전용 추가 모델 호출 없이 확정 제어·기존 선택을 재사용하고, 필요한 의미 판단은 현재 AI의 응답에서 수행하도록 설계합니다. 추천이 없으면 바로 본문을 답하며 모든 역할 문서를 매번 읽지 않습니다. 실제 절감 효과는 아직 미측정입니다.
 
 튜터 개발과 추천 평가·Orca 입력 연결·사용자 선택·위임/모델 전환·비용 비교는 [통합 개발 순서](learning/development.md)에 따라 단계적으로 진행합니다.
 
-[Orca 안의 Codex 입력 어댑터](runtime/orca-routing-input.md)는 준비 단계입니다. 원문을 저장하지 않고 정확한 대상의 명시 상태만 짧게 전달합니다. 프로젝트 hook 설치·신뢰와 실제 native 입력 수신은 아직 검증하지 않았습니다.
+[Orca 안의 Codex 입력 어댑터](runtime/orca-routing-input.md)는 선택적 연결입니다. 한정된 프로젝트 시험에서 실제 수신·공식 검토 경로를 확인하지 못해 시험 정의를 제거했습니다. 현재 AI의 명시 호출형 운영은 유지하며 native 입력 자동 연결은 보류합니다.
 
 [사용자 선택 기록](runtime/routing-choices.md)은 요청·추천 버전을 대조해 수용·거절·취소를 보관합니다. 수용한 현재 AI용 역할의 지침만 준비하고, 명시한 후속 대화에는 역할 본문을 다시 읽지 않고 선택을 재사용할 수 있습니다. 앱에 주입하거나 모델·effort·위임을 실행하지 않습니다. 입력 어댑터와 선택 UI의 자동 연결은 남아 있습니다.
+
+[공통 진입 흐름](runtime/routing-flow.md)은 현재 AI의 해석을 위 선택 기록·역할 지침·관리 위임에 연결합니다. 일반 입력에는 도구 실행을 요구하지 않으며, 거절한 추천·역할 본문·worker 실행의 반복을 막습니다. 연결된 worker의 명시 취소는 guarded stop과 정확한 종료 조회를 사용합니다. 현재 대화의 모델 변경은 수동 설정으로 구분하며, 실제 native 중지와 앱 자동 연결은 아직 검증되지 않았습니다.
 
 ### 개념을 배우고 싶을 때
 

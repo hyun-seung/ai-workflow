@@ -1,8 +1,26 @@
 # Orca 입력과 최소 라우팅 상태 연결
 
-상태: Codex 입력 hook용 어댑터·단위 검사 구현. 현재 Orca 대화에 설치·신뢰·활성화하지 않았으며 실제 native 입력 수신은 미검증이다. 플러그인과 공급자 hook의 적용 범위를 구분한다.
+상태: Codex 입력 어댑터와 한정된 실제 수신 probe를 준비했다. 2026-11-14 프로젝트 시험 정의를 등록했으나 실제 입력/완료 영수증이 생성되지 않았고 공식 검토 경로도 확보하지 못해 시험 정의를 제거했다. 실제 native 입력 수신은 미검증이다. [입력·역할·위임 실제 검증](routing-integration-check.md)에서 확인/미확인을 구분한다.
+
+이 문서는 **선택적 native 상태 연결**을 다룬다. 지침이 연결된 현재 AI가 요청을 읽고 같은 응답에서 판단·제안·대화 선택을 처리하는 기본 진입은 [요청 라우팅 계약](request-routing.md)을 따른다. native hook 검증 때문에 기본 경로나 같은 AI의 지침 기반 역할 적용을 보류하지 않는다.
 
 ## 확인한 지원 범위
+
+### 2026-11-14 공식 웹 문서 재확인
+
+**Orca의 일반 hook 지원은 공식 문서에 명시되어 있다.** [Agent hooks & memory](https://orca.dev/docs/agents/hooks-memory)는 저장소의 `.claude/`·`.codex/` 설정을 읽고 worktree에서 에이전트를 시작할 때 기존 hook을 실행한다고 설명한다. 따라서 이 기능을 포괄적으로 “Orca 미지원”으로 분류하지 않는다.
+
+같은 문서의 **Agent status hooks**는 Orca가 관리하는 working/waiting/done 보고 기능이며 설정 경로와 `orca agent hooks status|on|off --json`을 안내한다. 현재 설치 CLI의 help와 `status` 조회에서 `enabled: true`, Codex `state: installed`, `managedHooksPresent: true`를 확인했다. 조회 응답은 `appliedBy: offline`인 설정/설치 상태이며, 사용자 프로젝트의 hook 신뢰·native 입력 수신을 증명하지 않는다. `on/off`나 설정 변경은 하지 않았다.
+
+반면 [플러그인 host API](https://github.com/stablyai/orca/blob/main/docs/reference/plugin-host-api.md#hooks)의 `agent.prompt.before`는 터미널에 제출하는 시작/위임 프롬프트 대상이며 사람이 직접 보낸 입력을 제외한다. [native chat 문서](https://orca.dev/docs/agents/native-chat)에서도 현재 Codex structured chat에서 사용자 프로젝트의 `UserPromptSubmit`·`Stop`을 검토/활성화하는 구체적 UI 계약은 확인하지 못했다. **일반 지원 확인**과 **현재 native 경로의 미검증**을 구분한다. 후자는 기존 실제 시험 결과를 유지하며 같은 probe·worker를 반복하지 않는다.
+
+### 설치 버전 확인과 실제 시험
+
+후속 설정 진단에서는 도구 프로세스에 제공된 `CODEX_HOME`이 사용자 `.codex`와 일치했고 해당 `config.toml`의 프로젝트 폴더 신뢰는 `trusted`였다. 사용자 hook에는 `enabled`와 `trusted_hash`가 저장되어 있었지만, 앞서 시험한 현재 프로젝트 hook의 승인 항목은 없었다. **폴더 신뢰와 개별 hook 정의 승인은 별개**다. 저장된 해시의 존재만으로 현재 정의의 해시 일치·활성 세션 로딩까지 확인한 것으로 보지 않는다.
+
+현재 도구의 부모 계보에서 Codex app-server와 별도 외부 listener 인자 부재를 확인했다. 설치된 Orca CLI·배포 가이드에는 같은 native 런타임의 hook 목록을 읽는 창구를 찾지 못했다. OpenAI의 [app-server 계약](https://learn.chatgpt.com/docs/app-server)은 `hooks/list`를 제공하지만, 새 서버를 띄워 조회하는 것은 현재 세션 상태의 검증이 아니므로 대체하지 않았다. 실행 인자의 hook 관련 override와 실제 로딩된 계층도 완전히 해석하지 못했다.
+
+따라서 승인 기록 부재는 앞선 미수신을 설명할 장애 요소지만 단일 원인으로 확정하지 않는다. 다음 조건은 정확한 프로젝트 정의의 **공식 검토·승인 경로**와 동일 런타임의 목록/상태 확인이다. 이를 확보한 뒤 입력 한 건으로 재검증하며, 현재 상태에서 반복 설치·새 worker 시험·`trusted_hash` 직접 작성은 하지 않는다. 진단에서 설정·신뢰·hook을 변경하지 않았다. 원시 설정과 진단 경로는 비공개로 보관한다.
 
 2026-11-13 Orca 1.4.256의 설치 버전 가이드 `orca-plugin-authoring` / `references/host-api.md`를 확인했다. `agent.prompt.before`는 Orca가 터미널 agent에 전달하는 시작·위임 등의 프롬프트를 대상으로 하며 사용자가 직접 제출한 프롬프트는 대상이 아니다. 이를 모든 사용자 메시지의 입력 지점으로 사용하지 않는다. [Orca 공식 host API](https://github.com/stablyai/orca/blob/main/docs/reference/plugin-host-api.md#hooks)
 
@@ -11,6 +29,8 @@
 현재 `orca status`의 caller는 Orca 세션 ID와 live 상태를 제공하며 native Codex 세션 ID·transcript 경로는 제공하지 않았다. 두 세션 ID를 이름으로 변환·추측하지 않고 원본 hook이나 공식 실행 메타데이터의 정확한 값을 사용한다. 경로를 찾으려고 다른 대화·전체 세션 폴더를 탐색하지 않는다.
 
 같은 날 Orca 1.4.257에서 설정 화면과 입력 명령 후보도 확인했으나 이 대화에 적용할 공급자 hook 검토·신뢰 경로를 확보하지 못했다. 이것만으로 앱 전체의 지원 불가를 단정하지 않는다. 설정값을 변경하거나 시험 메시지를 제출하지 않았고 검색용 초안도 제거했다. 정확한 native 바인딩과 공식 신뢰 경로가 확인될 때 실제 연결 검증을 재개한다. 같은 UI 탐색을 반복하거나 신뢰 우회로 대신하지 않는다.
+
+2026-11-14에는 현재 런타임의 Codex 세션/스레드 ID 후보를 확인하고 해당 세션만 대상으로 프로젝트 probe를 등록했다. 이후 실제 사용자 선택 입력에서도 영수증이 생성되지 않았다. 공식 세션 검색은 꺼져 있어 진행하지 않았으며, UI 조회는 macOS 접근성 오류로 실패했고 사용자도 별도 hook 검토 안내를 확인하지 못했다. 신뢰 우회나 OS/전역 설정 변경 없이 시험 정의를 제거했다. 로딩·신뢰·이벤트 제공 중 원인은 아직 미확인이다.
 
 ## 구현한 최소 경로
 
@@ -66,7 +86,9 @@ python3 scripts/routing_hook.py --context /private/path/routing-context.json --p
 3. 공식 hook 검토 화면에서 **추가한 정확한 정의**를 검토·신뢰한다. 새 정의는 신뢰 전 실행되지 않을 수 있다. 검토 UI가 없으면 보류하며 신뢰 우회 플래그·다른 앱으로 대체하지 않는다. [OpenAI Docs: Review and trust hooks](https://learn.chatgpt.com/docs/hooks#review-and-trust-hooks)
 4. 이후의 실제 사용자 입력 한 건에서 대상 일치·빈 상태의 문맥 생략·힌트 전달·원문 비저장을 확인한다. synthetic stdin 재현은 실제 native 이벤트 발생의 증명이 아니다.
 
-현재는 native 식별자·경로 확보와 해당 대화의 hook 신뢰/실제 이벤트가 남아 있어 설치하지 않았다. 다음 단계에서 확인 없이 완료 상태로 승격하지 않는다. 지원 여부 조사와 이 코드 준비를 전역 입력 연결 완료라고 보고하지 않는다.
+원본 경로를 아직 모르는 경우 `scripts/routing_probe.py --project /path/to/project --session-id session_example --receipt /private/path/input.receipt.json --print-hook`으로 현재 세션 하나의 수신 후보를 준비할 수 있다. 실제 런타임이 제공한 식별자만 사용하며 이 명령도 설치·신뢰하지 않는다. probe는 prompt/transcript 내용을 읽지 않고 이벤트의 경로 메타데이터만 한 번 기록한다. 현재 환경의 시험에서는 수신이 확인되지 않았으므로 같은 정의를 반복 설치하지 않는다.
+
+현재 남은 조건은 native 원본 경로와 해당 대화의 공식 hook 로딩·신뢰·실제 이벤트다. 확인 없이 완료 상태로 승격하지 않는다. 지원 여부 조사와 코드 준비를 전역 입력 연결 완료라고 보고하지 않는다.
 
 ## 검증과 남은 범위
 

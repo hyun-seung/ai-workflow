@@ -186,12 +186,13 @@ def probe_environment(environment, source, environ, project, timeout):
             "session_identity_confirmed": False, "command": cli}
 
 
-def startup(project, explicit=None, config_path=None, timeout=8):
+def startup(project, explicit=None, config_path=None, timeout=8, *, environ=None):
     if not math.isfinite(timeout) or timeout <= 0:
         raise StartupError("Probe timeout must be finite and positive")
+    environ = os.environ if environ is None else environ
     loaded = load_project(project, config_path)
-    environment, source = select_environment(explicit, loaded["environment"], os.environ)
-    connection = probe_environment(environment, source, os.environ, loaded["project"], timeout)
+    environment, source = select_environment(explicit, loaded["environment"], environ)
+    connection = probe_environment(environment, source, environ, loaded["project"], timeout)
     guide = ROOT / "runtime" / "environments" / (environment + ".md")
     common = [ROOT / "AGENTS.md", ROOT / "roles" / "README.md", ROOT / "templates" / "README.md"]
     for path in [guide, *common]:

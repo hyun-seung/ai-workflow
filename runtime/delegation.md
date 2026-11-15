@@ -60,6 +60,8 @@ python3 scripts/dispatch_guard.py \
 
 `finish_worker.py`에 `--dispatch-directory`와 `--operation-id`를 함께 전달하면 메타데이터 저장 후 같은 해제 확인을 연결한다. 모델/승인 검사 불일치와 실제 프로세스 종료는 별개이며, 이미 끝난 프로세스의 자리는 반환할 수 있다.
 
+명시 취소는 `stop --operation-id <id>` 또는 [공통 진입 흐름](routing-flow.md)을 사용한다. 시작 전 접근 거부·실패 종료 코드·`not_started`·native ID 부재가 모두 일치하는 예약은 실제 worker가 생성되지 않았으므로 로컬에서 취소·해제한다. `cancellation_evidence`로 미실행 근거를 구분하고 원래 영수증·누적 한도를 보존한다. 취소한 operation은 다시 실행하지 않는다. timeout·모순 응답·ID가 유실된 불명 상태는 이 예외로 해제하지 않는다. 실제 배정의 취소는 guarded stop 뒤 정확한 종료를 확인한다.
+
 종료가 확인된 관리 대상의 다음 업무는 새 operation으로 `followup --previous <operation-id> --spec-file <path>`를 사용한다. 같은 요청의 누적 한도를 소비하고 공식 `send --to dispatch:<id>`로 전달한다. 현재는 이전 worker의 실제 종료 후 후속 업무만 지원하며, 같은 선행 배정에서 이어진 후속 업무·재시도 중 하나라도 실행 또는 불명 상태면 추가 배정을 거부한다. 오래된 선행 operation을 다시 지정해도 이 점유 검사를 적용한다. 새 모델을 지정하는 후속 전송은 지원하지 않는다.
 
 실패한 배정의 종료가 확인되면 `retry --previous <operation-id>`로 같은 native Task와 `--retry-of`를 사용한다. 새 operation이므로 누적 한도에 포함한다. Orca의 실패 연쇄·회로 차단을 새 Task로 우회하지 않으며 자동 재시도하지 않는다. 사용자의 재시도 지시 범위와 공식 recovery 가이드를 먼저 확인한다.

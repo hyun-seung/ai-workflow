@@ -7,6 +7,9 @@
 | [task-input.md](task-input.md) | 사용자 또는 조율자가 한 담당자에게 전달하는 작업 |
 | [task-result.md](task-result.md) | 담당자가 제출하는 산출물·검증·미해결 사항 |
 | [task-report.md](task-report.md) | 조율자가 여러 작업을 종합하는 선택적 보고서 |
+| [routing-evaluation.md](routing-evaluation.md) | 튜터·추천의 AC/출처/제어·실제 수집 범위를 기록하는 빈 평가 양식 |
+| [routing-comparison.json](routing-comparison.json) | 동일 완료 기준과 실제 수집 파일로 직접 처리/라우팅 한 쌍을 비교하는 입력 양식 |
+| [routing-comparison-v2.json](routing-comparison-v2.json), [routing-timing.json](routing-timing.json), [routing-rate-card.json](routing-rate-card.json) | 선택적인 요청 전체 시간·관측 모델의 단가 추정 비교. 빈 날짜/단가는 실제 값으로 채우기 전 실행하지 않음 |
 | [가상 예시](../examples/task-contract.md) | 개발과 글쓰기 작업의 입력·결과 연결 |
 
 ## 최소 계약

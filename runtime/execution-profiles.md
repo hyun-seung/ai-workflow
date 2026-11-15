@@ -10,7 +10,7 @@
 
 실제 관측은 공급자의 턴 컨텍스트에 기록된 값이다. 공급자 내부 라우팅이나 물리 서버의 모델을 별도 계측했다는 뜻은 아니다. snapshot·값이 없으면 미확인이다. native 요청이 관측됐지만 모델을 명시하지 않은 null은 `native 기본값 요청`으로 표시하며 실제 모델을 추측하지 않는다. 적용 단계의 관측된 null은 `적용값 미제공`이다.
 
-[라우팅 선택을 명시 연결한 배정](routing-dispatch.md)은 `finish_worker.py`의 관리 operation 연결에서 선택한 모델·effort를 기대값으로 가져온다. 완료 metadata의 세 단계를 대조해 하나라도 누락되면 `routing_profile=unverified`, 불일치면 fail로 반환하며 요청값으로 실제 관측을 채우지 않는다. 이는 가상 native 응답으로 검사한 신규 연결이며 아래 기존 수집 경로의 실제 관측 검증과 구분한다.
+[라우팅 선택을 명시 연결한 배정](routing-dispatch.md)은 `finish_worker.py`의 관리 operation 연결에서 선택한 모델·effort를 기대값으로 가져온다. 완료 metadata의 세 단계를 대조해 하나라도 누락되면 `routing_profile=unverified`, 불일치면 fail로 반환하며 요청값으로 실제 관측을 채우지 않는다. 신규 연결의 [실제 한 건](routing-integration-check.md)은 요청·실행환경 적용값만 일치했고 공급자 원본·토큰은 미확인이다. 아래 기존 수집 경로의 실제 관측 검증과 구분한다.
 
 ## 추가 관측과 수입
 

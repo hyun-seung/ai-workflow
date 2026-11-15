@@ -2,6 +2,8 @@
 
 상태: 로컬 선택 기록·선택한 역할 지침 준비·명시한 후속 대화의 선택 재사용 구현. 수용한 worker 선택의 [명시 관리 실행 연결](routing-dispatch.md)도 제공한다. Orca의 실제 선택 UI·자연어 동의 해석·동일 AI에 지침 주입은 아직 연결하지 않았다. [입력 어댑터](orca-routing-input.md)의 snapshot과도 자동 동기화하지 않는다.
 
+[공통 진입 흐름](routing-flow.md)은 이 저장 형식을 재사용해 현재 AI의 대화 해석→선택 기록→첫 역할 지침 준비를 묶는다. 연결된 worker 취소에는 정확한 참조의 guarded stop도 요청한다. 아래 저수준 `choose: cancel` 단독 명령은 상태만 취소하며 native 중지는 수행하지 않는다.
+
 `scripts/routing_choices.py`는 [추천 검사기](request-router.md)의 판정을 받아 요청별 추천과 수용·거절·취소를 비공개 파일에 기록한다. 모델·네트워크·worker를 호출하거나 모델/effort·권한·앱 설정을 바꾸지 않는다. 선택 기록은 실행 권한 승인이 아니다.
 
 ## 처리 계약

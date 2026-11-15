@@ -82,13 +82,17 @@ def orca(cli, *args):
 
 
 def exited(snapshot, task_id, dispatch_id):
-    result = snapshot.get('result', {})
+    result = snapshot.get('result') if isinstance(snapshot, dict) else None
+    if not isinstance(result, dict):
+        raise ValueError('worker_identity_mismatch')
     dispatch, worker, observation = (result.get(k, {}) for k in ('dispatch', 'worker', 'observation'))
-    if (snapshot.get('ok') is not True or dispatch.get('id') != dispatch_id or
+    if (not isinstance(dispatch, dict) or not isinstance(worker, dict) or
+            snapshot.get('ok') is not True or dispatch.get('id') != dispatch_id or
             dispatch.get('taskId') != task_id or worker.get('dispatchId') != dispatch_id):
         raise ValueError('worker_identity_mismatch')
-    if (dispatch.get('hostScope', {}).get('kind') != 'local' or
-            dispatch.get('status') not in {'completed', 'failed', 'cancelled'} or
-            worker.get('state') not in {'succeeded', 'failed', 'cancelled'} or
+    host = dispatch.get('hostScope')
+    if (not isinstance(host, dict) or not isinstance(observation, dict) or host.get('kind') != 'local' or
+            dispatch.get('status') not in ('completed', 'failed', 'cancelled') or
+            worker.get('state') not in ('succeeded', 'failed', 'cancelled') or
             observation.get('exactWorker') is not True or observation.get('status') != 'exited'):
         raise ValueError('worker_exit_unconfirmed')

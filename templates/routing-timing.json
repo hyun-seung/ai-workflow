@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "request_id": "request_example",
+  "measurement_id": "timing_example",
+  "clock_id": "clock_example",
+  "scope": "request_wall_clock",
+  "start_event": "request_received",
+  "end_event": "final_response_delivered",
+  "started_at": null,
+  "finished_at": null,
+  "coverage": {
+    "routing": "missing",
+    "selection": "missing",
+    "processing": "missing",
+    "handoff": "missing",
+    "integration": "missing",
+    "verification": "missing",
+    "rework": "missing",
+    "reporting": "missing"
+  },
+  "evidence": {
+    "path": "/private/example/request-clock-evidence.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

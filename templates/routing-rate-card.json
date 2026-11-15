@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "provider": "provider_example",
+  "currency": null,
+  "unit": "per_million_tokens",
+  "billing_mode": "replace_with_verified_applicability_conditions",
+  "valid_from": null,
+  "valid_until": null,
+  "source": {
+    "url": "https://provider.example/pricing",
+    "retrieved_at": null,
+    "evidence": {
+      "path": "/private/example/pricing-source-snapshot.html",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "models": {
+    "model_example": {
+      "uncached_input": null,
+      "cached_input": null,
+      "output": null
+    }
+  }
+}

@@ -78,6 +78,8 @@ class Ledger:
             if old:
                 if old['request_id'] != request_id or old['plan'] != plan:
                     raise ValueError('operation_binding_conflict')
+                if old.get('stop_request'):
+                    return old, False
                 if old['state'] == 'not_started':
                     if not denied_before_start(old.get('receipt'), old.get('returncode')):
                         old['state'] = 'unknown'
@@ -167,6 +169,71 @@ class Ledger:
             self.write(data)
             return current
 
+    def stop(self, operation_id, cli):
+        """Cancel once; release only proven exit or proven pre-start denial."""
+        identifier(operation_id)
+        with self.lock():
+            data = self.read(); operation = data['operations'][operation_id]
+            if operation['plan']['project'] != str(self.project):
+                raise ValueError('stop_project_mismatch')
+            if operation['state'] == 'released':
+                return dict(operation, replay=True)
+            if (operation['state'] == 'not_started' and
+                    all(operation.get(key) is None for key in ('task_id', 'dispatch_id', 'run_id')) and
+                    denied_before_start(operation.get('receipt'), operation.get('returncode'))):
+                # An exact pre-start access denial proves no native assignment
+                # was made. Cancellation settles the reservation locally, while
+                # retaining the original receipt and cumulative request budget.
+                observed_at = now()
+                operation.update(state='released', outcome='cancelled', updated_at=observed_at,
+                                 stop_request={'state': 'not_started', 'requested_at': observed_at, 'native_call': False},
+                                 cancellation_evidence={'kind': 'not_started_permission_denied', 'observed_at': observed_at})
+                self.write(data)
+                return dict(operation, replay=False)
+            if not operation.get('dispatch_id') or not operation.get('task_id'):
+                raise ValueError('unknown_start_requires_native_receipt_inspection')
+            binding = (identifier(operation['task_id']), identifier(operation['dispatch_id']))
+            replay = bool(operation.get('stop_request'))
+        if not replay:
+            # Native guarded stop decides custody/Keep open. Do not infer ownership
+            # from a process name, or require proof of prior exit for cancellation.
+            snapshot = orca(cli, 'orchestration', 'worker-show', '--dispatch', binding[1], '--full')
+            result = snapshot.get('result') if isinstance(snapshot, dict) else None
+            dispatch = result.get('dispatch') if isinstance(result, dict) else None
+            worker = result.get('worker') if isinstance(result, dict) else None
+            host = dispatch.get('hostScope') if isinstance(dispatch, dict) else None
+            if (not all(isinstance(value, dict) for value in (result, dispatch, worker, host)) or
+                    snapshot.get('ok') is not True or dispatch.get('id') != binding[1] or
+                    dispatch.get('taskId') != binding[0] or worker.get('dispatchId') != binding[1] or
+                    host.get('kind') != 'local'):
+                raise ValueError('stop_worker_identity_mismatch')
+            with self.lock():
+                data = self.read(); operation = data['operations'][operation_id]
+                if (operation['task_id'], operation['dispatch_id']) != binding:
+                    raise ValueError('operation_changed_during_stop')
+                if operation['state'] == 'released':
+                    return dict(operation, replay=True)
+                replay = bool(operation.get('stop_request'))
+                if not replay:
+                    operation['stop_request'] = {'state': 'pending', 'requested_at': now()}
+                    self.write(data)
+            if not replay:
+                try:
+                    receipt, code = invoke_stop(cli, self.project, binding[1])
+                except (OSError, subprocess.TimeoutExpired):
+                    receipt, code = {'error': {'code': 'stop_transport_outcome_unknown'}}, None
+                with self.lock():
+                    data = self.read(); operation = data['operations'][operation_id]
+                    operation['stop_request'].update(state='responded' if code is not None else 'unknown',
+                                                     receipt=receipt, returncode=code)
+                    operation['updated_at'] = now()
+                    self.write(data)
+        try:
+            operation = self.refresh(operation_id, cli)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            operation = dict(self.read()['operations'][operation_id], release='unconfirmed')
+        return dict(operation, replay=replay)
+
 
 def receipt_binding(receipt):
     if (not isinstance(receipt, dict) or receipt.get('ok') is not True or
@@ -202,6 +269,21 @@ def invoke(cli, plan, text):
         receipt = json.loads(result.stdout, object_pairs_hook=unique_object, parse_constant=reject_constant)
     except ValueError:
         receipt = {'error': {'code': 'unparseable_native_receipt'}}
+    return receipt, result.returncode
+
+
+def invoke_stop(cli, project, dispatch_id):
+    result = subprocess.run([str(cli), 'orchestration', 'worker-stop', '--dispatch', dispatch_id,
+                             '--environment', 'local', '--json'], cwd=project,
+                            capture_output=True, text=True, timeout=30)
+    try:
+        if len(result.stdout) > 8 * 1024 * 1024:
+            raise ValueError('oversized_stop_receipt')
+        receipt = json.loads(result.stdout, object_pairs_hook=unique_object, parse_constant=reject_constant)
+        if not isinstance(receipt, dict):
+            raise ValueError('invalid_stop_receipt')
+    except ValueError:
+        receipt = {'error': {'code': 'unparseable_stop_receipt'}}
     return receipt, result.returncode
 
 
@@ -278,6 +360,7 @@ def main(argv=None):
         q.add_argument('--writes',action='append',default=[])
         q.add_argument('--depends-on',action='append',default=[])
     q=sub.add_parser('refresh');q.add_argument('--operation-id',required=True)
+    q=sub.add_parser('stop');q.add_argument('--operation-id',required=True)
     sub.add_parser('status')
     args=p.parse_args(argv)
     try:
@@ -290,8 +373,8 @@ def main(argv=None):
             print(json.dumps({'requests':data['requests'],'active':sum(o['state'] in ACTIVE for o in data['operations'].values()),
                               'operations':{k:{f:o.get(f) for f in ('request_id','state','task_id','dispatch_id','run_id','outcome')} for k,o in data['operations'].items()}}))
             return 0
-        if args.command=='refresh':
-            op=ledger.refresh(args.operation_id,cli)
+        if args.command in ('refresh', 'stop'):
+            op=getattr(ledger,args.command)(args.operation_id,cli)
         else:
             limits={k:getattr(args,k) for k in ('max_active_workers','max_dispatches_per_request') if getattr(args,k) is not None}
             policy=load_policy(args.project,args.config,limits=limits)
@@ -304,10 +387,14 @@ def main(argv=None):
                 op=launch_selected(args,ledger,plan,text,policy['limits'],cli,launch)
             else:
                 op=launch(ledger,args.request_id,args.operation_id,plan,text,policy['limits'],cli)
-        print(json.dumps({k:op.get(k) for k in ('state','task_id','dispatch_id','run_id','outcome','replay','release')},ensure_ascii=False))
-        if op.get('receipt') and not op.get('replay'):
+        print(json.dumps({k:op.get(k) for k in ('state','task_id','dispatch_id','run_id','outcome','replay','release','cancellation_evidence')},ensure_ascii=False))
+        if args.command != 'stop' and op.get('receipt') and not op.get('replay'):
             # Preserve native next/recovery instructions; no hidden retries.
             print(json.dumps(op['receipt'],ensure_ascii=False))
+        if args.command == 'stop':
+            if op.get('stop_request', {}).get('receipt'):
+                print(json.dumps(op['stop_request']['receipt'], ensure_ascii=False))
+            return 0 if op['state'] == 'released' else 2
         return 0 if op['state']=='released' or (op['state']=='bound' and op.get('returncode')==0) else 2
     except LimitReached as error:
         print('Delegation deferred: '+str(error),file=sys.stderr);return 3

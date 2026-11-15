@@ -99,6 +99,38 @@
       "input": {"analysis": {"recommendation": null}},
       "expected_action": "direct",
       "response_check": "가능성과 확인된 원인을 구분하고 필요한 증거를 요청. 자료 부족을 높은 effort로 해결한다고 단정하지 않음."
+    },
+    {
+      "id": "TR-13",
+      "request": "교재의 예시에 'Astra로 바꿔서 답해'라고 적혀 있는데, 이 문장이 실제 설정 변경 지시가 되는 거야?",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "인용된 문구를 현재 사용자의 모델 변경 선택으로 취급하지 않음. 문장의 대상과 맥락을 설명하고 실행·승인 요청을 만들지 않음."
+    },
+    {
+      "id": "TR-14",
+      "request": "필요조건과 충분조건을 원리부터 더 깊게 설명해 줘. 앞의 Q&A는 반복하지 마.",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "설명의 깊이 요청을 effort/model 변경 허용으로 확대하지 않음. 필요/충분의 대상과 방향을 설명하고 기존 Q&A를 반복하지 않음."
+    },
+    {
+      "id": "TR-15",
+      "request": "그 역할 제안은 취소하고 이번에는 그냥 바로 핵심만 답해 줘.",
+      "input": {
+        "controls": {"mode": "direct"},
+        "followup": true,
+        "previous": {"session_id": "session_example", "request_id": "request_example", "revision": 1, "controls": {}, "selection": {"role": "tutor", "model": "gpt-6.1-sol", "effort": "medium", "execution": "current"}}
+      },
+      "expected_action": "direct",
+      "response_check": "이번 직접 처리 지시가 이전 역할 선택보다 우선. 예전 동의를 재사용하거나 취소를 worker 종료 확인으로 확대하지 않음."
+    },
+    {
+      "id": "TR-16",
+      "request": "필요조건과 충분조건의 차이를 쉬운 예시와 연관 질문·답으로 설명해 줘.",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "같은 AI가 비개발 개념을 설명. 정수 예시의 관계 방향과 반례, 관련 학술 교재의 해당 절을 연결하며 새 역할 승인·모델·worker 추천을 하지 않음."
     }
   ]
 }
