@@ -65,3 +65,17 @@ python3 -m unittest discover -s tests -p test_draft_request_completion.py
 가상 등록 정보의 프로필 상속·누락·충돌·계보 불일치, 요청·역할·자원 범위, JSON 한도, 입력 불변과 출력 충돌·재실행을 검사한다. 실제 파서와 SQLite fixture로 생성한 초안을 기존 `complete_request.prepare`에 전달하는 검사를 포함하며 native 실행과 실제 마감은 구분한다.
 
 로컬의 이전 등록 요청에서 생성한 프로필을 원래 수용 자료와 대조했고, 새 요청에서도 자동 생성한 초안을 명시 검토한 뒤 별도 일괄 마감 명령에 사용했다. 생성 단계의 DB 불변, 정리 뒤 초안 재실행, 마감 재실행의 journal·토큰 불변과 기존 요청 보존·복원을 확인했다. 입력 recipe와 제품 수용·마감 판단은 조율자가 준비했으며, 모든 작업의 자동 마감이나 총 시간·토큰 절감 효과를 검증한 것은 아니다.
+
+## v2의 명시적인 완료 자료 선택
+
+recipe `schema_version: 2`는 기존 필드에 필수 `operation_sources` 배열을 추가한다(최대 100개). 요청의 등록 operation마다 정확히 한 행 `{operation_id, source}`를 지정한다. 누락·중복·미등록 항목은 거부하며 Stop을 기본값으로 넣지 않는다. `source`는 정확히 `{"kind":"stop"}` 또는 `{"kind":"explicit_source","record_file":"/private/tmp/example-private/saved.json"}`이다. v1은 이 필드를 거부하며 기존 출력 형식을 유지한다. v2 출력 operation은 `{operation_id, expected, source}`이고 나머지 필드는 동일하다.
+
+생성기는 기존 비공개 일반 파일인 메타데이터의 정수 schema 1, Orca/Codex 프로젝트, pass 검증, 요청·역할·Task·Dispatch·세션 연결과 측정 usage의 물리 key·카운터를 확인한다. native actor는 논리 담당자 ID가 아니라 dispatch ID다. 기대 프로필은 여전히 검증한 실행 계보에서만 가져온다. 메타데이터나 토큰 값은 출력으로 복사하지 않으며 선택한 kind와 record 경로만 기록한다.
+
+선언된 원문 경로는 canonical 절대 경로여야 한다. 생성기는 그 본문을 읽거나 다른 경로를 추론하지 않고, record·선언 경로를 출력·자원 원본/보관본·가변 등록부와 hook 저장 위치로부터 보호한다. 메타데이터 binding에 session_file이나 id가 있다고 가정하지 않는다. 원문의 실제 비공개 권한·별칭과 현재 프로필·정확한 종료·새 측정 검증은 실행기가 검사한다.
+
+이 초안은 실행 시점 고정본이 아니다. 메타데이터는 생성 이후 바뀔 수 있으며 실행기는 실행 시점에 다시 검증하고 고정한다. 동일 초안 재생성도 현재 입력을 다시 검사하고 동일 결과이면 inode와 mtime을 유지한다. 생성 자체는 admission, pending 재시도, 완료 실행이나 승인 판정이 아니며 Stop 영수증·DB 기록·0 토큰을 만들지 않는다.
+
+v2 합성 검사는 `python3 -m unittest discover -s tests -p 'test_draft_request_completion*.py' -v`로 실행한다. 원문 파싱과 native 모의 배치 실행은 생성 단계가 끝난 후 별도 단계에서 검사한다.
+
+이전 실제 요청의 Stop·명시 저장 원본 혼합 선택으로 생성과 동일 초안 재생성, 입력·DB 불변을 확인하고 별도 단계에서 실제 `prepare`가 수용하는지 검증했다. 이전 요청은 실행하지 않았다. 새 요청에서는 생성한 v2 초안을 명시 수용한 뒤 일괄 마감·재실행·보관·기본 Y 정리와 새 DB 복원을 확인했다. 이 실제 확인도 생성 시점의 원문 신선성이나 요청 전체 사용량을 보장하지 않는다.

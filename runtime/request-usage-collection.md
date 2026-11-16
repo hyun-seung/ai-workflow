@@ -55,6 +55,8 @@ native 수집 전에 manifest/config/binding 파일의 바이트 해시와 worke
 
 root actor의 `trace.manual-source-recovery` explanation에는 manifest ID/digest와 선택 measurement key만 기록하며 `stop_delivery_inferred:false`, `full_usage_complete:false`를 명시한다. **Stop receipt를 만들지 않는다.** [복구 점검](completion-recovery.md)의 received-Stop coverage나 missing 판정은 바뀌지 않는다. 선택한 원본 수집 성공은 요청 전체 사용량·제품 수용·보관 완료를 의미하지 않는다.
 
+저장 원본을 마감 근거로 사용할 때는 [v2 일괄 마감](request-completion.md#명시한-저장-측정-소스-v2)에서 `explicit_source`를 직접 선택한다. 검증 통과 메타데이터와 비공개 원본, 현재 native 종료·프로필을 별도로 확인하며 이 수집기의 성공을 Stop 전달로 바꾸지 않는다.
+
 합성 세션 파서·SQLite와 native worker mock 검증:
 
 ```sh

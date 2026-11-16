@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 
+import completion_sources as completion_evidence
 import completion_hook as hook
 import completion_recovery as recovery
 import finish_worker as fw
@@ -96,7 +97,7 @@ def validate_artifact_locations(closeout, cfg, output, resource_rows):
 def prepare(manifest_file, directory, config, auto_cleanup):
     m = read_json(path(str(manifest_file))); hook.bounded_json(m)
     exact(m, FIELDS)
-    require(type(m['schema_version']) is int and m['schema_version'] == 1 and
+    require(type(m['schema_version']) is int and m['schema_version'] in (1, 2) and
             type(m['retry_pending']) is bool, 'batch_invalid_version_or_retry')
     for key in ('id', 'request_id', 'coordinator_id'):
         identifier(m[key])
@@ -113,7 +114,16 @@ def prepare(manifest_file, directory, config, auto_cleanup):
         require(isinstance(m[key], list) and len(m[key]) <= 100, 'batch_input_limit')
     selected = {}
     for row in m['operations']:
-        exact(row, ('operation_id', 'expected')); identifier(row['operation_id'])
+        exact(row, ('operation_id', 'expected', 'source') if m['schema_version'] == 2 else ('operation_id', 'expected'));
+        if m['schema_version'] == 2:
+            source = row['source']
+            require(isinstance(source, dict), 'batch_invalid_source')
+            if source.get('kind') == 'stop':
+                exact(source, ('kind',))
+            else:
+                exact(source, ('kind', 'record_file'))
+                require(source['kind'] == 'explicit_source', 'batch_invalid_source')
+        identifier(row['operation_id'])
         exact(row['expected'], ('model', 'effort', 'reviewer'))
         require(all(isinstance(v, str) and 0 < len(v.strip()) <= 200 for v in row['expected'].values()),
                 'batch_expected_profile_required')
@@ -145,6 +155,13 @@ def prepare(manifest_file, directory, config, auto_cleanup):
     protected = [path(str(manifest_file)), path(m['hook_config']), path(m['closeout_file']),
                  path(cfg['ledger']), path(cfg['trace_db']), path(cfg['directory'])]
     protected += [path(p) for p in policy['sources']]
+    descriptions = {}
+    if m['schema_version'] == 2:
+        for oid, row in selected.items():
+            if row['source']['kind'] == 'explicit_source':
+                d = completion_evidence.describe(cfg, ops[oid], row['source'])
+                descriptions[oid] = d
+                protected += [path(d['record_file']), path(d['session_file'])]
     receipt_bindings = {}
     receipt_paths = list(Path(cfg['directory']).glob('*.receipt.json'))
     require(len(receipt_paths) <= recovery.MAX_ITEMS, 'batch_receipt_limit')
@@ -205,6 +222,11 @@ def prepare(manifest_file, directory, config, auto_cleanup):
                receipt_bindings=receipt_bindings,
                operations={k: hook.operation_binding(v) for k, v in ops.items()},
                resources=[dict(binding=r['binding'], root_identity=r['root_identity']) for r in resources])
+    if m['schema_version'] == 2:
+        pin['source_descriptions'] = descriptions
+        for d in descriptions.values():
+            for candidate in (path(d['record_file']), path(d['session_file'])):
+                require(not any(candidate.is_relative_to(a) or a.is_relative_to(candidate) for a in archives + [path(cfg['directory'])] + [path(r['directory']) for r in m['resources']]), 'batch_source_mutable_overlap')
     return m, cfg, policy, ops, resources, closeout, pin
 
 
@@ -245,6 +267,10 @@ def run(manifest_file, directory, orca_cli, config=None, auto_cleanup=None):
             chosen = {}
             for oid, op in ops.items():
                 rows = [r for r in diagnostic['receipts'] if r.get('operation_id') == oid]
+                if oid in pin.get('source_descriptions', {}):
+                    require(len(rows) <= 1 and all(r['status'] == 'collected' for r in rows), 'batch_explicit_receipt_attention')
+                    if not rows:
+                        continue
                 require(len(rows) == 1 and rows[0]['status'] in {'collected', 'pending'}, 'batch_receipt_attention')
                 row = rows[0]; key = row['receipt_key']
                 if row['status'] == 'pending':
@@ -264,10 +290,28 @@ def run(manifest_file, directory, orca_cli, config=None, auto_cleanup=None):
             receipt_pin = {oid: digest(row) for oid, (_, row) in chosen.items()}
             require(state.get('receipts', receipt_pin) == receipt_pin, 'batch_receipt_changed')
             state['receipts'] = receipt_pin; stage('receipts_bound')
+            provenance = {}
+            def verify_explicit():
+                if not pin.get('source_descriptions'):
+                    return
+                recheck()
+                for item in m['operations']:
+                    oid = item['operation_id']
+                    if oid in pin.get('source_descriptions', {}):
+                        completion_evidence.verify(cfg, ops[oid], item['expected'], pin['source_descriptions'][oid], orca_cli, Path(directory))
             store = Store(cfg['trace_db'])
             try:
                 for row in m['operations']:
                     oid = row['operation_id']; op = ops[oid]; c = op['plan']['usage_collection']
+                    if oid in pin.get('source_descriptions', {}):
+                        result = completion_evidence.verify(cfg, op, row['expected'], pin['source_descriptions'][oid], orca_cli, Path(directory))
+                        if oid in chosen:
+                            key, receipt = chosen[oid]
+                            recovery.collected(cfg, key, receipt, op, store)
+                            hook.verify_saved_measurement(cfg, receipt['binding']['event'], op, read_json(receipt['record_path']), read_json(result['record_path']))
+                        import_usage(store, result['record_path'], c['actor_id'], c['task_title'])
+                        provenance[oid] = result['provenance']
+                        continue
                     key, receipt = chosen[oid]; event = receipt['binding']['event']
                     require(not any(path(event['transcript_path']).is_relative_to(path(r['binding']['source']))
                                     for r in resources), 'batch_worker_source_inside_cleanup')
@@ -289,6 +333,11 @@ def run(manifest_file, directory, orca_cli, config=None, auto_cleanup=None):
                     hook.verify_saved_measurement(cfg, event, op, read_json(receipt['record_path']),
                                                   current)
                     import_usage(store, result['record_path'], c['actor_id'], c['task_title'])
+                    if m.get('schema_version', 1) == 2:
+                        provenance[oid] = dict(kind='stop', receipt_key=key, measurement_key=current['dispatch_usage']['measurement_key'])
+                if m.get('schema_version', 1) == 2:
+                    event = dict(id='completion-sources-' + digest(dict(request=m['request_id'], batch=m['id'])), request_id=m['request_id'], actor_id=m['coordinator_id'], kind='explanation', source='trace.explicit-completion-sources', source_id=m['id'], time=closeout['time'], completeness='partial', detail=dict(version=1, operations=[dict(operation_id=k, **v) for k,v in sorted(provenance.items())], stop_delivery_inferred=False, full_usage_complete=False))
+                    store.import_bundle(dict(schema_version=1, requests=[], actors=[], events=[event]))
                 for index, row in enumerate(m['coordinator_turns']):
                     _, _, binding = turns.load_binding(row['binding_file'])
                     record = turns.inspect_turn(project, row['session_file'], row['session_id'], binding)
@@ -310,6 +359,7 @@ def run(manifest_file, directory, orca_cli, config=None, auto_cleanup=None):
                         for oid, (key, receipt) in chosen.items():
                             require(digest(recovery.receipt(cfg, key)) == state['receipts'][oid],
                                     'batch_receipt_changed')
+                        verify_explicit()
                         if mode == 'Y':
                             require([artifact(r) for r in closeout['artifacts']] == state['artifacts'],
                                     'batch_artifact_changed')
@@ -318,6 +368,7 @@ def run(manifest_file, directory, orca_cli, config=None, auto_cleanup=None):
                         wr.finalize(project, row['directory'], row['resource_id'], row['acceptance'],
                                     workers, orca_cli, config, mode)
                 finalize('N'); stage('archived')
+                verify_explicit()
                 pinned = []
                 for row in closeout['artifacts']:
                     p = path(row['path'])
@@ -348,13 +399,15 @@ def run(manifest_file, directory, orca_cli, config=None, auto_cleanup=None):
                 stage('cleanup_' + policy['auto_cleanup'])
                 recheck()
                 require([artifact(r) for r in closeout['artifacts']] == pinned, 'batch_artifact_changed')
+                verify_explicit()
                 terminalize(store, m, ops)
                 result = close_request(store, bound_closeout)
                 state.update(status='complete', result=result, full_usage_complete=False,
                              worker_receipts=len(chosen), coordinator_turns=len(m['coordinator_turns']),
                              recorded_coordinator_turns=coordinator_coverage)
                 stage('complete')
-                return dict(status='complete', journal=str(journal), result=result, replay=replay,
+                extra = dict(source_provenance=provenance, explicit_source_operations=len(pin.get('source_descriptions', {})), stop_source_operations=len(ops)-len(pin.get('source_descriptions', {}))) if m.get('schema_version', 1) == 2 else {}
+                return dict(**extra, status='complete', journal=str(journal), result=result, replay=replay,
                             unassociated_receipts=len(diagnostic.get('receipt_errors', [])),
                             coordinator_turns=len(m['coordinator_turns']),
                             recorded_coordinator_turns=coordinator_coverage, full_usage_complete=False)

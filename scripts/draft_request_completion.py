@@ -19,6 +19,7 @@ from lifecycle_io import private_file
 from native_record import identifier
 from trace_store import Store
 from trace_closeout import validate_detail
+from trace_usage import validate_usage
 
 FIELDS = {'schema_version', 'id', 'hook_config', 'request_id', 'expected_reviewer',
           'resource_directories', 'acceptance_file', 'closeout_file', 'coordinator_turns', 'retry_pending'}
@@ -72,9 +73,56 @@ def profile(oid, ops, visiting=None):
     return values, origins
 
 
+def selection(data, ops, cfg, project):
+    """Check saved metadata only; never admit or read the declared transcript."""
+    rows = data['operation_sources']
+    require(isinstance(rows, list) and len(rows) <= 100, 'draft_source_limit')
+    selected = {}; protected = []
+    for row in rows:
+        batch.exact(row, ('operation_id', 'source'))
+        oid = row['operation_id']; identifier(oid)
+        require(oid in ops and oid not in selected, 'draft_source_coverage')
+        source = row['source']
+        require(isinstance(source, dict), 'draft_invalid_source')
+        if source.get('kind') == 'stop':
+            batch.exact(source, ('kind',))
+        else:
+            batch.exact(source, ('kind', 'record_file'))
+            require(source['kind'] == 'explicit_source', 'draft_invalid_source')
+            value = source['record_file']
+            require(isinstance(value, str) and Path(value).is_absolute() and
+                    str(Path(value).resolve(strict=True)) == value, 'draft_source_path')
+            saved = read(value, project)
+            require(isinstance(saved, dict), 'draft_invalid_metadata')
+            op = ops[oid]; role = op['plan']['usage_collection']['role']
+            require(type(saved.get('schema_version')) is int and saved['schema_version'] == 1 and
+                    saved.get('kind') == 'orca_codex_metadata' and saved.get('environment') == 'orca' and
+                    saved.get('provider') == 'codex' and saved.get('project') == str(project) and
+                    op['plan']['project'] == str(project), 'draft_metadata_identity')
+            context = saved.get('request_context')
+            require(isinstance(context, dict) and context.get('request_id') == op['request_id'] and
+                    context.get('role') == role, 'draft_metadata_context')
+            require(saved['verification']['status'] == 'pass', 'draft_metadata_verification')
+            usage = saved['dispatch_usage']; validate_usage(usage)
+            require(all(saved['binding'][k] == op[k] and usage[k] == op[k]
+                        for k in ('task_id', 'dispatch_id')) and
+                    usage['actor_id'] == op['dispatch_id'] and usage['request_id'] == op['request_id'] and
+                    usage['role'] == role and saved['session']['id'] == usage['session_id'],
+                    'draft_metadata_binding')
+            declared = saved['source']['path']
+            require(isinstance(declared, str) and Path(declared).is_absolute() and
+                    str(Path(declared).resolve()) == declared, 'draft_session_path')
+            protected.extend((Path(value), Path(declared)))
+        selected[oid] = source.copy()
+    require(set(selected) == set(ops), 'draft_source_coverage')
+    return selected, protected
+
+
 def build(input_file, output_file):
-    data = read(input_file); batch.exact(data, FIELDS)
-    require(type(data['schema_version']) is int and data['schema_version'] == 1 and
+    data = read(input_file)
+    version = data.get('schema_version') if isinstance(data, dict) else None
+    batch.exact(data, FIELDS | {'operation_sources'} if type(version) is int and version == 2 else FIELDS)
+    require(type(data['schema_version']) is int and data['schema_version'] in (1, 2) and
             type(data['retry_pending']) is bool, 'draft_invalid_version_or_retry')
     for key in ('id', 'request_id'): identifier(data[key])
     require(isinstance(data['expected_reviewer'], str) and 0 < len(data['expected_reviewer'].strip()) <= 200,
@@ -100,6 +148,7 @@ def build(input_file, output_file):
     actors = {a['id']: a for a in bundle['actors']}
     roots = [a['id'] for a in actors.values() if a.get('parent_id') is None and a.get('role') == 'coordinator']
     require(len(roots) == 1, 'draft_unique_root_required'); root = roots[0]
+    selected, source_paths = selection(data, ops, cfg, project) if version == 2 else ({}, [])
     operations = []; origins = {}
     for oid in sorted(ops):
         op = ops[oid]
@@ -108,6 +157,7 @@ def build(input_file, output_file):
         require(a.get('request_id') == data['request_id'] and a.get('role') == c['role'], 'draft_actor_mismatch')
         values, origins[oid] = profile(oid, ops)
         operations.append(dict(operation_id=oid, expected=dict(values, reviewer=data['expected_reviewer'])))
+        if version == 2: operations[-1]['source'] = selected[oid]
     acceptance = existing(data['acceptance_file'], project)
     batch.fingerprint(acceptance, False)
     closeout = read(data['closeout_file'], project)
@@ -136,7 +186,8 @@ def build(input_file, output_file):
     protected += [Path(str(cfg['trace_db']) + s) for s in ('-wal', '-shm', '-journal')]
     protected.append(Path(cfg['ledger']).with_suffix('.lock'))
     protected.extend(batch.path(r['path']) for r in closeout['artifacts'])
-    resources = []; directories = set(); count = 0
+    protected.extend(source_paths)
+    resource_paths = []; resources = []; directories = set(); count = 0
     for value in data['resource_directories']:
         directory = existing(value, project, True)
         require(directory not in directories, 'draft_duplicate_registry'); directories.add(directory); protected.append(directory)
@@ -158,7 +209,12 @@ def build(input_file, output_file):
             require(b.get('owner') in actors, 'draft_resource_owner_unknown')
             require(bool(ops), 'draft_resource_requires_operations')
             protected.extend(Path(b[k]) for k in ('source', 'archive'))
+            resource_paths.extend(Path(b[k]) for k in ('source', 'archive'))
             resources.append(dict(directory=str(directory), resource_id=rid, acceptance=str(acceptance), operation_ids=sorted(ops)))
+    if version == 2:
+        mutable = resource_paths + [Path(cfg['directory'])] + list(directories) + [Path(cfg['ledger']), Path(cfg['trace_db']), Path(data['hook_config'])]
+        require(not any(a.is_relative_to(b) or b.is_relative_to(a) for a in source_paths for b in mutable),
+                'draft_source_mutable_overlap')
     seen = set()
     for row in data['coordinator_turns']:
         batch.exact(row, ('session_file', 'session_id', 'binding_file', 'task_title'))
@@ -174,7 +230,7 @@ def build(input_file, output_file):
     private_file(output, project)
     if output.exists(): existing(output, project)
     batch.validate_artifact_locations(closeout, cfg, output, resources)
-    manifest = dict(schema_version=1, id=data['id'], project=str(project), request_id=data['request_id'],
+    manifest = dict(schema_version=version, id=data['id'], project=str(project), request_id=data['request_id'],
                     coordinator_id=root, hook_config=data['hook_config'], operations=operations,
                     coordinator_turns=data['coordinator_turns'], resources=sorted(resources, key=lambda r:(r['directory'], r['resource_id'])),
                     closeout_file=data['closeout_file'], retry_pending=data['retry_pending'])
