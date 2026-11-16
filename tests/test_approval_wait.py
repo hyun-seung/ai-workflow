@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 import io
 import json
 import os
@@ -138,10 +138,10 @@ class WaitTests(unittest.TestCase):
 
     def test_rejects_foreign_database(self):
         path = self.path.parent / "foreign.sqlite3"
-        with sqlite3.connect(path) as db:db.execute("CREATE TABLE other(value TEXT)")
+        with closing(sqlite3.connect(path)) as db:db.execute("CREATE TABLE other(value TEXT)")
         os.chmod(path, 0o600)
         with self.assertRaises(ValueError):WaitStore(path, self.project)
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db:
             self.assertEqual(db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall(), [("other",)])
 
     def test_input_validation(self):
