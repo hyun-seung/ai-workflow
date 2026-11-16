@@ -68,3 +68,7 @@ python3 -m unittest discover -s tests -p test_collect_request_usage.py -v
 테스트는 기본 `tempfile.TemporaryDirectory()`를 사용한다. `AI_WORKFLOW_TEST_TMP` 환경변수로 이미 존재하는 소유자 전용 fixture 부모 디렉터리를 명시할 수 있다. 과거 작업의 비공개 경로를 생성하거나 재사용하지 않는다.
 
 실제 로컬 조율자의 닫힌 두 턴을 수입하고 같은 명령의 재호출에서 DB 불변을 확인했다. 별도 SQLite 사본과 빈 영수증 디렉터리에서는 실제 종료 worker 원본을 조율자 턴과 함께 회수하고, 재호출·이벤트 복원을 확인했다. 이 시험에서 Stop 미수신 상태는 그대로 유지했다. 독립 검토는 합성 원본·native mock 경계이며 실제 환경 검증과 구분한다. 작성 중인 원본의 변경 감지는 수입을 중단하며 안정된 시점에 같은 입력으로 재시도한다.
+
+동일 호출에서 소스별로 묶은 coordinator turn이 같은 canonical 경로·프로젝트·세션을 사용하면 검증된 파싱 결과 하나를 공유한다. 복구 context도 같은 결과에서 산출한다. 메모리에는 한 소스의 파싱 결과만 유지하며, 선택된 소스들의 dev/inode/size/mtime_ns/ctime_ns를 재사용 전과 live import 직전에 확인한다. 변경되면 오래된 값을 가져오지 않고 중단한다. 새 호출, replay와 restore는 원본을 새로 파싱한다. SQLite commit 승인 직전에도 같은 속성을 확인하여 변경 시 트랜잭션을 거부한다. 전역 캐시나 원시 transcript 복사본은 만들지 않는다. 파일시스템 확인 이후의 외부 변경을 잠그는 기능은 아니다.
+
+명시 저장 원본의 파일 준비 조건은 [읽기 전용 사전검사](source-preflight.md)로 먼저 진단할 수 있다. 실제 닫힌 worker 원본으로 재사용 객체의 동일 호출 내 한 번 파싱과 새 호출의 fresh 파싱을 확인했다. 복수 조율자 턴의 값·context·순서 보존, 원본 교체·append·변경 시 DB rollback은 합성 원본과 SQLite로 독립 검증했다. 이 확인을 실제 요청 전체의 속도 개선율로 해석하지 않는다.

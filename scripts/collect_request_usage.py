@@ -14,8 +14,8 @@ from completion_hook import (bounded_json, load_config, operation_binding,
                              validate_collection, verify_saved_measurement)
 from finish_worker import finish
 from lifecycle_io import locked, private_file, read_json, save, now, orca, exited
-from native_record import identifier, inspect_session, read_session
-from native_turn_record import inspect_turn, load_binding, validate_binding
+from native_record import identifier, inspect_session, read_session, _SelectedSource
+from native_turn_record import inspect_turn, _inspect_parsed_turn, load_binding, validate_binding
 from trace_store import Store
 from trace_usage import import_usage
 
@@ -171,10 +171,13 @@ def collect(manifest_file, directory, cli):
             journal = dict(version=1, pin=pin, time=now())
             save(journal_path, journal, project)
         selected = []
-        for i, (t, b) in enumerate(zip(m['coordinator_turns'], bindings)):
-            current = inspect_turn(project, t['session_file'], t['session_id'], b)
+        selected_turns = {}
+        sources = _SelectedSource()
+        turns = enumerate(zip(m['coordinator_turns'], bindings))
+        for i, (t, b) in sorted(turns, key=lambda item: (item[1][0]['session_file'], item[1][0]['session_id'])):
+            data = sources.read(project, t['session_file'], t['session_id'])
+            current = _inspect_parsed_turn(data, b)
             current['binding_source'] = pin['bindings'][i]
-            data = read_session(project, t['session_file'], t['session_id'])
             if data['sha256'] != current['source']['sha256']:
                 raise ValueError('source_changed_between_inspections')
             interval = current['turn_usage'].get('interval')
@@ -182,7 +185,8 @@ def collect(manifest_file, directory, cli):
             if current['turn_usage']['status'] != 'measured': raise ValueError('coordinator_source_unavailable')
             dest = private_file(directory / (m['id'] + '.turn.' + str(i) + '.json'), project)
             saved = stable_record(dest, current, project)
-            selected.append((dest, m['coordinator_id'], t['task_title'], saved['turn_usage']['measurement_key']))
+            selected_turns[i] = (dest, m['coordinator_id'], t['task_title'], saved['turn_usage']['measurement_key'])
+        selected.extend(selected_turns[i] for i in sorted(selected_turns))
         for i, (w, op) in enumerate(zip(m['worker_sources'], operations)):
             c = op['plan']['usage_collection']
             live_snapshot = fresh_native(cli, op, directory, project)
@@ -227,8 +231,20 @@ def collect(manifest_file, directory, cli):
                 collections = [json.loads(body) for key, body in clone.db.execute('SELECT id,body FROM collections') if key not in before_collections]
             finally: clone.close()
             live = Store(config['trace_db'])
-            try: live.import_bundle(dict(schema_version=1, requests=[], actors=[], events=events, collections=collections))
-            finally: live.close()
+            def guard_commit(action, argument, _second, _database, _trigger):
+                if action == sqlite3.SQLITE_TRANSACTION and argument == 'COMMIT':
+                    try:
+                        sources.check()
+                    except (OSError, ValueError):
+                        return sqlite3.SQLITE_DENY
+                return sqlite3.SQLITE_OK
+            try:
+                sources.check()
+                live.db.set_authorizer(guard_commit)
+                live.import_bundle(dict(schema_version=1, requests=[], actors=[], events=events, collections=collections))
+            finally:
+                live.db.set_authorizer(None)
+                live.close()
         return dict(status='collected', manifest_id=m['id'], measurement_keys=[s[3] for s in selected],
                     stop_delivery_inferred=False, full_usage_complete=False)
 

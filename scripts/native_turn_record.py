@@ -101,6 +101,10 @@ def collect_turn(data, binding):
 
 def inspect_turn(project, session_file, session_id, binding):
     data = read_session(project, session_file, session_id)
+    return _inspect_parsed_turn(data, binding)
+
+
+def _inspect_parsed_turn(data, binding):
     usage = collect_turn(data, binding)
     return dict(schema_version=1, kind='orca_codex_coordinator_turn', environment='orca', provider='codex',
                 recorded_at=datetime.now(timezone.utc).isoformat(), project=str(data['project']), session=data['meta'],

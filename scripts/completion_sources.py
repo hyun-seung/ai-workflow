@@ -16,13 +16,8 @@ def require(value):
 
 
 def private(value):
-    require(isinstance(value, str) and Path(value).is_absolute())
-    p = Path(value)
-    require(str(p.resolve(strict=True)) == value)
-    s = p.stat()
-    require(stat.S_ISREG(s.st_mode) and s.st_uid == os.getuid() and
-            s.st_nlink == 1 and not s.st_mode & 0o077)
-    return p
+    from source_preflight import private_attributes
+    return private_attributes(value)[0]
 
 
 def describe(cfg, operation, source):
