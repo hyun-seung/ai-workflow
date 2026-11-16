@@ -72,3 +72,7 @@ python3 -m unittest discover -s tests -p test_collect_request_usage.py -v
 동일 호출에서 소스별로 묶은 coordinator turn이 같은 canonical 경로·프로젝트·세션을 사용하면 검증된 파싱 결과 하나를 공유한다. 복구 context도 같은 결과에서 산출한다. 메모리에는 한 소스의 파싱 결과만 유지하며, 선택된 소스들의 dev/inode/size/mtime_ns/ctime_ns를 재사용 전과 live import 직전에 확인한다. 변경되면 오래된 값을 가져오지 않고 중단한다. 새 호출, replay와 restore는 원본을 새로 파싱한다. SQLite commit 승인 직전에도 같은 속성을 확인하여 변경 시 트랜잭션을 거부한다. 전역 캐시나 원시 transcript 복사본은 만들지 않는다. 파일시스템 확인 이후의 외부 변경을 잠그는 기능은 아니다.
 
 명시 저장 원본의 파일 준비 조건은 [읽기 전용 사전검사](source-preflight.md)로 먼저 진단할 수 있다. 실제 닫힌 worker 원본으로 재사용 객체의 동일 호출 내 한 번 파싱과 새 호출의 fresh 파싱을 확인했다. 복수 조율자 턴의 값·context·순서 보존, 원본 교체·append·변경 시 DB rollback은 합성 원본과 SQLite로 독립 검증했다. 이 확인을 실제 요청 전체의 속도 개선율로 해석하지 않는다.
+
+## 조율자 바인딩 준비
+
+선택한 닫힌 턴의 줄 번호·메시지 해시는 [조율자 바인딩 초안](coordinator-usage.md#명시적으로-선택한-조율자-턴의-바인딩-초안)으로 준비할 수 있다. 검토한 결과를 이 수집기의 `coordinator_turns`에 명시한다. 초안 생성과 실제 사용량 수입은 별도 단계이며, 열린 턴이나 혼합 업무를 자동 귀속하지 않는다.

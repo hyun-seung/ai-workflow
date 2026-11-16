@@ -61,3 +61,15 @@ binding `schema_version=2`는 기존 `message_line`·`message_sha256` 대신 `sc
 행 순서대로 1~1000개를 연결하며 턴 안의 **모든** 사용자 메시지가 정확히 일치해야 한다. 누락·추가·중복·내용 변경을 허용하지 않는다. 두 번째 이후 메시지는 원본의 유효한 동일 턴 routing이 필수다. 첫 메시지의 routing 부재 호환은 유지하되 잘못된 명시 routing은 거부한다.
 
 출력 `turn_usage.version=3`은 `message_sha256` 대신 `message_bindings`를 보존한다. 물리 측정은 여전히 턴 전체 하나다. 메시지별 토큰으로 쪼개거나, 서로 다른 작업·역할로 비율 배분하지 않는다. 이미 저장된 version 2를 version 3으로 덮어쓰지 않으며 다른 binding으로 같은 물리 키를 수입하면 충돌한다. 과거 애매한 구간을 자동으로 측정값으로 승격하지 않는다.
+
+## 명시적으로 선택한 조율자 턴의 바인딩 초안
+
+`python3 scripts/draft_coordinator_binding.py --input /private/recipe.json --output /private/binding.json`은 이미 종료된 단일 native turn의 기존 schema_version 2 바인딩을 생성한다. 레시피는 정확히 `schema_version: 1`, `project`, `trace_db`, `request_id`, `actor_id`, `task_id`, `session_file`, `session_id`, `native_turn_id`, `scope: "single_work"`를 받는다. 경로는 기존 canonical 절대 경로이며 출력 부모는 미리 존재하는 소유자 전용 비공개 디렉터리로 프로젝트와 Git 밖에 있어야 한다. DB는 기존 요청의 최상위 coordinator actor를 읽기 전용으로 확인한다. `task_id`는 호출자가 지정한 논리 작업 ID이며 native Task 식별자라는 주장이 아니다.
+
+호출자는 선택 턴의 모든 사용자 메시지가 하나의 논리 작업에 속한다고 `single_work`로 선언한다. 도구는 작업 의미를 추론하거나 혼합 턴을 분할하지 않으며 다른 세션이나 시간 범위를 검색하지 않는다. 기존 파서의 정규화 해시와 줄 번호만 기록하고 원문·토큰·도구 출력은 출력하지 않는다. 기존 턴 적격성 및 사용량 검사를 통과해야 초안을 쓸 수 있다. 현재 열린 턴은 사용할 수 없다.
+
+성공은 exit 0과 `status: "draft"`, `requires_review: true`, `execution_authorized: false`다. 부적격 또는 미측정 턴은 exit 1과 제한된 issue 코드, 잘못된 입력·경로·IO·출력 충돌은 exit 2의 안전한 JSON 오류를 반환한다. 동일 바이트 재실행은 현재 소스와 루트를 다시 확인하고 inode와 mtime을 보존한다. 유효한 별도 후속 턴 append 후에도 새 파싱으로 재실행할 수 있다. 다른 기존 출력은 보존한다.
+
+초안은 native 종료 상태 확인, 신원 권한, 전체 요청 커버리지, 작업 승인이나 권한 부여가 아니다. 기존 collector는 별도 import에서 소스를 독립적으로 다시 읽고 검증한다. 이 명령은 DB·ledger·세션을 수정하거나 collector, native finish, 정리 또는 hook을 실행하지 않는다.
+
+합성 파서·SQLite·CLI 경계 검사와 독립 검토를 통과했다. 실제 이전 요청의 닫힌 다중 메시지 턴에서 기존 바인딩과 같은 결과, 파일을 보존하는 재실행, 별도 SQLite 수입·재수입을 확인했다. 원문과 운영 기록은 변경하지 않았다. 이 검증은 선택한 턴 범위이며 전체 조율자 사용량의 자동 수집을 뜻하지 않는다.
