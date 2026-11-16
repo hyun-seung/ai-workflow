@@ -100,23 +100,26 @@ class Store:
     def __init__(self, path, readonly=False):
         self.path = private_db(path, create=not readonly)
         self.db = sqlite3.connect(self.path.as_uri() + ('?mode=ro' if readonly else '?mode=rw'), uri=True)
-        version = self.db.execute('PRAGMA user_version').fetchone()[0]
-        tables = self.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        if version not in (0, 1) or (version == 0 and tables):
+        try:
+            version = self.db.execute('PRAGMA user_version').fetchone()[0]
+            tables = self.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            if version not in (0, 1) or (version == 0 and tables):
+                raise ValueError('Not a supported trace database')
+            if readonly and version != 1:
+                raise ValueError('Trace database is not initialized')
+            if not readonly:
+                self.db.executescript('''
+                CREATE TABLE IF NOT EXISTS records(kind TEXT, id TEXT, request_id TEXT, body TEXT,
+                    PRIMARY KEY(kind,id));
+                CREATE INDEX IF NOT EXISTS by_request ON records(request_id,kind);
+                CREATE TABLE IF NOT EXISTS collections(id TEXT PRIMARY KEY, request_id TEXT, body TEXT);
+                PRAGMA user_version=1;
+                ''')
+            self.db.execute('PRAGMA query_only=' + ('ON' if readonly else 'OFF'))
+        except BaseException:
+            # Failed construction has no caller-owned Store to close, even on interrupt.
             self.db.close()
-            raise ValueError('Not a supported trace database')
-        if readonly and version != 1:
-            self.db.close()
-            raise ValueError('Trace database is not initialized')
-        if not readonly:
-            self.db.executescript('''
-            CREATE TABLE IF NOT EXISTS records(kind TEXT, id TEXT, request_id TEXT, body TEXT,
-                PRIMARY KEY(kind,id));
-            CREATE INDEX IF NOT EXISTS by_request ON records(request_id,kind);
-            CREATE TABLE IF NOT EXISTS collections(id TEXT PRIMARY KEY, request_id TEXT, body TEXT);
-            PRAGMA user_version=1;
-            ''')
-        self.db.execute('PRAGMA query_only=' + ('ON' if readonly else 'OFF'))
+            raise
 
     def close(self):
         self.db.close()
