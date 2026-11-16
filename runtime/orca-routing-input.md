@@ -4,6 +4,8 @@
 
 이 문서는 **선택적 native 상태 연결**을 다룬다. 지침이 연결된 현재 AI가 요청을 읽고 같은 응답에서 판단·제안·대화 선택을 처리하는 기본 진입은 [요청 라우팅 계약](request-routing.md)을 따른다. native hook 검증 때문에 기본 경로나 같은 AI의 지침 기반 역할 적용을 보류하지 않는다.
 
+2026-11-15에는 [공식 원본·사용량 API 조사](native-source-access.md)를 추가했다. Orca 플러그인 목록 API는 원본 경로를 제공하지 않으며, Codex의 경로/토큰 계약을 현재 Orca의 같은 provider 연결에서 받는 bridge는 미확인이다. 새 plugin·server·worker나 같은 hook 시험을 실행한 것은 아니다.
+
 ## 확인한 지원 범위
 
 ### 2026-11-14 공식 웹 문서 재확인

@@ -122,6 +122,8 @@ worker가 연결된 선택을 `choose: cancel`하면 먼저 이후 실행 동의
 
 ## 검증과 남은 범위
 
+2026-11-15의 [같은 AI 운영 점검](routing-operation-check.md)에서는 가상 입력 24건을 매번 새 CLI 프로세스로 실행해 후속·취소·거절·목표/제어 변경·파일 불변성과 수동 프로필 처리 경계를 확인했다. 앱 자동 연결·실제 native 중지·사용자 평가와는 구분한다.
+
 ```sh
 python3 -m unittest discover -s tests -p test_routing_flow.py -v
 python3 -m unittest discover -s tests -p test_dispatch_stop.py -v

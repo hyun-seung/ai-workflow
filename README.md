@@ -29,7 +29,8 @@
 | [runtime/routing-dispatch.md](runtime/routing-dispatch.md), [실제 검증](runtime/routing-integration-check.md) | 수용한 worker 선택과 관리 실행의 opt-in 연결. 실제 요청/적용·재조회/종료 확인, 공급자 관측·토큰·앱 자동 입력은 미확인 |
 | [scripts/compare_routing.py](scripts/compare_routing.py), [비교 안내](runtime/routing-comparison.md) | 기존 측정 파일의 직접/라우팅 한 쌍 비교. 누락·품질 미확인은 절감 판정 보류. 자동화 허용 없음 |
 | [시간·단가 추정 안내](runtime/routing-metrics.md) | 선택적인 v2 입력의 요청 시간·관측 모델 단가 추정. 원본/요금 자동 탐색·실제 청구 인증 없음 |
-| [짧은 운영 안내](runtime/routing-quickstart.md), [비교·평가 준비 묶음](experiments/routing-pilot/README.md) | 최소 사용 흐름, 네 가지 가상 입력·고정 완료 기준·평가 양식. 실제 비교 결과와 구분 |
+| [공식 native 원본 연결 조사](runtime/native-source-access.md) | Orca 목록 API와 Codex thread/토큰 계약의 확인 범위, 현재 미확인인 export/bridge와 필요한 최소 연결 제안 |
+| [짧은 운영 안내](runtime/routing-quickstart.md), [운영 점검](runtime/routing-operation-check.md), [비교·평가 준비 묶음](experiments/routing-pilot/README.md) | 최소 사용 흐름, 같은 AI의 CLI 점검, 네 가지 가상 입력·고정 완료 기준·평가 양식. 실제 비교 결과와 구분 |
 | [AGENTS.md](AGENTS.md), [principles/privacy.md](principles/privacy.md) | 모든 역할에 전달하는 공통 원칙 |
 | [templates/project.workflow.json](templates/project.workflow.json) | 대상 프로젝트의 `.ai-workflow.json`으로 사용할 설정 양식 |
 | [schema/workflow.schema.json](schema/workflow.schema.json) | 설정 파일의 필드·타입·허용값 |
