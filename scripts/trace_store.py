@@ -91,6 +91,11 @@ def private_db(path, create=False):
     return path
 
 
+def validate_search(q, limit):
+    if len(q) > 200 or not 1 <= limit <= 200:
+        raise ValueError('Invalid search/limit')
+
+
 class Store:
     def __init__(self, path, readonly=False):
         self.path = private_db(path, create=not readonly)
@@ -282,7 +287,7 @@ class Store:
         return {'records_received':len(rows)}
 
     def requests(self, q='', limit=100):
-        if len(q)>200 or not 1<=limit<=200: raise ValueError('Invalid search/limit')
+        validate_search(q, limit)
         # Literal substring search, no SQL interpolation or wildcard semantics.
         # Unknown receipt times are not invented from snapshot activity. Keep
         # them after known times, newest local registration first within ties.

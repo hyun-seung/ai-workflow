@@ -94,8 +94,19 @@ JSON bundle: `schema_version: 1`, `requests: []`, `actors: []`, `events: []`, �
 
 127.0.0.1만 bind하며 DB는 각 API 요청에서 mode=ro/query_only로 연다. SQL 매개변수 바인딩, 검색길이/limit/ID 검증, 고정 asset allowlist, textContent 표시, CSP, no-store, Host/Origin/Fetch-Site 검사를 사용한다. 같은 OS 사용자·브라우저 확장에 대한 인증 시스템은 아니며 인터넷 공개 서버로 사용하지 않는다. 단일 HTTPServer로 최소 기능만 제공한다.
 
+API 오류 본문은 기존 `{ "error": "설명" }` 형식을 유지한다. 입력과 경로를 먼저 검사하므로 잘못된 요청의 상태는 DB·라이브러리의 정상 여부와 무관하다.
+
+| 상태 | 조건 |
+| --- | --- |
+| `400` | 잘못된 검색 길이·limit·ID, 중복 키·쿼리 문법 |
+| `404` | 지원하지 않는 경로·쿼리 키 조합 또는 유효한 ID의 요청 없음 |
+| `500` | 유효한 요청에서 DB·라이브러리를 읽거나 검증하지 못함. 내부 경로·원본 오류 없이 일반 오류 반환 |
+
+Host·Origin·Fetch-Site 위반 `403`, 쓰기 메서드 `405`, 긴 URI `414`도 유지한다. 회귀 검사는 실제 loopback HTTP 요청으로 입력 거부·자료 장애·읽기 전용 경계를 확인한다.
+
 ```sh
 python3 -m unittest discover -s tests -p 'test_trace_viewer.py' -v
+python3 -m unittest discover -s tests -p 'test_trace_api_contract.py' -v
 node --test tests/test_trace_frontend.cjs
 python3 -m unittest discover -s tests -v
 ```
