@@ -2,6 +2,8 @@
 
 역할은 책임, 스킬은 그 책임을 수행하는 방법이다. 필요한 역할과 스킬만 선택한다. 이 저장소의 역할별 적용 스킬은 `.agents/skills/ai-role-*/SKILL.md`, 외부 원본의 고정 출처는 [catalog.json](catalog.json), 반복 관리는 [스킬 유지관리](../runtime/skill-maintenance.md)에 있다.
 
+초기 구축은 [운영 준비 완료 기준](rollout.md)으로 마감한다. 이후 후보 추가·교체·은퇴는 정기 관리로 계속하며, 개별 스킬의 미검증 범위는 따로 보존한다.
+
 ## 설치와 선택
 
 외부 원본은 `local/role-skills/library/<ID>/<commit>/`에 설치한다. 자동 발견 위치에 모든 외부 스킬을 넣지 않으므로, 광범위한 트리거가 다른 역할의 작업을 가로채지 않는다. 전역 스킬·hook·권한·도구 설정은 바꾸지 않는다. 다음 명령의 installer 경로는 해당 환경에 설치된 `skill-installer`의 공식 helper로 바꾼다.
