@@ -2,6 +2,8 @@
 
 하위 worker는 생성된 Orca 배정 머리말로 연결한다. 조율자의 일반 대화에는 그런 dispatch가 없으므로 `scripts/native_turn_record.py`는 별도의 명시 연결을 사용한다. dispatch ID를 만들거나 세션 누적값을 요청별로 복제하지 않는다. 현재 Orca·Codex의 닫힌 native 턴을 개별 측정한다. 여러 턴은 [논리 작업 묶음](trace-amendments.md)으로 연결한다.
 
+여러 닫힌 턴을 한 번에 수입하거나 Stop 미수신 worker의 확인된 원본을 함께 회수하려면 [요청별 명시 원본 수집](request-usage-collection.md)을 사용한다. 각 턴의 기존 측정 규칙을 유지하며, 전체 목록을 DB 사본에서 검증한 뒤 새 이벤트를 한 트랜잭션으로 수입한다. 자동 귀속이나 전체 조율 사용량의 완전 수집은 아니다.
+
 ## 연결과 실행
 
 비공개 binding JSON에 요청·기존 최상위 조율자 actor·논리 작업과 정확한 native 턴·사용자 메시지 행/해시를 기록한다. 아래는 가상 값이다.

@@ -34,6 +34,7 @@
 | [runtime/trace-usage.md](runtime/trace-usage.md), [scripts/trace_usage.py](scripts/trace_usage.py) | 원래 actor를 보존하는 배정별 토큰 DB 수입, 물리 구간 중복·충돌 검사와 집계 |
 | [runtime/trace-observations.md](runtime/trace-observations.md) | 실행자·제품 담당자·검증 대상·판정자를 구분하는 관측 생성과 저장 전 검사 |
 | [runtime/coordinator-usage.md](runtime/coordinator-usage.md) | 배정 ID 없는 조율자 단일 턴의 명시 연결·토큰 수집, 부분 측정 구분 |
+| [runtime/request-usage-collection.md](runtime/request-usage-collection.md), [scripts/collect_request_usage.py](scripts/collect_request_usage.py) | 여러 명시 조율자 턴·확인된 worker 원본의 검증·원자적 수입, Stop 수신과 원본 회수 구분 |
 | [harness.json](harness.json), [runtime/delegation.md](runtime/delegation.md) | 임시 공간 자동 정리 Y/N(기본 Y), 작업별 동시·누적 위임 한도와 native 호출 전 예약 |
 | [runtime/harness.md](runtime/harness.md), [scripts/prepare_handoff.py](scripts/prepare_handoff.py) | 작업 크기에 맞는 조율, 중복 대기 처리 규칙, 명시 입력 파일의 인계 준비 |
 | [runtime/approval-waits.md](runtime/approval-waits.md), [scripts/approval_wait.py](scripts/approval_wait.py) | 승인·질문 대기 관측, 확인된 요청의 중복 억제, 알림 전달 확인과 단발성 Orca 조회 |
