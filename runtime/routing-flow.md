@@ -111,6 +111,7 @@ DB 반영을 원하면 실행 시작 전에 기존 비공개 DB에 요청과 담
 worker가 연결된 선택을 `choose: cancel`하면 먼저 이후 실행 동의를 취소하고, 저장한 ledger/operation/계획과 정확한 native task/dispatch를 대조한 뒤 guarded `worker-stop`을 요청한다. 취소 요청은 native 호출 전에 ledger에 기록한다. 동시 호출·재시작·timeout 이후에도 stop을 자동 반복하지 않는다. 원본 영수증과 후속 `worker-show`를 확인하며 Keep open·custody 거절을 우회하지 않는다.
 
 - 실제 배정된 worker의 `state: released`는 기존 exact-worker 종료 검사에 통과한 경우다. stop 성공 영수증만으로 종료를 확정하지 않는다.
+- native worker의 `stopped`도 정확한 로컬 신원·종료된 dispatch·`exactWorker: true`·`status: exited`가 함께 확인되면 해제한다. outcome은 `stopped`로 보존하며 성공한 의존 작업으로 취급하지 않는다. [실제 취소 점검](routing-cancellation-check.md)에서 발견한 상태 조합이다.
 - 시작 전 `runtime_access_denied`·실패 종료 코드·`not_started` 상태·모든 native ID 부재가 함께 확인되면 취소 시 예약만 해제한다. native 조회/중지 호출 없이 `cancellation_evidence.kind: not_started_permission_denied`, `stop_request.native_call: false`를 남긴다. worker의 종료를 관측했다는 뜻이 아니며 `exit_evidence`를 만들지 않는다. 원래 거부 영수증과 누적 한도는 보존하고 같은 operation의 재실행은 막는다.
 - `release: unconfirmed`나 `cancellation_pending`이면 물리적 중지는 미확인이다. 활성 슬롯을 유지하고 재시도·새 배정을 막는다. 시작 자체가 unknown이고 dispatch ID가 없으면 공식 영수증 확인이 먼저다.
 - 수용 취소는 저장됐지만 환경·권한·조회가 막힌 경우 `selection_cancelled: true`, `runtime_stopped: false`로 구분한다. 같은 원본 환경에서 해당 참조의 `stop`/`refresh`로 복구한다. 알 수 없는 stop을 무작정 다시 호출하지 않는다.
@@ -123,6 +124,8 @@ worker가 연결된 선택을 `choose: cancel`하면 먼저 이후 실행 동의
 ## 검증과 남은 범위
 
 2026-11-15의 [같은 AI 운영 점검](routing-operation-check.md)에서는 가상 입력 24건을 매번 새 CLI 프로세스로 실행해 후속·취소·거절·목표/제어 변경·파일 불변성과 수동 프로필 처리 경계를 확인했다. 앱 자동 연결·실제 native 중지·사용자 평가와는 구분한다.
+
+2026-11-16 [실제 취소 점검](routing-cancellation-check.md)은 worker 한 건의 중지·정확한 종료·슬롯 해제·취소 replay를 확인했다. 자식 IPC 차단으로 준비 신호는 실패했으며 해당 정상 경로는 미검증이다. `stopped` 호환성 수정과 관련 회귀 106개를 확인했고 추가 실행·중지 재시도는 하지 않았다.
 
 ```sh
 python3 -m unittest discover -s tests -p test_routing_flow.py -v

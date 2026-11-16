@@ -78,6 +78,43 @@ class StopTests(unittest.TestCase):
             stop.assert_called_once()
         self.assertEqual(len(self.ledger.read()['operations']), 1)
 
+    def test_stopped_worker_with_failed_dispatch_releases_without_becoming_success(self):
+        # A failed checkpoint can leave a failed Dispatch and a physically stopped
+        # worker. Preserve that outcome while recognizing exact exit evidence.
+        value = self.snapshot()
+        value['result']['dispatch']['status'] = 'failed'
+        value['result']['worker']['state'] = 'stopped'
+        with patch.object(guard, 'orca', return_value=value) as query, \
+                patch.object(guard, 'invoke_stop', return_value=({'ok': True, 'result': {'state': 'stopped'}}, 0)) as stop:
+            result = self.ledger.stop('operation_example', 'example')
+            self.assertEqual((result['state'], result['outcome']), ('released', 'stopped'))
+            self.assertTrue(result['exit_evidence']['exact_worker'])
+            count = query.call_count
+            self.assertTrue(self.ledger.stop('operation_example', 'example')['replay'])
+            self.assertEqual(query.call_count, count)
+            stop.assert_called_once()
+        self.assertEqual(len(self.ledger.read()['operations']), 1)
+        successor = plan(self.project)
+        successor['depends_on'] = ['operation_example']
+        with self.assertRaisesRegex(guard.LimitReached, 'dependency_not_successfully_released'):
+            self.ledger.reserve('request_example', 'successor', successor, self.limits)
+
+    def test_stopped_state_does_not_replace_exit_identity_or_terminal_dispatch_checks(self):
+        for change in ('live', 'unverifiable', 'task', 'dispatch', 'worker', 'remote', 'pending', 'failed_response'):
+            value = self.snapshot()
+            result = value['result']
+            result['worker']['state'] = 'stopped'
+            if change == 'live': result['observation']['status'] = 'running'
+            elif change == 'unverifiable': result['observation']['exactWorker'] = False
+            elif change == 'task': result['dispatch']['taskId'] = 'task_other'
+            elif change == 'dispatch': result['dispatch']['id'] = 'ctx_other'
+            elif change == 'worker': result['worker']['dispatchId'] = 'ctx_other'
+            elif change == 'remote': result['dispatch']['hostScope']['kind'] = 'remote'
+            elif change == 'pending': result['dispatch']['status'] = 'pending'
+            elif change == 'failed_response': value['ok'] = False
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                guard.exited(value, 'task_1', 'ctx_1')
+
     def test_native_stop_has_exact_dispatch_local_environment_and_no_shell(self):
         result = subprocess.CompletedProcess('example', 1, '{"ok":false,"error":{"code":"stop_unknown"}}', '')
         with patch.object(guard.subprocess, 'run', return_value=result) as run:
