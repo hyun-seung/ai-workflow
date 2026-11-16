@@ -75,3 +75,5 @@ python3 scripts/skill_catalog.py check
 적용 대상은 명시한 로컬 Orca 작업 공간이다. 주간 시각·timezone·자동화 ID·CLI와 installer의 실제 경로는 `local/role-skills/registration.json`에 둔다. 비활성 상태에서 수동 시험 후 활성화한다. 결과는 Orca Automations의 실행 이력과 각 실행 세션에서 확인한다. 현재 대화나 외부 메신저로 알림을 보내지는 않는다. 기기·Orca가 오프라인이거나 지정 workspace가 삭제되면 실행되지 않을 수 있고, 다른 checkout으로 자동 이동하지 않는다.
 
 precheck로 자료·설치 무결성을 확인한다. Run now는 Orca 사양상 precheck를 건너뛰므로 요청문에서도 같은 확인을 한다. 실제 권한·모델은 실행 시 확인하고 부모의 성공을 자식 권한으로 간주하지 않는다. 실패를 새 worker·예약·권한 변경으로 우회하지 않는다. 후보·변경 개수 제한은 모델 토큰 상한 강제 기능이 아니다.
+
+예약의 실제 결과와 요청별 스킬 기록을 연결할 때는 [운영 확인 절차](trace-skills.md#실제-운영-연결을-확인할-때)를 따른다. 지연 실행, 도구의 실행 완료, 검토 내용의 partial/failed와 화면 반영을 각각 보존한다. 운영 관측을 예약 담당자의 원래 실행 기록이나 전체 품질 인증으로 바꾸지 않는다.
