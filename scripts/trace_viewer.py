@@ -6,16 +6,17 @@ import sqlite3
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
-from trace_store import Store, load_bundle, load_file, orca_bundle, encoded
+from trace_store import Store, load_bundle, load_file, orca_bundle, encoded, ident, validate_search
 from trace_closeout import close_request
 from trace_usage import import_usage
 from trace_observation import import_observation
 from trace_amendments import import_amendment, event_state
+from trace_skills import library_snapshot
 
 ASSETS = Path(__file__).with_name('trace_web')
 
 
-def handler_for(db_path):
+def handler_for(db_path, skills_root=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args): pass  # private request/search contents never logged
 
@@ -35,26 +36,43 @@ def handler_for(db_path):
                 self.reply(403, {'error':'Local same-origin access only'}); return
             if len(self.path)>2048:
                 self.reply(414, {'error':'URI too long'}); return
-            path = urlsplit(self.path)
+            try:
+                path = urlsplit(self.path)
+            except ValueError:
+                self.reply(400, {'error':'Invalid query'}); return
             assets = {'/':('index.html','text/html'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css')}
             if path.path in assets:
                 name,kind = assets[path.path]
                 self.reply(200,(ASSETS/name).read_bytes(),kind+'; charset=utf-8'); return
-            store = None
             try:
-                query = parse_qs(path.query, strict_parsing=True)
+                query = parse_qs(path.query, strict_parsing=True, keep_blank_values=True)
                 if any(len(v)!=1 for v in query.values()): raise ValueError('Repeated query key')
-                store = Store(db_path, readonly=True)
-                if path.path == '/api/requests' and not set(query)-{'q','limit'}:
-                    result = store.requests(query.get('q',[''])[0], int(query.get('limit',['100'])[0]))
+                if path.path == '/api/skills' and not query:
+                    operation = 'skills'
+                elif path.path == '/api/requests' and not set(query)-{'q','limit'}:
+                    operation = 'requests'
+                    search, limit = query.get('q',[''])[0], int(query.get('limit',['100'])[0])
+                    validate_search(search, limit)
                 elif path.path == '/api/request' and set(query)=={'id'}:
-                    result = store.request(query['id'][0])
-                    if result is None:
-                        self.reply(404,{'error':'Request not found'}); return
+                    operation = 'request'
+                    request_id = ident(query['id'][0])
                 else:
                     self.reply(404,{'error':'Not found'}); return
+            except (ValueError, KeyError):
+                self.reply(400,{'error':'Invalid query'}); return
+
+            # Valid client input can still encounter broken private sources.
+            # Their validation failures are server faults, not invalid queries.
+            store = None
+            try:
+                if operation == 'skills':
+                    result = library_snapshot(skills_root)
+                else:
+                    store = Store(db_path, readonly=True)
+                    result = store.requests(search, limit) if operation == 'requests' else store.request(request_id)
+                    if result is None:
+                        self.reply(404,{'error':'Request not found'}); return
                 self.reply(200,result)
-            except (ValueError, KeyError): self.reply(400,{'error':'Invalid query'})
             except Exception: self.reply(500,{'error':'기록을 읽을 수 없습니다'})
             finally:
                 if store: store.close()
@@ -79,12 +97,13 @@ def main():
     l = sub.add_parser('list'); l.add_argument('--q',default=''); l.add_argument('--limit',type=int,default=100)
     e = sub.add_parser('export'); e.add_argument('--request-id',required=True); e.add_argument('--format', choices=('json','jsonl'), default='json')
     s = sub.add_parser('serve'); s.add_argument('--port',type=int,default=8765)
+    s.add_argument('--skills-root', help='Explicit ai-workflow managed-library root; read-only')
     args = p.parse_args()
     try:
         if args.command == 'serve':
             store = Store(args.db,readonly=True); store.close()
             if not 1<=args.port<=65535: raise ValueError('Invalid port')
-            server = HTTPServer(('127.0.0.1',args.port),handler_for(args.db))
+            server = HTTPServer(('127.0.0.1',args.port),handler_for(args.db, args.skills_root))
             print(f'http://127.0.0.1:{server.server_port}',flush=True)
             try: server.serve_forever()
             except KeyboardInterrupt: pass

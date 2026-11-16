@@ -19,10 +19,11 @@ from trace_observation import (SOURCE as OBSERVATION_SOURCE,
 
 import trace_amendments as amendments
 import trace_profiles as profiles
+import trace_skills as skills
 
 MAX_BYTES = 8 * 1024 * 1024
 KINDS = {'user_request', 'decision', 'assignment', 'instruction', 'tool_call', 'tool_result',
-         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion', 'usage', 'usage_group', 'revision', 'profile'}
+         'question', 'approval_request', 'approval_resolution', 'handoff', 'verification', 'explanation', 'completion', 'usage', 'usage_group', 'revision', 'profile', 'skill_use'}
 FORBIDDEN = {'analysis', 'reasoning', 'thinking', 'chain_of_thought'}
 ROLE_IDS = {'coordinator', 'architect', 'designer', 'backend', 'frontend', 'verifier'}
 
@@ -90,6 +91,11 @@ def private_db(path, create=False):
     return path
 
 
+def validate_search(q, limit):
+    if len(q) > 200 or not 1 <= limit <= 200:
+        raise ValueError('Invalid search/limit')
+
+
 class Store:
     def __init__(self, path, readonly=False):
         self.path = private_db(path, create=not readonly)
@@ -125,6 +131,8 @@ class Store:
         # an invalid field or turn its source marker into an untyped legacy row.
         if isinstance(bundle.get('events'), list):
             for event in bundle['events']:
+                if isinstance(event, dict) and skills.uses_contract(event):
+                    skills.validate_event(event)
                 if isinstance(event, dict) and profiles.uses_contract(event):
                     profiles.validate_event(event)
                 if isinstance(event, dict) and amendments.uses_contract(event):
@@ -181,6 +189,8 @@ class Store:
                     if 'detail' not in row: raise ValueError('Event detail missing')
                     if profiles.uses_contract(row):
                         profiles.validate_event(row)
+                    if skills.uses_contract(row):
+                        skills.validate_event(row)
                     if amendments.uses_contract(row):
                         amendments.validate_event(row)
                     if uses_contract(row):
@@ -235,6 +245,8 @@ class Store:
                     raise ValueError('Unknown actor/parent '+ref)
                 if kind == 'event' and profiles.uses_contract(row):
                     profiles.validate_store(self, row)
+                if kind == 'event' and skills.uses_contract(row):
+                    skills.validate_store(self, row)
                 if kind == 'event' and row.get('kind') == 'usage':
                     validate_usage_store(self, row)
                 if kind == 'event' and uses_contract(row):
@@ -278,7 +290,7 @@ class Store:
         return {'records_received':len(rows)}
 
     def requests(self, q='', limit=100):
-        if len(q)>200 or not 1<=limit<=200: raise ValueError('Invalid search/limit')
+        validate_search(q, limit)
         # Literal substring search, no SQL interpolation or wildcard semantics.
         # Unknown receipt times are not invented from snapshot activity. Keep
         # them after known times, newest local registration first within ties.

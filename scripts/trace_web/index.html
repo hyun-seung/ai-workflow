@@ -12,7 +12,7 @@
 <header class="app-header">
 <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div>
 <div><p class="eyebrow">AI WORKFLOW</p><h1>요청별 작업 대시보드</h1><p class="header-note">내 요청이 누구에게, 어떻게 전달됐는지 한눈에.</p></div>
-<button id="refresh" class="refresh" type="button">↻ <span>새로고침</span></button>
+<button id="refresh" class="refresh" type="button" aria-label="요청 기록 새로고침">↻ <span>새로고침</span></button>
 </header>
 <div class="layout">
 <aside aria-label="요청 탐색">
@@ -42,6 +42,10 @@
 </div>
 </details>
 <section id="metadata" aria-label="기록 근거"></section>
+<section aria-label="스킬 라이브러리 점검">
+<details id="skill-library"><summary>스킬 라이브러리 · 정기 검토</summary>
+<div class="details-content"><p id="skill-library-status" role="status">펼치면 연결된 점검 정보를 조회합니다.</p><div id="skill-library-body"></div></div>
+</details></section>
 <footer>명시적으로 수입한 기록 · 읽기 전용</footer>
 </main>
 </div>

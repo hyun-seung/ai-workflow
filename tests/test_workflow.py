@@ -161,6 +161,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("gpt-6.1-sol", recorded["args"])
         self.assertIn("COMMON_POLICY", recorded["stdin"])
         self.assertIn("ROLE_POLICY", recorded["stdin"])
+        self.assertIn(f"자료 기준 경로: {self.template / 'role.md'}", recorded["stdin"])
         self.assertIn(task, recorded["stdin"])
         self.assertNotIn(task, recorded["args"])
         self.assertFalse(marker.exists())

@@ -8,6 +8,8 @@
 
 등록된 작업과 임시 자원으로 [마감 입력 초안](runtime/manifest-draft.md)을 만들고, 조율자가 수용한 요청은 [일괄 마감 명령](runtime/request-completion.md)으로 수집·전체 보관·사전 검증·정리·SQLite 마감을 연결할 수 있습니다. 초안 생성과 제품 수용·실행은 구분하며, 정리 정책은 Y/N 선택·기본 Y입니다. 실제 사용량은 확인한 구간만 집계합니다.
 
+역할별 전문 스킬은 [운영·인계 가이드](skills/operations.md)에서 설치·작업별 선택·실제 사용 기록·문제 복구 순서로 연결합니다. 외부 원본의 고정 버전과 로컬 관리 상태를 사용하며, 문서 연결·설치·작업 적용·품질 검증을 구분합니다. 저장소 복제만으로 원본 라이브러리·활성 목록·주간 예약이 다른 설치에 자동 배포되지는 않습니다.
+
 ## 무엇을 바꾸면 되나요?
 
 | 경로 | 용도 |
@@ -17,6 +19,9 @@
 | [runtime/environments/](runtime/environments/README.md), [scripts/startup.py](scripts/startup.py) | 세션 근거·연결 확인 후 Orca/Paseo 가이드 선택 |
 | [projects/](projects/README.md), [templates/project.startup.json](templates/project.startup.json) | 상위 폴더와 자식 저장소의 프로젝트 지침 연결 |
 | [roles/](roles/README.md) | 각 역할의 책임·결과물·검증 기준 |
+| [skills/](skills/README.md), [역할 스킬 유지관리](runtime/skill-maintenance.md) | 역할별 적용 스킬, 고정 원본의 로컬 설치·선택, 주간 신규·인기·대체 검토와 복구 가능한 은퇴 |
+| [스킬 운영·인계](skills/operations.md), [운영 준비 완료 기준](skills/rollout.md) | 작업별 진입 명령·새 설치 연결·실패 복구와 초기 구축의 마감 기준 |
+| [Web 역할 시험 화면](examples/role-ui-trial/README.md), [시험 서버](scripts/role_ui_trial.py) | 가상 업무 화면·loopback API로 경계 데이터·초점·실패/재시도·중복 요청을 브라우저에서 재현 |
 | [AGENTS.md](AGENTS.md), [principles/privacy.md](principles/privacy.md) | 모든 역할에 전달하는 공통 원칙 |
 | [runtime/session-practices.md](runtime/session-practices.md) | 대화 분리·계획·캐시·검증의 실무 기준 |
 | [runtime/guidance-maintenance.md](runtime/guidance-maintenance.md) | 공식 문서 주간 점검·변경안 제안; 로컬 Orca 예약 시험 완료, 자동 적용·병합 없음 |
@@ -32,6 +37,7 @@
 | [runtime/manifest-draft.md](runtime/manifest-draft.md), [scripts/draft_request_completion.py](scripts/draft_request_completion.py) | 등록 정보와 후속 배정 계보로 검토 가능한 마감 manifest 초안 생성 |
 | [runtime/trace-viewer.md](runtime/trace-viewer.md), [runtime/trace-closeout.md](runtime/trace-closeout.md) | 요청→역할→작업 흐름, 토큰 표시·상세, 결과 파일·검증 근거와 마감 연결 |
 | [runtime/trace-usage.md](runtime/trace-usage.md), [scripts/trace_usage.py](scripts/trace_usage.py) | 원래 actor를 보존하는 배정별 토큰 DB 수입, 물리 구간 중복·충돌 검사와 집계 |
+| [runtime/trace-skills.md](runtime/trace-skills.md), [scripts/trace_skills.py](scripts/trace_skills.py) | 역할별 스킬 선택·참고·적용·실행 기록과 읽기 전용 라이브러리·정기 검토 표시 |
 | [runtime/trace-observations.md](runtime/trace-observations.md) | 실행자·제품 담당자·검증 대상·판정자를 구분하는 관측 생성과 저장 전 검사 |
 | [runtime/coordinator-usage.md](runtime/coordinator-usage.md) | 배정 ID 없는 조율자 단일 턴의 명시 연결·토큰 수집, 부분 측정 구분 |
 | [runtime/request-usage-collection.md](runtime/request-usage-collection.md), [scripts/collect_request_usage.py](scripts/collect_request_usage.py) | 여러 명시 조율자 턴·확인된 worker 원본의 검증·원자적 수입, Stop 수신과 원본 회수 구분 |

@@ -8,37 +8,37 @@
       "model": "gpt-6.1-sol",
       "effort": "low",
       "sandbox": "read-only",
-      "instructions": ["roles/coordinator.md"]
+      "instructions": ["roles/coordinator.md", ".agents/skills/ai-role-coordinator/SKILL.md"]
     },
     "architect": {
       "model": "gpt-6-astra",
       "effort": "high",
       "sandbox": "read-only",
-      "instructions": ["roles/architect.md"]
+      "instructions": ["roles/architect.md", ".agents/skills/ai-role-architect/SKILL.md"]
     },
     "designer": {
       "model": "gpt-6.1-terra",
       "effort": "medium",
       "sandbox": "read-only",
-      "instructions": ["roles/designer.md"]
+      "instructions": ["roles/designer.md", ".agents/skills/ai-role-designer/SKILL.md"]
     },
     "backend": {
       "model": "gpt-6.1-sol",
       "effort": "medium",
       "sandbox": "workspace-write",
-      "instructions": ["roles/backend-developer.md"]
+      "instructions": ["roles/backend-developer.md", ".agents/skills/ai-role-backend/SKILL.md"]
     },
     "frontend": {
       "model": "gpt-6.1-sol",
       "effort": "medium",
       "sandbox": "workspace-write",
-      "instructions": ["roles/frontend-developer.md"]
+      "instructions": ["roles/frontend-developer.md", ".agents/skills/ai-role-frontend/SKILL.md"]
     },
     "verifier": {
       "model": "gpt-6.1-sol",
       "effort": "medium",
       "sandbox": "read-only",
-      "instructions": ["roles/verifier.md"]
+      "instructions": ["roles/verifier.md", ".agents/skills/ai-role-verifier/SKILL.md"]
     }
   }
 }
