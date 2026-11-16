@@ -55,6 +55,39 @@ class RoutingTests(unittest.TestCase):
             self.assertEqual(result['action'], 'direct')
             self.assertEqual(result['message'], '')
 
+    def test_missing_input_suppresses_candidates_and_previous_reuse_without_catalog(self):
+        candidate = recommend(role='architect', model='gpt-6-astra', effort='xhigh', execution='worker')
+        for analysis in ({'needs_input': True}, dict(candidate, needs_input=True)):
+            with self.subTest(analysis=analysis), patch.object(router, 'load_catalog', side_effect=AssertionError('catalog read')) as load:
+                result = router.route(request(analysis=analysis, followup=True, previous=self.previous()), load)
+                self.assertEqual((result['action'], result['reason']), ('needs_input', 'required_input_missing'))
+                self.assertEqual(result['message'], '')
+                self.assertEqual(result['profile']['model'], 'gpt-6.1-sol')
+                self.assertIsNone(result['profile']['role'])
+                self.assertFalse(result['executable'])
+                self.assertEqual(result['router_model_calls'], 0)
+                load.assert_not_called()
+
+    def test_missing_input_does_not_override_direct_enable_auto_or_change_locked_profile(self):
+        for mode, expected in (('direct', 'direct'), ('auto', 'unsupported')):
+            with self.subTest(mode=mode):
+                self.assertEqual(self.route(controls={'mode': mode}, analysis={'needs_input': True})['action'], expected)
+        fixed = dict(role_locked=True, model_locked=True, effort_locked=True, delegation='forbid')
+        with patch.object(router, 'load_catalog', side_effect=AssertionError('catalog read')) as load:
+            result = router.route(request(controls=fixed, analysis=dict(recommend(role='architect'), needs_input=True)), load)
+        self.assertEqual(result['action'], 'needs_input')
+        self.assertEqual(result['profile'], router.profile(request()['current']))
+        load.assert_not_called()
+
+    def test_missing_input_flag_is_strict_and_false_keeps_existing_recommendation_contract(self):
+        for flag in (None, 0, 1, 'true', []):
+            with self.subTest(flag=flag), self.assertRaisesRegex(ValueError, 'invalid_needs_input'):
+                self.route(analysis={'needs_input': flag}, followup=True, previous=self.previous())
+        with self.assertRaisesRegex(ValueError, 'recommendation_required'):
+            self.route(analysis={'needs_input': False})
+        self.assertEqual(self.route(analysis={'needs_input': False, 'recommendation': None})['action'], 'direct')
+        self.assertEqual(self.route(analysis=dict(recommend(role='architect'), needs_input=False))['action'], 'propose')
+
     def test_explicit_always_frequency_gets_a_short_keep_proposal(self):
         result = self.route(controls={'frequency': 'always'}, analysis={'recommendation': None})
         self.assertTrue(result['message'])
@@ -201,6 +234,14 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertEqual(result.stdout, b'')
             self.assertNotIn(b'PRIVATE_VALUE', result.stderr)
+
+    def test_missing_input_cli_returns_success_without_a_proposal(self):
+        result = self.run_cli(json.dumps(request(analysis={'needs_input': True})).encode())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        value = json.loads(result.stdout)
+        self.assertEqual(value['action'], 'needs_input')
+        self.assertEqual(value['message'], '')
+        self.assertNotIn('changes', value)
 
 
 if __name__ == '__main__':

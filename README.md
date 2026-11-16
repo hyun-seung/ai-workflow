@@ -6,9 +6,9 @@
 
 현재는 **환경 가이드 선택·연결 확인**, 단일 Codex 역할 실행·기록·집계, 관리 경로의 위임 한도, 명시적으로 수입한 실행 기록의 SQLite 대시보드를 제공합니다. Orca 네이티브 위임·결과 반환과 새 Codex worker의 대신 승인 적용은 제한된 실제 작업에서 확인했습니다. 닫힌 단일 native 턴의 배정별 토큰을 완료 기록에 저장하고, 지정된 DB에 중복 없이 연결해 요청·역할·작업별로 표시합니다. 조율자 등 누락된 역할의 전체 수집, 자동 업무 분해, Paseo 실제 위임, 복수 저장소 통합은 남아 있습니다. [하네스 개선 상태와 다음 작업](runtime/harness-roadmap.md)에 구현·운영 규칙·미검증을 구분했습니다.
 
-학습 대화에는 튜터 지침과 공식 근거·연관 Q&A 기준을 제공합니다. 요청 라우팅은 별도 분류 AI 호출 없이 현재 AI의 판단을 추천·선택·역할 지침·명시 위임·취소/종료·완료 수집에 연결합니다. 앱의 구조화된 상태 자동 전달·선택 UI·역할 자동 주입·현재 대화의 모델 전환·자동 위임은 아직 연결하지 않았습니다. 튜터의 대표 응답은 작성 AI의 자체 점검을 수행했고 독립 정확도·학습 효과·비용 절감은 미검증입니다. [통합 개발 순서](learning/development.md)를 기준으로 진행합니다.
+학습 대화에는 튜터 지침과 공식 근거·연관 Q&A 기준을 제공합니다. 요청 라우팅은 별도 분류 AI 호출 없이 현재 AI의 판단을 추천·선택·역할 지침·명시 위임·취소/종료·완료 수집에 연결합니다. 필수 자료 부족을 표시하면 추천과 역할 목록 읽기를 건너뜁니다. 앱의 구조화된 상태 자동 전달·선택 UI·역할 자동 주입·현재 대화의 모델 전환·자동 위임은 아직 연결하지 않았습니다. 튜터의 대표 응답 자체 점검과 다섯 응답의 독립 콘텐츠 검토를 수행했으며 수정본은 자체 확인으로 구분합니다. 실사용 정확도·학습 효과·비용 절감은 미검증입니다. [통합 개발 순서](learning/development.md)를 기준으로 진행합니다.
 
-수용한 worker 선택을 [기존 관리 실행기에 명시 연결](runtime/routing-dispatch.md)하는 경로도 제공합니다. 한 동의를 한 실행에 묶고 선택한 모델·effort를 정확히 전달하며 완료 시 요청·적용·실제 관측을 대조합니다. [실제 한 건](runtime/routing-integration-check.md)에서 역할 수신·Sol/medium 요청/실행환경 적용값·중복 재조회·정확한 종료를 확인했습니다. 공급자 실제 관측·토큰·앱 입력 hook은 미확인입니다.
+수용한 worker 선택을 [기존 관리 실행기에 명시 연결](runtime/routing-dispatch.md)하는 경로도 제공합니다. 한 동의를 한 실행에 묶고 선택한 모델·effort를 정확히 전달하며 완료 시 요청·적용·실제 관측을 대조합니다. [실제 한 건](runtime/routing-integration-check.md)에서 역할 수신·Sol/medium 요청/실행환경 적용값·중복 재조회·정확한 종료를 확인했고, 별도 선택받은 [취소·IPC 시험](runtime/routing-cancellation-check.md)에서는 준비 신호·중지·정확한 종료·취소 replay를 확인했습니다. 공급자 실제 관측·토큰·세부 승인 영수증·앱 입력 hook은 미확인입니다.
 
 기본 진입은 **지침이 연결된 현재 AI가 요청을 읽고 짧게 판단·제안하며 대화에서 선택을 받는 방식**입니다. 같은 AI의 역할은 필요한 지침을 읽어 적용합니다. native hook·별도 선택 UI를 선행 조건으로 두지 않으며, 해당 연결은 상태 자동 전달·측정 수집의 선택적 고도화입니다. 현재 대화의 모델/effort 전환에는 별도 공식 적용 경로가 필요합니다.
 
@@ -23,7 +23,7 @@
 | [roles/](roles/README.md) | 각 역할의 책임·결과물·검증 기준 |
 | [learning/](learning/README.md), [통합 개발 순서](learning/development.md) | 튜터 사용법·출처 기준·심화 방식과 자체 평가·다음 작업 |
 | [runtime/request-routing.md](runtime/request-routing.md), [짧은 진입 지침](runtime/routing-brief.md) | 직접 처리·역할/설정 추천·위임 제어·적용 범위·최소 토큰 원칙 |
-| [scripts/request_router.py](scripts/request_router.py), [입출력 안내](runtime/request-router.md) | 짧은 목록과 구조화된 판단의 로컬 검사. 모델 호출·실행·설정 저장 없음 |
+| [scripts/request_router.py](scripts/request_router.py), [입출력 안내](runtime/request-router.md) | 짧은 목록과 구조화된 판단의 로컬 검사. 필수 자료 부족 시 추천 생략. 모델 호출·실행·설정 저장 없음 |
 | [scripts/routing_choices.py](scripts/routing_choices.py), [선택 기록 안내](runtime/routing-choices.md) | 비공개 요청별 수용·거절·취소·만료와 선택한 역할 지침 준비. 앱의 자동 지침 주입은 미연결 |
 | [scripts/routing_flow.py](scripts/routing_flow.py), [공통 진입 흐름](runtime/routing-flow.md) | 추천·선택·역할 지침·명시 위임·취소/종료·완료 수집/비교 자료 연결. 거절·실행·측정 중복 방지, 미지원 프로필 전환 구분 |
 | [runtime/routing-dispatch.md](runtime/routing-dispatch.md), [실제 검증](runtime/routing-integration-check.md) | 수용한 worker 선택과 관리 실행의 opt-in 연결. 실제 요청/적용·재조회/종료 확인, 공급자 관측·토큰·앱 자동 입력은 미확인 |
@@ -46,6 +46,7 @@
 | [runtime/harness.md](runtime/harness.md), [scripts/prepare_handoff.py](scripts/prepare_handoff.py) | 작업 크기에 맞는 조율, 중복 대기 처리 규칙, 명시 입력 파일의 인계 준비 |
 | [runtime/approval-waits.md](runtime/approval-waits.md), [scripts/approval_wait.py](scripts/approval_wait.py) | 승인·질문 대기 관측, 확인된 요청의 중복 억제, 알림 전달 확인과 단발성 Orca 조회 |
 | [runtime/permission-policy.md](runtime/permission-policy.md), [권한 인계 양식](templates/execution-permissions.md) | 공식 운영 사례, 사전 허용 범위·예외 승인·실제 적용 확인. 권한을 자동 부여하는 설정 파일은 아님 |
+| [짧은 worker IPC 지침](runtime/orca-ipc-brief.md), [checkpoint 양식](templates/orca-ipc-checkpoint.md) | CLI 조율이 필요한 worker의 정식 승인·재시도 구분. 필요한 때만 참조하며 실제 권한을 부여하지 않음 |
 | [runtime/storage-options.md](runtime/storage-options.md) | Markdown·JSON/JSONL·SQLite·MongoDB·PostgreSQL의 역할과 선택 기준 |
 | [runtime/orchestration-contract.md](runtime/orchestration-contract.md) | 보존한 단독 Codex 자동 조율 프로토타입 설계. 구현 보류 |
 | [experiments/](experiments/README.md) | 토큰 효율 개선 절차와 공개용 실험 요약·재현 방법 |
@@ -70,7 +71,7 @@
 
 [사용자 선택 기록](runtime/routing-choices.md)은 요청·추천 버전을 대조해 수용·거절·취소를 보관합니다. 수용한 현재 AI용 역할의 지침만 준비하고, 명시한 후속 대화에는 역할 본문을 다시 읽지 않고 선택을 재사용할 수 있습니다. 앱에 주입하거나 모델·effort·위임을 실행하지 않습니다. 입력 어댑터와 선택 UI의 자동 연결은 남아 있습니다.
 
-[공통 진입 흐름](runtime/routing-flow.md)은 현재 AI의 해석을 위 선택 기록·역할 지침·관리 위임에 연결합니다. 일반 입력에는 도구 실행을 요구하지 않으며, 거절한 추천·역할 본문·worker 실행의 반복을 막습니다. 연결된 worker의 명시 취소는 guarded stop과 정확한 종료 조회를 사용합니다. 현재 대화의 모델 변경은 수동 설정으로 구분하며, 실제 native 중지와 앱 자동 연결은 아직 검증되지 않았습니다.
+[공통 진입 흐름](runtime/routing-flow.md)은 현재 AI의 해석을 위 선택 기록·역할 지침·관리 위임에 연결합니다. 일반 입력에는 도구 실행을 요구하지 않으며, 거절한 추천·역할 본문·worker 실행의 반복을 막습니다. 연결된 worker의 명시 취소는 guarded stop과 정확한 종료 조회를 사용하며 한정된 실제 경로를 확인했습니다. 현재 대화의 모델 변경은 수동 설정으로 구분하고 앱 자동 연결은 미검증으로 유지합니다.
 
 ### 개념을 배우고 싶을 때
 

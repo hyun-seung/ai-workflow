@@ -122,6 +122,28 @@ class FlowTests(unittest.TestCase):
         result = self.request(None, followup=True)
         self.assertEqual(result['action'], 'direct')
 
+    def test_missing_input_fresh_flow_creates_no_proposal_and_can_resume(self):
+        with patch.object(flow, 'load_catalog', side_effect=AssertionError('catalog read')):
+            result = self.call('request', dict(context=self.context, followup=False, analysis={'needs_input': True}))
+        self.assertEqual(result['action'], 'needs_input')
+        self.assertFalse(self.path.exists())
+        self.assertNotIn('selection', result)
+        self.assertEqual(self.request(None)['action'], 'direct')
+        self.assertFalse(self.path.exists())
+
+    def test_missing_input_skips_cached_role_without_cancelling_consent(self):
+        ref = self.propose(); self.choose(ref)
+        before = self.path.read_bytes(), self.path.stat().st_mtime_ns
+        with patch.object(flow, 'load_catalog', side_effect=AssertionError('catalog read')), \
+                patch.object(flow.choices, 'role_context', side_effect=AssertionError('guidance read')):
+            result = self.call('request', dict(context=self.context, followup=True,
+                                              analysis={'needs_input': True, 'recommendation': {'role': 'architect'}}))
+        self.assertEqual(result['action'], 'needs_input')
+        self.assertNotIn('guidance', result)
+        self.assertNotIn('selection', result)
+        self.assertEqual((self.path.read_bytes(), self.path.stat().st_mtime_ns), before)
+        self.assertEqual(self.call('request', dict(context=self.context, followup=True))['action'], 'reuse')
+
     def test_manual_profile_change_never_creates_executable_choice(self):
         result = self.request(dict(model='gpt-6.1-terra', effort='low', reason='가상 하향 추천'))
         self.assertEqual(result['action'], 'manual')

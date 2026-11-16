@@ -43,6 +43,9 @@ def prepare(state, reference, coordinator, request_id, plan, text):
              'Read these common instructions before the assignment, together with the target project and ancestor instructions. '
              'Report unavailable references instead of silently omitting them.']
     parts += ['- ' + str(path) for path in config['instructions']]
+    parts.append('Only if this assignment requires Orca CLI coordination, read ' +
+                 str(ROOT / 'runtime/orca-ipc-brief.md') +
+                 '. This grants no permissions; explicit task limits still apply.')
     if target['role'] is not None:
         parts.append('# Selected ai-workflow role: ' + target['role'])
         remaining = MAX_BYTES

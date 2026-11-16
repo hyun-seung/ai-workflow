@@ -131,6 +131,13 @@
       "input": {"analysis": {"recommendation": null}},
       "expected_action": "direct",
       "response_check": "같은 AI가 비개발 개념을 설명. 정수 예시의 관계 방향과 반례, 관련 학술 교재의 해당 절을 연결하며 새 역할 승인·모델·worker 추천을 하지 않음."
+    },
+    {
+      "id": "TR-17",
+      "request": "모델·effort는 그대로 두고 긴 자료의 설계 대안을 비교해 줘. 검토 자료는 아직 제공하지 않았어.",
+      "input": {"controls": {"model_locked": true, "effort_locked": true, "delegation": "forbid"}, "analysis": {"needs_input": true}},
+      "expected_action": "needs_input",
+      "response_check": "필수 자료를 먼저 확인하며 역할 승인·모델 상향·worker 제안을 만들지 않음. 자료 부족 판단은 현재 AI가 제공한 값이며 라우터의 자동 분류 결과가 아님."
     }
   ]
 }

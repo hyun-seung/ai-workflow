@@ -89,6 +89,15 @@ def validate_target(target, current, settings, catalog):
     return violations
 
 
+def missing_input(analysis):
+    if not isinstance(analysis, dict) or 'needs_input' not in analysis:
+        return False
+    obj(analysis, {'recommendation', 'needs_input'}, 'analysis')
+    if type(analysis['needs_input']) is not bool:
+        raise ValueError('invalid_needs_input')
+    return analysis['needs_input']
+
+
 def route(value, catalog_loader=load_catalog):
     obj(value, {'version', 'session_id', 'request_id', 'revision', 'controls', 'current',
                 'followup', 'previous', 'analysis'}, 'input')
@@ -112,6 +121,8 @@ def route(value, catalog_loader=load_catalog):
         return result('direct', 'explicit_direct')
     if settings['mode'] == 'auto':
         return result('unsupported', 'automatic_execution_not_implemented')
+    if missing_input(value.get('analysis')):
+        return result('needs_input', 'required_input_missing')
 
     previous = value.get('previous')
     if previous is not None:
@@ -132,7 +143,7 @@ def route(value, catalog_loader=load_catalog):
         return result('direct', 'all_changes_disabled', message=message)
     if 'analysis' not in value:
         return result('needs_analysis', 'current_agent_judgment_required')
-    analysis = obj(value['analysis'], {'recommendation'}, 'analysis')
+    analysis = obj(value['analysis'], {'recommendation', 'needs_input'}, 'analysis')
     if 'recommendation' not in analysis:
         raise ValueError('recommendation_required')
     candidate = analysis['recommendation']

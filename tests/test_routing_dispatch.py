@@ -67,6 +67,8 @@ class RoutingDispatchTests(unittest.TestCase):
         self.assertIn('# Selected ai-workflow role: tutor', text)
         self.assertIn(str(choices.ROOT / 'AGENTS.md'), text)
         self.assertIn(str(choices.ROOT / 'principles/privacy.md'), text)
+        self.assertIn(str(choices.ROOT / 'runtime/orca-ipc-brief.md'), text)
+        self.assertNotIn((choices.ROOT / 'runtime/orca-ipc-brief.md').read_text(), text)
         self.assertIn('Source: ' + str(choices.ROOT / 'roles/tutor.md'), text)
         self.assertIn('Resolve relative references against this source file.', text)
         self.assertIn('Do the assignment.', text)
@@ -94,6 +96,7 @@ class RoutingDispatchTests(unittest.TestCase):
         text = invoke.call_args.args[2]
         self.assertIn(str(choices.ROOT / 'AGENTS.md'), text)
         self.assertIn(str(choices.ROOT / 'principles/privacy.md'), text)
+        self.assertIn(str(choices.ROOT / 'runtime/orca-ipc-brief.md'), text)
         self.assertNotIn('# Selected ai-workflow role:', text)
 
     def test_combined_spec_limit_is_checked_before_reservation_or_native_call(self):
