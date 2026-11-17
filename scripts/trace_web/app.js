@@ -15,7 +15,11 @@ const roleCatalog = {
   designer: { label: '디자이너', color: '#b55b8e', background: '#fdf0f7' },
   backend: { label: '백엔드 개발자', color: '#2e9a77', background: '#edf8f3' },
   frontend: { label: '프론트엔드 개발자', color: '#cf7534', background: '#fff5eb' },
-  verifier: { label: '검증자', color: '#a47817', background: '#fff8e6' }
+  verifier: { label: '검증자', color: '#a47817', background: '#fff8e6' },
+  tutor: { label: '학습 튜터', color: '#257b86', background: '#edf8fa' },
+  'learning-concepts': { label: '개념 해설', color: '#4278cf', background: '#edf4ff' },
+  'learning-visuals': { label: '학습 시각화', color: '#b55b8e', background: '#fdf0f7' },
+  'learning-connections': { label: '연관 질문 해설', color: '#8861ce', background: '#f5f0fc' }
 };
 function roleKey(value) {
   return Object.hasOwn(roleCatalog, value) ? value : Object.keys(roleCatalog).find(key => roleCatalog[key].label === value) || null;

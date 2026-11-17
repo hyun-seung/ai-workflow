@@ -3,7 +3,8 @@
 No runtime calls, source text, token estimates or request-level aggregation.
 """
 
-ROLE_IDS = {'coordinator', 'architect', 'designer', 'backend', 'frontend', 'verifier'}
+ROLE_IDS = {'coordinator', 'architect', 'designer', 'backend', 'frontend', 'verifier',
+            'tutor', 'learning-concepts', 'learning-visuals', 'learning-connections'}
 FIELDS = ('input_tokens', 'output_tokens', 'cached_input_tokens', 'reasoning_output_tokens', 'total_tokens')
 PRIMARY = ('input_tokens', 'output_tokens')
 

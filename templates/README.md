@@ -9,6 +9,9 @@
 | [task-input.md](task-input.md) | 사용자 또는 조율자가 한 담당자에게 전달하는 작업 |
 | [task-result.md](task-result.md) | 담당자가 제출하는 산출물·검증·미해결 사항 |
 | [task-report.md](task-report.md) | 조율자가 여러 작업을 종합하는 선택적 보고서 |
+| [routing-evaluation.md](routing-evaluation.md) | 튜터·추천의 AC/출처/제어·실제 수집 범위를 기록하는 빈 평가 양식 |
+| [routing-comparison.json](routing-comparison.json) | 동일 완료 기준과 실제 수집 파일로 직접 처리/라우팅 한 쌍을 비교하는 입력 양식 |
+| [routing-comparison-v2.json](routing-comparison-v2.json), [routing-timing.json](routing-timing.json), [routing-rate-card.json](routing-rate-card.json) | 선택적인 요청 전체 시간·관측 모델의 단가 추정 비교. 빈 날짜/단가는 실제 값으로 채우기 전 실행하지 않음 |
 | [guidance-review.md](guidance-review.md) | 공식 모범 사례를 주기적으로 점검할 때 재사용하는 요청문 |
 | [guidance-review-automation.md](guidance-review-automation.md) | Orca 예약에서 읽는 실행 요청: 원본 보존·로컬 보고서·적용 전 패치 |
 | [가상 예시](../examples/task-contract.md) | 개발과 글쓰기 작업의 입력·결과 연결 |
@@ -32,7 +35,7 @@
 | 결과 | `task_id`, `status`, `summary`, `artifacts`, `checks`, `remaining`, `usage` | 동일한 작업 ID를 사용하고, 모든 완료 기준의 판정과 근거를 남긴다. |
 
 - 작은 작업은 완료 기준 하나와 짧은 결과면 충분하다. 선택 항목은 필요할 때만 남긴다. `artifacts`, `remaining`이 없으면 `없음`을, 사용량을 모르면 `unavailable`을 명시한다.
-- `role`에는 실행 설정의 역할 ID를 사용한다. 기본값은 `coordinator`, `architect`, `designer`, `backend`, `frontend`, `verifier`다. 역할은 기술 조사·글쓰기 같은 작업 유형과 별개이며 실제로 맡을 수 있는 역할을 선택한다.
+- `role`에는 `workflow.json`에 등록된 역할 ID를 사용한다. 개발 역할과 별도의 학습 튜터·준비 역할은 [역할 가이드](../roles/README.md)를 참고한다. 역할은 기술 조사·글쓰기 같은 작업 유형과 별개이며 실제로 맡을 수 있는 역할을 선택한다.
 - `scope`에는 포함·제외 범위를 쓴다. 파일을 수정하면 대상 경로도 명시하고, 조사·검토라면 읽을 자료와 결과물 범위를 적는다. 프로젝트 경로의 기준은 대상 프로젝트 루트이며 외부 자료는 별도 출처를 표시한다.
 - `acceptance`의 `AC-01` 같은 ID를 결과의 `checks`에서 그대로 사용한다. 검증 방법을 실행할 수 없으면 그 기준을 `unverified`로 남긴다. 원래 기준을 바꾸어 통과 처리하지 않는다. 범위 변경이 합의되면 입력을 갱신하고 결과에도 변경 사실을 남긴다.
 - 선택적 추가 확인은 시작할 때 `additional_checks`로 분리하고 미수행 이유를 남긴다. 필수 완료 기준의 실패·미검증을 이 항목으로 옮겨 완료 처리하지 않는다.

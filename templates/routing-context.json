@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "enabled": false,
+  "project": "/path/to/project",
+  "session_id": "session_example",
+  "transcript_path": "/private/path/session.jsonl",
+  "conversation_controls": {},
+  "request_hint": null
+}

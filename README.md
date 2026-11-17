@@ -6,6 +6,12 @@
 
 현재는 **환경 가이드 선택·연결 확인**, 단일 Codex 역할 실행·기록·집계, 관리 경로의 위임 한도, 명시적으로 수입한 실행 기록의 SQLite 대시보드를 제공합니다. Orca 네이티브 위임·결과 반환과 새 Codex worker의 대신 승인 적용은 제한된 실제 작업에서 확인했습니다. 닫힌 단일 native 턴의 배정별 토큰을 완료 기록에 저장하고, 지정된 DB에 중복 없이 연결해 요청·역할·작업별로 표시합니다. 조율자 등 누락된 역할의 전체 수집, 자동 업무 분해, Paseo 실제 위임, 복수 저장소 통합은 남아 있습니다. [하네스 개선 상태와 다음 작업](runtime/harness-roadmap.md)에 구현·운영 규칙·미검증을 구분했습니다.
 
+학습 대화에는 튜터 지침과 공식 근거·연관 Q&A 기준을 제공합니다. 요청 라우팅은 별도 분류 AI 호출 없이 현재 AI의 판단을 추천·선택·역할 지침·명시 위임·취소/종료·완료 수집에 연결합니다. 필수 자료 부족을 표시하면 추천과 역할 목록 읽기를 건너뜁니다. 앱의 구조화된 상태 자동 전달·선택 UI·역할 자동 주입·현재 대화의 모델 전환·자동 위임은 아직 연결하지 않았습니다. 튜터의 대표 응답 자체 점검과 다섯 응답의 독립 콘텐츠 검토를 수행했으며 수정본은 자체 확인으로 구분합니다. 실사용 정확도·학습 효과·비용 절감은 미검증입니다. [통합 개발 순서](learning/development.md)를 기준으로 진행합니다.
+
+수용한 worker 선택을 [기존 관리 실행기에 명시 연결](runtime/routing-dispatch.md)하는 경로도 제공합니다. 한 동의를 한 실행에 묶고 선택한 모델·effort를 정확히 전달하며 완료 시 요청·적용·실제 관측을 대조합니다. [실제 한 건](runtime/routing-integration-check.md)에서 역할 수신·Sol/medium 요청/실행환경 적용값·중복 재조회·정확한 종료를 확인했고, 별도 선택받은 [취소·IPC 시험](runtime/routing-cancellation-check.md)에서는 준비 신호·중지·정확한 종료·취소 replay를 확인했습니다. 공급자 실제 관측·토큰·세부 승인 영수증·앱 입력 hook은 미확인입니다.
+
+기본 진입은 **지침이 연결된 현재 AI가 요청을 읽고 짧게 판단·제안하며 대화에서 선택을 받는 방식**입니다. 같은 AI의 역할은 필요한 지침을 읽어 적용합니다. native hook·별도 선택 UI를 선행 조건으로 두지 않으며, 해당 연결은 상태 자동 전달·측정 수집의 선택적 고도화입니다. 현재 대화의 모델/effort 전환에는 별도 공식 적용 경로가 필요합니다.
+
 등록된 작업과 임시 자원으로 [마감 입력 초안](runtime/manifest-draft.md)을 만들고, 조율자가 수용한 요청은 [일괄 마감 명령](runtime/request-completion.md)으로 수집·전체 보관·사전 검증·정리·SQLite 마감을 연결할 수 있습니다. 초안 생성과 제품 수용·실행은 구분하며, 정리 정책은 Y/N 선택·기본 Y입니다. 실제 사용량은 확인한 구간만 집계합니다.
 
 역할별 전문 스킬은 [운영·인계 가이드](skills/operations.md)에서 설치·작업별 선택·실제 사용 기록·문제 복구 순서로 연결합니다. 외부 원본의 고정 버전과 로컬 관리 상태를 사용하며, 문서 연결·설치·작업 적용·품질 검증을 구분합니다. 저장소 복제만으로 원본 라이브러리·활성 목록·주간 예약이 다른 설치에 자동 배포되지는 않습니다.
@@ -19,6 +25,16 @@
 | [runtime/environments/](runtime/environments/README.md), [scripts/startup.py](scripts/startup.py) | 세션 근거·연결 확인 후 Orca/Paseo 가이드 선택 |
 | [projects/](projects/README.md), [templates/project.startup.json](templates/project.startup.json) | 상위 폴더와 자식 저장소의 프로젝트 지침 연결 |
 | [roles/](roles/README.md) | 각 역할의 책임·결과물·검증 기준 |
+| [learning/](learning/README.md), [통합 개발 순서](learning/development.md) | 튜터 사용법·출처 기준·심화 방식과 자체 평가·다음 작업 |
+| [runtime/request-routing.md](runtime/request-routing.md), [짧은 진입 지침](runtime/routing-brief.md) | 직접 처리·역할/설정 추천·위임 제어·적용 범위·최소 토큰 원칙 |
+| [scripts/request_router.py](scripts/request_router.py), [입출력 안내](runtime/request-router.md) | 짧은 목록과 구조화된 판단의 로컬 검사. 필수 자료 부족 시 추천 생략. 모델 호출·실행·설정 저장 없음 |
+| [scripts/routing_choices.py](scripts/routing_choices.py), [선택 기록 안내](runtime/routing-choices.md) | 비공개 요청별 수용·거절·취소·만료와 선택한 역할 지침 준비. 앱의 자동 지침 주입은 미연결 |
+| [scripts/routing_flow.py](scripts/routing_flow.py), [공통 진입 흐름](runtime/routing-flow.md) | 추천·선택·역할 지침·명시 위임·취소/종료·완료 수집/비교 자료 연결. 거절·실행·측정 중복 방지, 미지원 프로필 전환 구분 |
+| [runtime/routing-dispatch.md](runtime/routing-dispatch.md), [실제 검증](runtime/routing-integration-check.md) | 수용한 worker 선택과 관리 실행의 opt-in 연결. 실제 요청/적용·재조회/종료 확인, 공급자 관측·토큰·앱 자동 입력은 미확인 |
+| [scripts/compare_routing.py](scripts/compare_routing.py), [비교 안내](runtime/routing-comparison.md) | 기존 측정 파일의 직접/라우팅 한 쌍 비교. 누락·품질 미확인은 절감 판정 보류. 자동화 허용 없음 |
+| [시간·단가 추정 안내](runtime/routing-metrics.md) | 선택적인 v2 입력의 요청 시간·관측 모델 단가 추정. 원본/요금 자동 탐색·실제 청구 인증 없음 |
+| [공식 native 원본 연결 조사](runtime/native-source-access.md) | Orca 목록 API와 Codex thread/토큰 계약의 확인 범위, 현재 미확인인 export/bridge와 필요한 최소 연결 제안 |
+| [짧은 운영 안내](runtime/routing-quickstart.md), [운영 점검](runtime/routing-operation-check.md), [비교·평가 준비 묶음](experiments/routing-pilot/README.md) | 최소 사용 흐름, 같은 AI의 CLI 점검, 네 가지 가상 입력·고정 완료 기준·평가 양식. 실제 비교 결과와 구분 |
 | [skills/](skills/README.md), [역할 스킬 유지관리](runtime/skill-maintenance.md) | 역할별 적용 스킬, 고정 원본의 로컬 설치·선택, 주간 신규·인기·대체 검토와 복구 가능한 은퇴 |
 | [스킬 운영·인계](skills/operations.md), [운영 준비 완료 기준](skills/rollout.md) | 작업별 진입 명령·새 설치 연결·실패 복구와 초기 구축의 마감 기준 |
 | [Web 역할 시험 화면](examples/role-ui-trial/README.md), [시험 서버](scripts/role_ui_trial.py) | 가상 업무 화면·loopback API로 경계 데이터·초점·실패/재시도·중복 요청을 브라우저에서 재현 |
@@ -45,6 +61,7 @@
 | [runtime/harness.md](runtime/harness.md), [scripts/prepare_handoff.py](scripts/prepare_handoff.py) | 작업 크기에 맞는 조율, 중복 대기 처리 규칙, 명시 입력 파일의 인계 준비 |
 | [runtime/approval-waits.md](runtime/approval-waits.md), [scripts/approval_wait.py](scripts/approval_wait.py) | 승인·질문 대기 관측, 확인된 요청의 중복 억제, 알림 전달 확인과 단발성 Orca 조회 |
 | [runtime/permission-policy.md](runtime/permission-policy.md), [권한 인계 양식](templates/execution-permissions.md) | 공식 운영 사례, 사전 허용 범위·예외 승인·실제 적용 확인. 권한을 자동 부여하는 설정 파일은 아님 |
+| [짧은 worker IPC 지침](runtime/orca-ipc-brief.md), [checkpoint 양식](templates/orca-ipc-checkpoint.md) | CLI 조율이 필요한 worker의 정식 승인·재시도 구분. 필요한 때만 참조하며 실제 권한을 부여하지 않음 |
 | [runtime/storage-options.md](runtime/storage-options.md) | Markdown·JSON/JSONL·SQLite·MongoDB·PostgreSQL의 역할과 선택 기준 |
 | [runtime/orchestration-contract.md](runtime/orchestration-contract.md) | 보존한 단독 Codex 자동 조율 프로토타입 설계. 구현 보류 |
 | [experiments/](experiments/README.md) | 토큰 효율 개선 절차와 공개용 실험 요약·재현 방법 |
@@ -52,6 +69,32 @@
 | [examples/task-contract.md](examples/task-contract.md) | 개발·글쓰기 작업의 가상 입력과 결과 |
 
 ## 사용하기
+
+처음 운영할 때는 [짧은 사용 흐름](runtime/routing-quickstart.md), 비용·품질을 평가할 때는 [비교 준비 묶음](experiments/routing-pilot/README.md)을 확인합니다. 일반 입력에 이 자료를 모두 주입하지 않습니다.
+
+### 처리 방식을 직접 제어하기
+
+[요청 라우팅과 사용자 제어](runtime/request-routing.md)에 직접 처리·제안 후 선택·허용 범위 내 자동 처리의 의미를 정의했습니다. “이번에는 바로 답해”, “튜터 방식으로 하되 새 에이전트는 만들지 마”, “이 대화에서는 모델과 effort를 고정해”처럼 역할·설정·위임과 적용 범위를 구분합니다. 작은 요청과 후속 질문에는 불필요한 제안을 반복하지 않습니다.
+
+현재는 **사용자 제어 계약·[추천 검사](runtime/request-router.md)·[공통 진입 흐름](runtime/routing-flow.md)**을 제공합니다. `python3 scripts/request_router.py catalog`로 짧은 역할·프로필 목록을 확인하고 `python3 scripts/request_router.py route < examples/request-route.json`으로 현재 AI의 판단을 검사합니다. 추천 검사 자체는 실행하지 않으며 공통 진입점이 요청별 선택·역할 지침과 별도 수용한 관리 실행·완료 수집을 연결합니다. 앱 입력 자동 연결·선택 UI·현재 대화의 모델 전환과 실제 추천 품질 검증은 남아 있습니다. 새 제어 개념을 기존 `harness.json`의 지원 필드로 해석하지 않습니다.
+
+라우팅 자체의 토큰 비용 최소화를 핵심 제약으로 둡니다. 기본 경로는 라우팅 전용 추가 모델 호출 없이 확정 제어·기존 선택을 재사용하고, 필요한 의미 판단은 현재 AI의 응답에서 수행하도록 설계합니다. 추천이 없으면 바로 본문을 답하며 모든 역할 문서를 매번 읽지 않습니다. 실제 절감 효과는 아직 미측정입니다.
+
+튜터 개발과 추천 평가·Orca 입력 연결·사용자 선택·위임/모델 전환·비용 비교는 [통합 개발 순서](learning/development.md)에 따라 단계적으로 진행합니다.
+
+[Orca 안의 Codex 입력 어댑터](runtime/orca-routing-input.md)는 선택적 연결입니다. 한정된 프로젝트 시험에서 실제 수신·공식 검토 경로를 확인하지 못해 시험 정의를 제거했습니다. 현재 AI의 명시 호출형 운영은 유지하며 native 입력 자동 연결은 보류합니다.
+
+[사용자 선택 기록](runtime/routing-choices.md)은 요청·추천 버전을 대조해 수용·거절·취소를 보관합니다. 수용한 현재 AI용 역할의 지침만 준비하고, 명시한 후속 대화에는 역할 본문을 다시 읽지 않고 선택을 재사용할 수 있습니다. 앱에 주입하거나 모델·effort·위임을 실행하지 않습니다. 입력 어댑터와 선택 UI의 자동 연결은 남아 있습니다.
+
+[공통 진입 흐름](runtime/routing-flow.md)은 현재 AI의 해석을 위 선택 기록·역할 지침·관리 위임에 연결합니다. 일반 입력에는 도구 실행을 요구하지 않으며, 거절한 추천·역할 본문·worker 실행의 반복을 막습니다. 연결된 worker의 명시 취소는 guarded stop과 정확한 종료 조회를 사용하며 한정된 실제 경로를 확인했습니다. 현재 대화의 모델 변경은 수동 설정으로 구분하고 앱 자동 연결은 미검증으로 유지합니다.
+
+### 개념을 배우고 싶을 때
+
+“이게 무슨 개념이야?” 같은 학습 요청은 **[학습 튜터(`tutor`)](learning/README.md)**라는 별도 진입점으로 처리합니다. 쉬운 설명·핵심부터 시작해 스티커 메모, 제1원리, 파인만 기법, 한 장 학습 시트, 마인드맵·도식으로 전환합니다. 이어서 궁금할 만한 **연관 질문과 답변**도 함께 제공하며, **공식 문서를 우선 확인해 핵심 설명과 각 답변에 근거 링크**를 연결합니다. 재구성한 설명·비유와 원문 인용을 구분합니다.
+
+이 저장소에서는 `AGENTS.md`가 튜터 지침을 연결합니다. 다른 대화·프로젝트에는 튜터 문서를 명시적으로 연결하세요. 필요한 경우 개념 해설·학습 시각화·연관 질문 해설 자료를 병렬로 준비하고 튜터가 통합합니다. 앱의 전역 자동 라우팅이나 지속 문답 실행기를 설치한 것은 아닙니다. [사용 예시·병렬 조건·구현 범위](learning/README.md)를 확인하세요.
+
+### 프로젝트 작업을 시작할 때
 
 먼저 프로젝트를 명시하고 환경 가이드를 선택합니다. 이 명령은 모델을 호출하거나 앱을 시작하지 않습니다.
 
@@ -102,7 +145,7 @@ python3 scripts/workflow.py run --project ../my-project --role coordinator --tas
 python3 scripts/workflow.py run --project ../my-project --role backend --task "완료 여부로 목록을 필터링하는 API를 구현하고 테스트해줘"
 ```
 
-역할 ID는 `coordinator`, `architect`, `designer`, `backend`, `frontend`, `verifier`입니다. 역할 추가는 `workflow.json`에서, 기존 역할의 프로젝트별 변경은 `.ai-workflow.json`에서 합니다.
+작업 역할 ID는 `coordinator`, `architect`, `designer`, `backend`, `frontend`, `verifier`입니다. 학습 역할은 `tutor`, `learning-concepts`, `learning-visuals`, `learning-connections`입니다. 역할 추가는 `workflow.json`에서, 기존 역할의 프로젝트별 변경은 `.ai-workflow.json`에서 합니다.
 
 작업에 필요한 작은 파일이나 줄 범위가 이미 정해졌다면 `--context-file src/example.py:10:40`으로 내용을 함께 전달할 수 있습니다. 경로는 대상 프로젝트 기준이며 자동 탐색하지 않습니다. 충분한 자료가 전달되면 중복 읽기를 줄이도록 지시하지만, 토큰 절감은 실제 사용량과 검증 결과로 확인해야 합니다. [범위·제한과 비교 방법](runtime/execution-records.md)을 참고하세요.
 

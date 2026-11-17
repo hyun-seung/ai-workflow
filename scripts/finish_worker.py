@@ -92,18 +92,28 @@ def main(argv=None):
         cli = args.orca_cli or executable_for('orca', os.environ)
         expected = {k: getattr(args, 'expect_' + k) for k in ('reviewer', 'model', 'effort')
                     if getattr(args, 'expect_' + k) is not None}
-        result = finish(cli, args.project, args.session_file, args.session_id, args.task_id,
-                        args.dispatch_id, args.directory, expected, args.request_id, args.role)
-        print('completion=' + ('replay' if result['replay'] else 'recorded') +
-              ' verification=' + result['verification'])
-        print('dispatch_usage=' + result.get('dispatch_usage_status', 'not_collected_legacy') +
-              ' request_binding=' + ('attributed' if result.get('task_attributed') else 'unlinked_or_unmeasured'))
+        ledger = operation = None
         if args.dispatch_directory:
             from dispatch_guard import Ledger
             ledger=Ledger(args.dispatch_directory,args.project,os.environ.get('ORCA_AGENT_SESSION_ID'))
             operation=ledger.read()['operations'][args.operation_id]
             if (operation.get('task_id'),operation.get('dispatch_id')) != (args.task_id,args.dispatch_id):
                 raise ValueError('completion_operation_binding_mismatch')
+            if operation['plan'].get('routing_choice') is not None:
+                from routing_dispatch import completion_expectations
+                expected=completion_expectations(operation,expected,args.request_id,args.role)
+        result = finish(cli, args.project, args.session_file, args.session_id, args.task_id,
+                        args.dispatch_id, args.directory, expected, args.request_id, args.role)
+        print('completion=' + ('replay' if result['replay'] else 'recorded') +
+              ' verification=' + result['verification'])
+        print('dispatch_usage=' + result.get('dispatch_usage_status', 'not_collected_legacy') +
+              ' request_binding=' + ('attributed' if result.get('task_attributed') else 'unlinked_or_unmeasured'))
+        routing_profile = None
+        if operation is not None and operation['plan'].get('routing_choice') is not None:
+            from routing_dispatch import compare_profiles
+            routing_profile=compare_profiles(operation,read_json(result['record_path']))
+            print('routing_profile=' + routing_profile['status'])
+        if ledger is not None:
             print('delegation=' + ledger.refresh(args.operation_id,cli)['state'])
         if args.trace_db:
             from trace_store import Store
@@ -117,7 +127,7 @@ def main(argv=None):
             finally:
                 trace.close()
             print('trace_import=' + imported['event_id'])
-        if result['verification'] in ('fail', 'unverified'):
+        if result['verification'] in ('fail', 'unverified') or (routing_profile is not None and routing_profile['status'] != 'pass'):
             return 1
         if args.cleanup_plan and policy['auto_cleanup'] == 'N':
             print('cleanup=skipped_disabled')

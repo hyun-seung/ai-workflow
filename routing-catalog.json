@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "roles": {
+    "tutor": "개념을 쉽게 설명하고 공식 근거·연관 Q&A로 이해를 돕기",
+    "coordinator": "복합 작업의 범위·의존성·완료 기준과 결과 통합",
+    "architect": "기술 대안·시스템 경계·장애와 설계 검토",
+    "designer": "사용자 흐름·화면·상태·접근성 설계",
+    "backend": "서버·데이터·API 구현과 자체 검증",
+    "frontend": "화면·상호작용·API 연동 구현과 자체 검증",
+    "verifier": "요구사항·검증 근거·누락과 연동의 독립 확인",
+    "learning-concepts": "튜터용 핵심 사실·예시·원리 준비",
+    "learning-visuals": "확정 개념의 메모·마인드맵·도식 준비",
+    "learning-connections": "튜터용 연관 질문·답변·공식 근거 준비"
+  }
+}

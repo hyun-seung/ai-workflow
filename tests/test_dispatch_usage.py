@@ -70,6 +70,16 @@ class DispatchUsageTests(unittest.TestCase):
         rebound = self.inspect(request_id='another')['dispatch_usage']
         self.assertEqual(first['measurement_key'], rebound['measurement_key'])
 
+    def test_learning_roles_preserve_measured_assignment_binding(self):
+        import trace_store
+        self.assertEqual(ROLE_IDS, trace_store.ROLE_IDS)
+        for role in ('tutor', 'learning-concepts', 'learning-visuals', 'learning-connections'):
+            with self.subTest(role=role):
+                value = self.inspect(role=role)['dispatch_usage']
+                self.assertEqual(value['status'], 'measured')
+                self.assertEqual(value['role'], role)
+                self.assertEqual(value['measurements']['total_tokens'], 120)
+
     def test_duplicate_counter_notifications_not_added_again(self):
         self.rows.insert(-1, count()); self.rows.insert(-1, count())
         value = self.inspect()['dispatch_usage']

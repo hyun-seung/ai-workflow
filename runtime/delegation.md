@@ -60,6 +60,8 @@ python3 scripts/dispatch_guard.py \
 
 `finish_worker.py`에 `--dispatch-directory`와 `--operation-id`를 함께 전달하면 메타데이터 저장 후 같은 해제 확인을 연결한다. 모델/승인 검사 불일치와 실제 프로세스 종료는 별개이며, 이미 끝난 프로세스의 자리는 반환할 수 있다.
 
+명시 취소는 `stop --operation-id <id>` 또는 [공통 진입 흐름](routing-flow.md)을 사용한다. 시작 전 접근 거부·실패 종료 코드·`not_started`·native ID 부재가 모두 일치하는 예약은 실제 worker가 생성되지 않았으므로 로컬에서 취소·해제한다. `cancellation_evidence`로 미실행 근거를 구분하고 원래 영수증·누적 한도를 보존한다. 취소한 operation은 다시 실행하지 않는다. timeout·모순 응답·ID가 유실된 불명 상태는 이 예외로 해제하지 않는다. 실제 배정의 취소는 guarded stop 뒤 정확한 종료를 확인한다.
+
 종료가 확인된 관리 대상의 다음 업무는 새 operation으로 `followup --previous <operation-id> --spec-file <path>`를 사용한다. 같은 요청의 누적 한도를 소비하고 공식 `send --to dispatch:<id>`로 전달한다. 현재는 이전 worker의 실제 종료 후 후속 업무만 지원하며, 같은 선행 배정에서 이어진 후속 업무·재시도 중 하나라도 실행 또는 불명 상태면 추가 배정을 거부한다. 오래된 선행 operation을 다시 지정해도 이 점유 검사를 적용한다. 새 모델을 지정하는 후속 전송은 지원하지 않는다.
 
 실패하거나 명시적으로 중단한 배정의 정확한 종료가 확인되면 `retry --previous <operation-id>`로 같은 native Task와 `--retry-of`를 사용한다. 성공한 배정에는 retry를 사용하지 않는다. retry 응답의 native Task/Run이 원래 연결과 다르면 unknown으로 보존하고 재호출하지 않는다. 새 operation이므로 누적 한도에 포함한다. Orca의 실패 연쇄·회로 차단을 새 Task로 우회하지 않으며 자동 재시도하지 않는다. 사용자의 재시도 지시 범위와 공식 recovery 가이드를 먼저 확인한다.
@@ -82,3 +84,5 @@ python3 scripts/dispatch_guard.py \
 가상 응답 검증과 실제 native 실행 검증을 구분한다. 미지원 receipt 형식은 `unknown`으로 보존하고 성공으로 추정하지 않는다. [병렬 작업 판단](parallelism.md)은 이 수량 제한과 함께 적용한다.
 
 등록된 Orca·Codex 배정의 토큰 자동 수집을 준비할 때 `--usage-role`, `--usage-actor-id`, `--usage-task-title`을 함께 명시한다. native 호출 전에 계획에 고정하며 측정값은 입력받지 않는다. 프로젝트 hook의 설치·신뢰와 [실제 완료 이벤트 검증](completion-hook.md)이 별도로 필요하다. 옵션이 없는 기존 배정은 자동 수집 대상으로 승격하지 않는다.
+
+수용한 라우팅 선택을 연결하려면 [명시 위임·프로필 연결](routing-dispatch.md)의 네 `--routing-*` 옵션을 함께 사용한다. 현재 worktree의 새 Codex worker만 지원하며, 정확한 선택·명시 모델/effort와 일회 실행 바인딩을 검사한다. 역할 기본 프로필·직접 처리 선택을 worker로 자동 변환하지 않는다. 옵션이 없으면 기존 관리 실행 경로다. 이 새 연결의 검증은 가상 native 응답이며 실제 배정·전환 검증은 남아 있다.

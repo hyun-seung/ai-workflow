@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "case_id": "case_example",
+  "criteria": {
+    "path": "/private/example/acceptance.md",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "direct": {
+    "request_id": "direct_example",
+    "measurements": [],
+    "coverage": {
+      "routing": "not_applicable",
+      "selection": "not_applicable",
+      "processing": "missing",
+      "handoff": "not_applicable",
+      "integration": "not_applicable",
+      "verification": "missing",
+      "rework": "missing",
+      "reporting": "missing"
+    },
+    "quality": {
+      "status": "unverified",
+      "reviewer": "self",
+      "evidence": {
+        "path": "/private/example/direct-review.md",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  },
+  "routed": {
+    "request_id": "routed_example",
+    "measurements": [],
+    "coverage": {
+      "routing": "missing",
+      "selection": "missing",
+      "processing": "missing",
+      "handoff": "missing",
+      "integration": "missing",
+      "verification": "missing",
+      "rework": "missing",
+      "reporting": "missing"
+    },
+    "quality": {
+      "status": "unverified",
+      "reviewer": "self",
+      "evidence": {
+        "path": "/private/example/routed-review.md",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  }
+}
