@@ -254,6 +254,36 @@ function usageSummary(actors) {
   return { rows, covered: measured.length, total: measured.length && safe ? input + output : null,
     input: measured.length && safe ? input : null, output: measured.length && safe ? output : null };
 }
+// A record has validated numeric values, including zero and reference/duplicate values.
+// Invalid/unavailable usage stays in status rows, but is never a numeric record.
+function hasMeasuredValues(row) { return row.kind === 'attributed' || row.kind === 'reference'; }
+// Coverage describes imported records only; it never certifies request-wide collection.
+function usageCoverage(bundle, summary) {
+  const tasks = logicalTasks(bundle, summary);
+  return { registeredActors: bundle.actors.length,
+    physicalObservations: summary.rows.filter(hasMeasuredValues).length,
+    explicitGroups: tasks.filter(t => t.group).length,
+    ungroupedObservations: tasks.filter(t => !t.group).flatMap(t => t.rows).filter(hasMeasuredValues).length,
+    ...coverageCounts(summary.rows), requestCollectionComplete: false };
+}
+function coverageCounts(rows) {
+  return { measured: rows.filter(r => r.kind === 'attributed').length,
+    excluded: rows.filter(r => r.kind === 'reference').length,
+    unavailable: rows.filter(r => r.kind === 'unavailable').length };
+}
+function coverageText(counts) {
+  return `측정됨 ${counts.measured} · 참고값·집계 제외 ${counts.excluded} · 미측정 ${counts.unavailable} (수입 목록의 항목 수)`;
+}
+function coverageReason(row) {
+  const u = row.actor.usage || {};
+  if (row.kind === 'attributed') return `${row.label} · 출처 ${u.source} · 측정 키 ${u.measurement_key}`;
+  if (row.label === '중복 측정 · 집계 제외') return row.label;
+  if (row.kind === 'reference') return row.label + ' · 요청 합산 계약 미충족';
+  const m = u.measurements || u.tokens || {};
+  if (m.total_tokens != null && Number.isSafeInteger(m.input_tokens) && Number.isSafeInteger(m.output_tokens) && m.total_tokens !== m.input_tokens + m.output_tokens) return '합계 불일치 · 유효한 측정값 미확인 · 요청 합계에 더하지 않음';
+  const observed = typeof u.reason === 'string' && u.reason.trim();
+  return observed ? `수입 자료의 사유: ${observed}` : '미측정 사유 미확인 · 유효한 귀속 측정값 없음';
+}
 function tokenText(value) { return value == null ? '—' : value.toLocaleString('ko-KR'); }
 function brief(text, limit = 155) {
   const clean = String(text ?? '').replace(/^#+\s*/gm, '').replace(/\s+/g, ' ').trim();
@@ -330,7 +360,7 @@ function durationText(request) {
   const seconds = Math.round((Date.parse(b) - Date.parse(a)) / 1000);
   return seconds < 60 ? `${seconds}초` : `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
 }
-if (typeof module !== 'undefined') module.exports = { skillUses, compareInstants, segmentLabel, instant, measurementInterval, logicalTasks, measurementTimeline, profileFor, profileLine, effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
+if (typeof module !== 'undefined') module.exports = { usageCoverage, coverageCounts, coverageText, coverageReason, skillUses, compareInstants, segmentLabel, instant, measurementInterval, logicalTasks, measurementTimeline, profileFor, profileLine, effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
 if (typeof document !== 'undefined') startViewer();
 
 function startViewer() {
@@ -599,7 +629,7 @@ function startViewer() {
           const member = node('article', undefined, 'task-usage'), interval = measurementInterval(row);
           member.id = `logical-task-${index}-member-${memberIndex}`; member.tabIndex = -1;
           member.append(node('h4', segmentLabel(row, memberIndex)),
-            node('p', `${row.label} · 입력 ${tokenText(row.input)} · 출력 ${tokenText(row.output)}`, 'muted'),
+            node('p', `${coverageReason(row)} · 입력 ${tokenText(row.input)} · 출력 ${tokenText(row.output)}`, 'muted'),
             node('p', interval.valid ? `${displayTime(row.actor.usage.interval.started_at)} → ${displayTime(row.actor.usage.interval.finished_at)}${interval.point ? ' · 같은 밀리초로 표시' : ''}` : interval.reason, 'muted'),
             tokenDetails(row), profileDetails(profileFor(bundle, row.actor), row.actor));
           if (interval.valid) member.append(node('p', `원본 구간: ${row.actor.usage.interval.started_at} → ${row.actor.usage.interval.finished_at}`, 'body-text'));
@@ -662,11 +692,29 @@ function startViewer() {
   function renderUsage(bundle, measured) {
     const section = $('usage'); section.className = 'section-panel';
     const heading = node('div', undefined, 'section-heading'), h = node('div');
-    h.append(node('h3', '토큰 사용량'), node('p', '요청 전체 → 역할별 → 작업별 → 세부 항목')); heading.append(h); section.append(heading);
+    h.append(node('h3', '토큰 사용량'), node('p', '요청의 측정된 합계 → 역할별 → 작업별 → 세부 항목')); heading.append(h); section.append(heading);
     const total = node('div', undefined, 'request-token-total');
     total.append(node('span', '이 요청의 측정된 총 토큰'), node('strong', tokenText(measured.total)),
-      node('small', `입력 ${tokenText(measured.input)} · 출력 ${tokenText(measured.output)} · 측정 ${measured.covered}/${measured.rows.length}개 작업`));
-    section.append(total); renderTasks(bundle, measured, section); section.append(node('h4', '역할별 사용량'));
+      node('small', `입력 ${tokenText(measured.input)} · 출력 ${tokenText(measured.output)} · 수입 목록에서 합산한 값`));
+    section.append(total);
+    const coverage = usageCoverage(bundle, measured), panel = node('div', undefined, 'usage-coverage');
+    panel.append(node('h4', '현재 수입 목록의 측정 범위'),
+      node('p', `등록된 담당 실행 ${coverage.registeredActors}개 · 개별 측정 기록 ${coverage.physicalObservations}개 · 지정한 작업 묶음 ${coverage.explicitGroups}개 · 묶음 없는 측정 기록 ${coverage.ungroupedObservations}개`),
+      node('p', coverageText(coverage)),
+      node('p', '개별 측정 기록은 유효 수치가 있는 항목만 셉니다. 수치 미확인 항목은 미측정 목록에 남습니다.', 'notice'),
+      node('p', '부분 범위의 측정된 합계입니다. 요청 전체 수집 여부는 미확인입니다. 미등록 작업이나 조율자의 추가 턴은 개수를 추정하지 않습니다.', 'notice'));
+    panel.append(lazyDisclosure(`미측정·집계 제외 목록 (${coverage.unavailable + coverage.excluded}개 항목)`, body => {
+      const missing = measured.rows.filter(r => r.kind !== 'attributed');
+      if (!missing.length) body.append(node('p', '현재 수입 목록에 미측정·제외 항목이 없습니다. 전체 요청의 완전 수집을 뜻하지 않습니다.'));
+      for (const row of missing) {
+        const item = node('article', undefined, 'task-usage');
+        item.append(node('h4', `${row.actor.display_role || '역할 미분류'} · ${row.actor.display_task || '작업명 미확인'}`),
+          node('p', row.actor.observation_id ? hasMeasuredValues(row) ? '개별 측정 기록 항목' : '사용량 항목 · 유효 수치 미확인' : '등록된 담당 실행 항목'),
+          node('p', coverageReason(row)), tokenDetails(row));
+        body.append(item);
+      }
+    }, 'coverage-disclosure'));
+    section.append(panel, node('h4', '역할별 사용량'));
     const roles = node('div', undefined, 'role-usage-grid');
     for (const group of roleUsage(measured)) {
       const card = lazyDisclosure('', body => {
@@ -680,7 +728,7 @@ function startViewer() {
           for (const [label, key] of [['입력', 'input'], ['출력', 'output'], ['합계', 'total']]) {
             const cell = node('div', label, 'mini-stat'); cell.append(node('strong', tokenText(r.kind === 'attributed' ? r[key] : null))); grid.append(cell);
           }
-          task.append(grid, node('p', r.label, 'muted'), tokenDetails(r));
+          task.append(grid, node('p', coverageReason(r), 'muted'), tokenDetails(r));
           if (r.actor.observation_id) task.append(lazyDisclosure('이 작업의 측정 원문·출처', target => {
             target.append(node('p', `작업 ${r.actor.task_id} · dispatch ${r.actor.dispatch_id}`, 'muted'));
             target.append(node('pre', show({ event: r.actor.usage_event,
@@ -693,11 +741,11 @@ function startViewer() {
       paint(card, group.key); card.dataset.roleId = group.key;
       card.firstChild.append(node('span', group.label, 'card-role'), node('strong', tokenText(group.total), 'role-token-total'),
         node('small', `입력 ${tokenText(group.input)} · 출력 ${tokenText(group.output)}`),
-        node('small', `${group.rows.length}개 작업 · 측정 ${group.covered}/${group.rows.length} · 작업별 펼치기`));
+        node('small', `부분 범위 · ${coverageText(coverageCounts(group.rows))} · 작업별 펼치기`));
       roles.append(card);
     }
-    section.append(roles);
-    const note = measured.total == null ? '배정별 수치가 아직 연결되지 않았습니다. 미측정은 0이 아니며 세션 누적값은 요청 합계에 더하지 않습니다.' : `측정된 합계 ${tokenText(measured.total)} tokens · 표시된 작업 ${measured.covered}/${measured.rows.length}개 측정. 조율·검증·추가 작업의 전체 수집을 뜻하지 않습니다.`;
+    section.append(roles); renderTasks(bundle, measured, section);
+    const note = measured.total == null ? '배정별 수치가 아직 연결되지 않았습니다. 미측정은 0이 아니며 세션 누적값은 요청 합계에 더하지 않습니다.' : `측정된 합계 ${tokenText(measured.total)} tokens · 현재 수입 목록의 측정됨 ${measured.covered}개 항목. 조율·검증·추가 작업의 전체 수집을 뜻하지 않습니다.`;
     section.append(node('p', note, 'usage-note'));
   }
   function renderMetadata(bundle) {
@@ -722,7 +770,7 @@ function startViewer() {
       const displayed = displayActors(bundle), actors = new Map(displayed.map(a => [a.id, a])), units = usageUnits(bundle, displayed), measured = usageSummary(units), title = renderSummary(bundle, actors);
       const duration = durationText(bundle.requests[0]);
       $('metrics').append(metric('참여한 담당 실행', bundle.actors.length + '개', new Set(displayed.map(a => a.display_role)).size + '개 역할 · 수입된 배정 기준'),
-        metric('측정된 요청 토큰', tokenText(measured.total), `배정별 측정 ${measured.covered}/${measured.rows.length} · 입력 ${tokenText(measured.input)} / 출력 ${tokenText(measured.output)}`),
+        metric('측정된 요청 토큰', tokenText(measured.total), `수입 목록 기준 · 전체 수집 미확인 · ${coverageText(coverageCounts(measured.rows))}`),
         metric('전체 실행 시간', duration || '미확인', duration ? '명시된 시작 → 종료 기준' : '시작·종료 구간 미수집'),
         metric('수집된 실행 기록', bundle.events.length + '개', '명령·지시·검증을 펼쳐 확인'));
       renderFlow(bundle, actors, measured); renderUsage(bundle, measured); renderMetadata(bundle);

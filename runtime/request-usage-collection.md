@@ -76,3 +76,5 @@ python3 -m unittest discover -s tests -p test_collect_request_usage.py -v
 ## 조율자 바인딩 준비
 
 선택한 닫힌 턴의 줄 번호·메시지 해시는 [조율자 바인딩 초안](coordinator-usage.md#명시적으로-선택한-조율자-턴의-바인딩-초안)으로 준비할 수 있다. 검토한 결과를 이 수집기의 `coordinator_turns`에 명시한다. 초안 생성과 실제 사용량 수입은 별도 단계이며, 열린 턴이나 혼합 업무를 자동 귀속하지 않는다.
+
+단일 조율자 턴의 준비물·검토 해시 승인·수입을 연결하는 CLI는 [명시 조율자 수집 흐름](coordinator-collection-flow.md)에 있다.

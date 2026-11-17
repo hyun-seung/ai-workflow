@@ -316,3 +316,74 @@ test('adjacent segment identity uses member title and individual attributed toke
   assert.equal(segmentLabel(row,1),'구간 2 · 가상 물리 작업 <literal> · 120 tokens');
   assert.equal(segmentLabel({...row,kind:'reference'},0),'구간 1 · 가상 물리 작업 <literal> · — tokens');
 });
+
+test('coverage distinguishes imported actors, atomic observations and explicit groups without certifying collection', () => {
+  const {usageCoverage,coverageCounts,coverageReason,effectiveBundle,usageUnits,logicalTasks,roleUsage}=require('../scripts/trace_web/app.js');
+  const bundle=effectiveBundle(require('./fixtures/traces/usage-coverage.json'));
+  const before=JSON.stringify(bundle), summary=usageSummary(usageUnits(bundle)), c=usageCoverage(bundle,summary);
+  assert.equal(summary.total,840); assert.equal(c.registeredActors,bundle.actors.length);
+  assert.equal(c.physicalObservations,10); assert.equal(c.explicitGroups,1);
+  assert.equal(c.measured,7); assert.equal(c.excluded,3); assert.equal(c.unavailable,4);
+  assert.equal(c.requestCollectionComplete,false);
+  assert.equal(c.ungroupedObservations,8);
+  assert.match(coverageReason(summary.rows.find(r=>r.actor.id==='missing-reason')),/<script>literal<\/script>/);
+  assert.equal(coverageReason(summary.rows.find(r=>r.actor.id==='conflicting')),'합계 불일치 · 유효한 측정값 미확인 · 요청 합계에 더하지 않음');
+  assert.ok(summary.rows.filter(r=>r.actor.id.startsWith('duplicate')).every(r=>/중복/.test(coverageReason(r))));
+  assert.equal(roleUsage(summary).reduce((n,r)=>n+(r.total??0),0),840);
+  assert.deepEqual(coverageCounts(summary.rows),{measured:7,excluded:3,unavailable:4});
+  const ungrouped={...bundle,usage_groups:[]};
+  assert.equal(usageCoverage(ungrouped,summary).explicitGroups,0);
+  assert.equal(usageSummary(usageUnits(ungrouped)).total,840);
+  assert.equal(logicalTasks(bundle,summary).flatMap(t=>t.rows).length,summary.rows.length);
+  assert.equal(JSON.stringify(bundle),before);
+});
+test('empty and fully measured imports both leave request completeness unconfirmed; role mismatch remains ungrouped',()=>{
+  const {usageCoverage,usageUnits,logicalTasks,effectiveBundle}=require('../scripts/trace_web/app.js');
+  assert.deepEqual(usageCoverage({actors:[],events:[]},usageSummary([])),{registeredActors:0,physicalObservations:0,explicitGroups:0,ungroupedObservations:0,measured:0,excluded:0,unavailable:0,requestCollectionComplete:false});
+  const a=measuredActor('root'), b={actors:[a],events:[]};
+  assert.equal(usageCoverage(b,usageSummary(usageUnits(b))).requestCollectionComplete,false);
+  const f=effectiveBundle(require('./fixtures/traces/dashboard-flow.json'));
+  f.usage_groups[0].role='backend';
+  assert.equal(logicalTasks(f,usageSummary(usageUnits(f))).filter(t=>t.group).length,0);
+  assert.equal(usageSummary(usageUnits(f)).total,840);
+});
+
+test('coverage requires validated numeric values rather than empty objects or explicit event presence',()=>{
+  const {usageCoverage,usageUnits}=require('../scripts/trace_web/app.js');
+  const check=usage=>{const b={actors:[{id:'a',request_id:'request',usage}],events:[]};const s=usageSummary(usageUnits(b));return {s,c:usageCoverage(b,s)}};
+  for(const usage of [{status:'unavailable',measurements:{}},{status:'unavailable',tokens:{}},
+    {status:'measured',measurements:{note:'missing numbers'}},
+    measuredActor('a',{measurements:{input_tokens:10,output_tokens:2,total_tokens:99}}).usage,
+    measuredActor('a',{measurements:{input_tokens:-1,output_tokens:2}}).usage]) {
+    const {s,c}=check(usage);assert.equal(c.physicalObservations,0);assert.equal(c.ungroupedObservations,0);
+    assert.equal(c.registeredActors,1);assert.equal(c.unavailable,1);assert.equal(c.excluded,0);assert.equal(s.total,null);
+  }
+  const b={actors:[{id:'a',request_id:'request'}],events:[{id:'empty-event',kind:'usage',actor_id:'a',detail:{usage:{status:'unavailable',measurements:{}}}}]};
+  const c=usageCoverage(b,usageSummary(usageUnits(b)));assert.equal(c.physicalObservations,0);assert.equal(c.unavailable,1);
+});
+test('valid zero, tokens alias, partial references, cumulative and duplicate values are numeric records without promotion',()=>{
+  const {usageCoverage}=require('../scripts/trace_web/app.js');
+  const a=measuredActor('zero',{measurements:{input_tokens:0,output_tokens:0}});
+  const alias=measuredActor('alias');delete alias.usage.measurements;alias.usage.tokens={input_tokens:0,output_tokens:0};
+  const actors=[a,alias,measuredActor('partial',{status:'partial'}),measuredActor('cumulative',{scope:'session_cumulative'}),
+    measuredActor('d1',{measurement_key:'same'}),measuredActor('d2',{measurement_key:'same'})];
+  const s=usageSummary(actors),c=usageCoverage({actors,events:[]},s);
+  assert.equal(c.physicalObservations,6);assert.equal(c.ungroupedObservations,6);assert.equal(c.measured,2);assert.equal(c.excluded,4);assert.equal(c.unavailable,0);assert.equal(s.total,0);
+});
+test('multiple events and explicit groups count valid members only while retaining invalid status rows',()=>{
+  const {usageCoverage,usageUnits,logicalTasks}=require('../scripts/trace_web/app.js');
+  const events=['one','two','invalid'].map(id=>({id,kind:'usage',actor_id:'owner',detail:{usage:{...measuredActor('native-'+id).usage,role:'frontend',...(id==='invalid'?{measurements:{}}:{})}}}));
+  const b={actors:[{id:'owner',request_id:'request'}],events,usage_groups:[{event_id:'group',actor_id:'owner',role:'frontend',measurement_event_ids:['one','invalid']}]};
+  const s=usageSummary(usageUnits(b)),c=usageCoverage(b,s);
+  assert.equal(c.registeredActors,1);assert.equal(c.physicalObservations,2);assert.equal(c.ungroupedObservations,1);assert.equal(c.explicitGroups,1);assert.equal(c.unavailable,1);assert.equal(s.total,260);
+  assert.equal(logicalTasks(b,s).flatMap(t=>t.rows).length,3);
+  b.usage_groups[0].measurement_event_ids=['invalid'];const invalidGroup=usageCoverage(b,s);
+  assert.equal(invalidGroup.explicitGroups,1);assert.equal(invalidGroup.ungroupedObservations,2);
+  b.usage_groups=[];assert.equal(usageCoverage(b,s).ungroupedObservations,2);
+});
+test('conflicting total reason clearly stays unavailable rather than reference/excluded',()=>{
+  const {coverageReason,coverageCounts}=require('../scripts/trace_web/app.js');
+  const row=usageSummary([measuredActor('bad',{measurements:{input_tokens:10,output_tokens:2,total_tokens:99}})]).rows[0];
+  assert.equal(row.kind,'unavailable');assert.deepEqual(coverageCounts([row]),{measured:0,excluded:0,unavailable:1});
+  assert.equal(coverageReason(row),'합계 불일치 · 유효한 측정값 미확인 · 요청 합계에 더하지 않음');assert.doesNotMatch(coverageReason(row),/집계 제외|참고값/);
+});

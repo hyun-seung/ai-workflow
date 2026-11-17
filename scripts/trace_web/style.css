@@ -175,3 +175,8 @@ footer { text-align: right; color: #7b8a9f; font-size: 11px; margin-top: 20px; }
 .selected-member { outline: 3px solid #233148; outline-offset: 3px; border-radius: 4px; }
 @media (max-width:768px) { .logical-tasks { grid-template-columns: 1fr; } .card-top { flex-wrap: wrap; } }
 @media (max-width:768px) { .measurement-link .segment-label, .measurement-link .segment-precision, .measurement-lane .lane-label { max-width: 190px; } }
+
+.usage-coverage { background: #f3f7ff; border-radius: 10px; padding: 14px; margin-bottom: 18px; }
+.usage-coverage p, .usage-coverage summary, .task-usage h4, .role-usage small { overflow-wrap: anywhere; }
+.coverage-disclosure { margin: 12px 0 0; }
+.coverage-disclosure:focus-within { border-color: #526b9b; }

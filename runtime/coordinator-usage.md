@@ -73,3 +73,5 @@ binding `schema_version=2`는 기존 `message_line`·`message_sha256` 대신 `sc
 초안은 native 종료 상태 확인, 신원 권한, 전체 요청 커버리지, 작업 승인이나 권한 부여가 아니다. 기존 collector는 별도 import에서 소스를 독립적으로 다시 읽고 검증한다. 이 명령은 DB·ledger·세션을 수정하거나 collector, native finish, 정리 또는 hook을 실행하지 않는다.
 
 합성 파서·SQLite·CLI 경계 검사와 독립 검토를 통과했다. 실제 이전 요청의 닫힌 다중 메시지 턴에서 기존 바인딩과 같은 결과, 파일을 보존하는 재실행, 별도 SQLite 수입·재수입을 확인했다. 원문과 운영 기록은 변경하지 않았다. 이 검증은 선택한 턴 범위이며 전체 조율자 사용량의 자동 수집을 뜻하지 않는다.
+
+검토 해시를 명시해 단일 턴 준비부터 기존 collector 수입까지 연결하려면 [명시 조율자 수집 흐름](coordinator-collection-flow.md)을 사용한다.
