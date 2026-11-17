@@ -4,7 +4,7 @@
 
 ## 권장: 시작 메시지 하나로 연결하기
 
-**내 여러 프로젝트에서 기본으로 쓰고 싶다면 [개인 공통 연결](runtime/global-workflow.md)을 한 번 설정하세요.** 기본 Codex와 Paseo 계정이 서로 다른 Codex home을 쓰면 각각 연결합니다. 프로젝트별 실행·기록 기능은 아래 전체 연결에서 확인합니다.
+**내 여러 프로젝트에서 기본으로 쓰고 싶다면 [Orca·Codex·Paseo 개인 공통 연결](runtime/global-workflow.md)을 한 번 설정하세요.** Orca의 Codex·기본 Codex·Paseo 계정이 같은 Codex home을 쓰면 연결문 하나를 공유하고, 서로 다른 home을 쓰면 각각 연결합니다. 프로젝트별 실행·기록 기능은 아래 전체 연결에서 확인합니다.
 
 1. 쓰고 있는 AI 앱에서 **작업할 기존 프로젝트**를 엽니다.
 2. [README의 시작 메시지](README.md#처음-사용하시나요)를 복사해 보냅니다.

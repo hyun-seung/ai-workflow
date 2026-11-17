@@ -1,6 +1,6 @@
 # 여러 프로젝트에서 공통으로 사용하기
 
-개인 Codex 지침에 짧은 연결문을 두면, 서로 다른 프로젝트에서도 ai-workflow 문서를 읽도록 안내할 수 있다. 공통 저장소는 실행 host에 한 번 받아 두고, 프로젝트마다 전체 문서를 복사하지 않는다. 이 설정은 해당 개인 실행 환경의 기본 지침이므로 적용할 범위를 먼저 선택한다.
+Orca·Paseo에서 Codex를 사용하거나 Codex 앱·CLI를 사용할 때, 개인 Codex 지침에 짧은 연결문을 두면 서로 다른 프로젝트에서도 ai-workflow 문서를 읽도록 안내할 수 있다. 공통 저장소는 실행 host에 한 번 받아 두고, 프로젝트마다 전체 문서를 복사하지 않는다. 이 설정은 해당 개인 실행 환경의 기본 지침이므로 적용할 범위를 먼저 선택한다.
 
 ## 어떤 파일에 넣나요?
 
@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | 기본 Codex | `~/.codex/AGENTS.md` | 기본 Codex home을 사용하는 새 실행 |
 | `CODEX_HOME`을 따로 쓰는 Codex | 실제 `CODEX_HOME` 안의 `AGENTS.md` | 해당 home을 사용하는 새 실행 |
+| Orca에서 Codex 사용 | 현재 Orca 세션이 실행되는 host의 실제 Codex home 안의 `AGENTS.md` | 그 home을 사용하는 Orca Codex 세션; 기본 home이면 기본 Codex와 같은 파일 공유 |
 | Paseo에서 Codex 사용 | 선택한 host·공급자·계정의 실제 Codex home 안의 `AGENTS.md` | 그 설정으로 실행되는 Codex 세션 |
 
 [공식 Codex 문서](https://learn.chatgpt.com/docs/agent-configuration/agents-md.md)는 기본 home을 `~/.codex`로 설명하며 `CODEX_HOME`으로 바뀔 수 있다고 명시한다. 같은 위치에 `AGENTS.override.md`가 있으면 그 파일이 먼저 선택되므로, `AGENTS.md`만 추가해도 적용되지 않을 수 있다. 기존 override를 삭제하거나 덮어써 해결하지 않는다.
@@ -20,19 +21,29 @@
 
 이 경로는 **계정 전환 구성의 예시**이며 모든 Paseo 설치의 공통 경로가 아니다. 다른 사람의 계정 ID를 복사하거나 모든 계정 폴더를 수정하지 않는다. 새 계정·다른 PC·원격 host에서는 실제 경로를 다시 확인한다. 계정 경로가 확인되지 않으면 기본 home과 같다고 추측하지 않는다.
 
+## 지금 쓰는 Orca에도 적용하기
+
+[Orca의 native chat](https://orca.dev/docs/agents/native-chat)은 지원하는 agent 세션을 보여 주는 방식이다. 먼저 현재 공급자가 Codex인지와 실제 실행 host·Codex home을 확인한다. Orca가 설치돼 있다는 이유만으로 기본 home을 쓴다고 판단하지 않는다.
+
+- **기본 home을 공유하는 Orca Codex:** `~/.codex/AGENTS.md`의 기존 연결문을 재사용한다. Orca 전용 파일을 중복으로 만들지 않는다.
+- **별도 home·계정·원격 host의 Orca Codex:** 그 실행 환경의 실제 home에만 연결한다. 로컬 PC의 파일을 바꿔도 원격 실행에 적용됐다고 보지 않는다.
+- **이미 진행 중인 현재 대화:** 연결문이 제공됐는지와 공통 두 문서의 실제 읽기를 확인한다. 새 연결문을 만들었어도 과거에 시작한 모든 세션이 자동 갱신됐다고 가정하지 않는다. 필요한 문서를 현재 대화에서 명시적으로 읽어 적용할 수 있으며, 다른 프로젝트의 새 대화 적용은 별도 확인한다.
+
+Orca의 연결·현재 세션 대조는 [환경 가이드](environments/orca.md)를 따른다. 확인을 위해 현재 대화를 초기화하거나 다시 시작하거나, 새 worker·worktree를 만들 필요는 없다. Codex 이외 공급자는 그 공급자의 지침 기능을 별도로 확인하며 이 파일 경로를 그대로 적용하지 않는다. Orca의 상태 hook과 ai-workflow 사용량 수집 hook도 별개의 기능이다.
+
 ## AI에게 설정 맡기기
 
-공통 저장소를 받은 뒤 아래 경로를 실제 위치로 바꿔 사용 중인 AI에게 보낸다. 설정할 범위를 기본 Codex, 현재 Paseo 계정 또는 둘 다 중에서 명시한다.
+공통 저장소를 받은 뒤 아래 경로를 실제 위치로 바꿔 사용 중인 AI에게 보낸다. 설정할 범위를 현재 Orca의 Codex, 기본 Codex, 현재 Paseo의 Codex 계정 중에서 명시한다. 여러 범위를 선택해도 실제 home이 같으면 파일 하나를 공유한다.
 
 ```text
 내 여러 프로젝트에서 ai-workflow 공통 지침을 사용하고 싶어.
 공통 저장소 위치: /absolute/path/to/ai-workflow
-적용 범위: 기본 Codex와 현재 Paseo의 Codex 계정
+적용 범위: 현재 사용하는 앱의 Codex
 
 먼저 읽기 전용으로 실제 실행 host와 Codex home을 확인해줘.
 환경을 확인할 때는 CODEX_HOME 등 필요한 경로 항목만 확인하고,
 인증 파일이나 전체 환경변수·계정 로그는 출력하지 마.
-현재 Paseo 계정의 home을 확인할 수 없으면 그 부분은 미확인으로 남겨줘.
+현재 Orca 세션이나 Paseo 계정의 home을 확인할 수 없으면 미확인으로 남겨줘.
 
 공통 저장소의 templates/global-AGENTS.md를 읽고
 공통 저장소 경로를 내 실제 경로로 바꾼 최소 연결문을 준비해줘.

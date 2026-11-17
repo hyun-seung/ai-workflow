@@ -22,7 +22,7 @@ https://github.com/hyun-seung/ai-workflow
 
 | 사용 방식 | 안내 |
 | --- | --- |
-| 내 여러 프로젝트에서 기본으로 사용 | [Codex·Paseo 개인 공통 연결](runtime/global-workflow.md) |
+| 내 여러 프로젝트에서 기본으로 사용 | [Orca·Codex·Paseo 개인 공통 연결](runtime/global-workflow.md) |
 | 프로젝트 하나에 연결하거나 직접 설치 | [처음 시작하기](GETTING_STARTED.md) |
 
 연결 후에는 “이 오류를 고치고 관련 테스트까지 확인해줘”처럼 평소대로 요청하면 됩니다.
