@@ -46,7 +46,10 @@ def instant(value):
     moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if moment.tzinfo is None:
         raise ValueError("observed_at must include timezone")
-    return moment.astimezone(timezone.utc).isoformat(timespec="microseconds")
+    try:
+        return moment.astimezone(timezone.utc).isoformat(timespec="microseconds")
+    except OverflowError:
+        raise ValueError("Timestamp is outside supported UTC range") from None
 
 
 def validate(event):
@@ -93,6 +96,128 @@ def normalize_orca(snapshot, scope, dispatch_id, observed_at):
     return validate({"version": 1, "scope": scope, "dispatch_id": dispatch_id,
                      "observed_at": observed_at, "state": state, "kind": "unknown",
                      "source": "orca.worker-show", "request_id": None, "revision": None})
+
+
+# Separate from worker-show: this versioned contract supplies approvalId, but a
+# file import cannot establish that the same approval is still live in Orca.
+APPROVAL_SOURCE = "orca.worker-approval.v1"
+MAX_APPROVAL_INPUT = 64 * 1024
+
+
+def bounded_approval(value, depth=0):
+    if depth > 8:
+        raise ValueError("Approval input is too deep")
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ValueError("Invalid approval key")
+            bounded_approval(item, depth + 1)
+    elif isinstance(value, list):
+        for item in value:
+            bounded_approval(item, depth + 1)
+    elif value is not None and type(value) not in (str, int, bool):
+        raise ValueError("Invalid approval value")
+    if depth == 0 and len(json.dumps(value).encode()) > MAX_APPROVAL_INPUT:
+        raise ValueError("Approval input exceeds 64 KiB")
+
+
+def read_approval_json(path):
+    with Path(path).open("rb") as stream:
+        data = stream.read(MAX_APPROVAL_INPUT + 1)
+    if len(data) > MAX_APPROVAL_INPUT:
+        raise ValueError("Approval input exceeds 64 KiB")
+    try:
+        value = decode(data.decode("utf-8"))
+        bounded_approval(value)
+        return value
+    except RecursionError:
+        raise ValueError("Approval input is too deep") from None
+
+
+def exact_fields(value, required, optional=()):
+    if (not isinstance(value, dict) or set(value) - set(required) - set(optional)
+            or set(required) - set(value)):
+        raise ValueError("Unsupported approval fields")
+
+
+def approval_text(value, nullable=False):
+    if value is None and nullable:
+        return
+    if not isinstance(value, str):
+        raise ValueError("Invalid approval text")
+
+
+def normalize_approval(envelope, binding):
+    """Validate explicit captured evidence, not its authenticity or currentness."""
+    for value in (envelope, binding):
+        bounded_approval(value)
+    exact_fields(envelope, ("scope", "observed_at", "payload"))
+    exact_fields(binding, ("scope", "observed_at", "dispatch_id", "task_id",
+                           "worker_handle", "approval_id"))
+    for key in ("scope", "dispatch_id", "task_id", "worker_handle", "approval_id"):
+        identifier(binding[key], key)
+    # Exact capture metadata comparison: import time must never replace capture time.
+    if any(envelope[key] != binding[key] for key in ("scope", "observed_at")):
+        raise ValueError("Approval capture binding mismatch")
+    observed = instant(binding["observed_at"])
+    payload = envelope["payload"]
+    exact_fields(payload, ("v", "approvalId", "state", "worker", "summary", "allowedActions"),
+                 ("personOnly", "expiresAt", "outcome"))
+    if type(payload["v"]) is not int or payload["v"] != 1:
+        raise ValueError("Unsupported approval version")
+    exact_fields(payload["worker"], ("handle", "dispatchId", "taskId"))
+    expected = {"handle": binding["worker_handle"], "dispatchId": binding["dispatch_id"],
+                "taskId": binding["task_id"]}
+    if payload["worker"] != expected or payload["approvalId"] != binding["approval_id"]:
+        raise ValueError("Approval worker binding mismatch")
+    exact_fields(payload["summary"], ("title", "detail", "reason"))
+    for key in ("title", "detail", "reason"):
+        approval_text(payload["summary"][key], nullable=key != "title")
+    if "personOnly" in payload and payload["personOnly"] is not True:
+        raise ValueError("Invalid personOnly")
+    actions = payload["allowedActions"]
+    if (not isinstance(actions, list) or any(a not in ("allow", "deny") for a in actions)
+            or len(set(actions)) != len(actions)):
+        raise ValueError("Invalid allowedActions")
+    state = payload["state"]
+    if state == "open":
+        if not actions or "outcome" in payload:
+            raise ValueError("Conflicting open approval")
+        if "expiresAt" in payload:
+            instant(payload["expiresAt"])
+        status = "pending"
+    elif state in ("answered", "expired"):
+        if actions or "expiresAt" in payload or "outcome" not in payload:
+            raise ValueError("Conflicting closed approval")
+        outcome = payload["outcome"]
+        exact_fields(outcome, ("by", "decision", "reason", "reasonDelivered"))
+        by = outcome["by"]
+        if (by not in ("person", "coordinator", "worker-chat", "worker-terminal", "auto",
+                       "terminal-only", "worker-ended", "unknown")
+                or outcome["decision"] not in (None, "allow", "deny")
+                or type(outcome["reasonDelivered"]) is not bool):
+            raise ValueError("Invalid approval outcome")
+        approval_text(outcome["reason"], nullable=True)
+        if ((state == "expired") != (by == "auto")
+                or (outcome["reason"] is None and outcome["reasonDelivered"])
+                or (by in ("worker-ended", "terminal-only") and outcome["decision"] is not None)
+                or (payload.get("personOnly") and by == "coordinator" and outcome["decision"] == "allow")):
+            raise ValueError("Conflicting approval outcome")
+        # terminal-only explicitly leaves the worker's prompt up; it is not clear.
+        status = "ended" if by == "worker-ended" else "unknown" if by == "terminal-only" else "clear"
+    else:
+        raise ValueError("Invalid approval state")
+    # Set order and absent optional fields do not cause a content-change notice.
+    content = {"summary": payload["summary"], "allowedActions": sorted(actions),
+               "personOnly": payload.get("personOnly", False), "expiresAt": payload.get("expiresAt")}
+    event = validate({"version": 1, "scope": binding["scope"],
+                      "dispatch_id": binding["dispatch_id"], "source": APPROVAL_SOURCE,
+                      "observed_at": observed, "state": status, "kind": "approval",
+                      "request_id": payload["approvalId"] if status == "pending" else None,
+                      "revision": digest(content) if status == "pending" else None})
+    identity = (digest([binding["scope"], APPROVAL_SOURCE, payload["approvalId"]]),
+                digest([binding["dispatch_id"], binding["task_id"], binding["worker_handle"]]))
+    return event, identity
 
 
 def probe_orca(cli, project, scope, dispatch_id):
@@ -146,7 +271,7 @@ def chat_notice(result, *, live):
     """Prepare text only; delivery and its ack remain the coordinator's actions."""
     output = {"channel": "orca_chat", "deliver": False, "text": None,
               "notice_id": None, "permission_decision": "unknown"}
-    if not live:
+    if not live or result.get("evidence") == "manual_source_unverified":
         return dict(output, reason="historical_observation_not_live")
     if result.get("action") not in {"deliver_pending_notice", "replay"}:
         return dict(output, reason="no_current_notice")
@@ -182,6 +307,8 @@ class WaitStore:
             if (application, version) != (0x41575754, 1) and (application or version or tables):
                 raise ValueError("Not a supported approval wait database")
             self.db.execute("CREATE TABLE IF NOT EXISTS waits (key TEXT PRIMARY KEY, observed_at TEXT, event_hash TEXT, state TEXT, signature TEXT, notice TEXT, acked INTEGER, last_probe TEXT)")
+            self.db.execute("CREATE TABLE IF NOT EXISTS approval_bindings (approval_key TEXT PRIMARY KEY, worker_hash TEXT NOT NULL)")
+            self.db.execute("CREATE TABLE IF NOT EXISTS approval_heads (wait_key TEXT PRIMARY KEY, approval_key TEXT NOT NULL)")
             self.db.execute("PRAGMA application_id=1096243028")
             self.db.execute("PRAGMA user_version=1")
             self.db.commit()
@@ -193,13 +320,25 @@ class WaitStore:
     def close(self):
         self.db.close()
 
-    def observe(self, event):
+    def observe_approval(self, envelope, binding):
+        event, identity = normalize_approval(envelope, binding)
+        result = self.observe(event, approval_identity=identity)
+        result.update(source=APPROVAL_SOURCE, evidence="manual_source_unverified",
+                      current_identity="unknown")
+        return result
+
+    def observe(self, event, *, approval_identity=None):
         event = validate(event)
         key = digest([event["scope"], event["dispatch_id"]])
-        fingerprint = digest(event)
+        fingerprint = digest([event, approval_identity]) if approval_identity else digest(event)
         signature = digest([event["source"], event["request_id"], event["revision"], event["kind"]])
         self.db.execute("BEGIN IMMEDIATE")
         try:
+            if approval_identity:
+                prior = self.db.execute("SELECT worker_hash FROM approval_bindings WHERE approval_key=?",
+                                        (approval_identity[0],)).fetchone()
+                if prior and prior[0] != approval_identity[1]:
+                    raise ValueError("Approval identity changed worker, task or dispatch")
             old = self.db.execute("SELECT * FROM waits WHERE key=?", (key,)).fetchone()
             status = event["state"]
             result = {"state": status, "action": "none", "notice": None,
@@ -217,6 +356,17 @@ class WaitStore:
                 result.update(state="ended", action="inspect_conflicting_lifecycle")
                 self.db.commit()
                 return result
+            if approval_identity:
+                head = self.db.execute("SELECT approval_key FROM approval_heads WHERE wait_key=?", (key,)).fetchone()
+                if status != "pending" and head and head[0] != approval_identity[0]:
+                    result.update(state=old["last_probe"] if old else "unknown",
+                                  action="inspect_conflicting_approval")
+                    self.db.commit()
+                    return result
+                self.db.execute("INSERT OR IGNORE INTO approval_bindings VALUES(?,?)", approval_identity)
+                if status == "pending":
+                    self.db.execute("INSERT INTO approval_heads VALUES(?,?) ON CONFLICT(wait_key) DO UPDATE SET approval_key=excluded.approval_key",
+                                    (key, approval_identity[0]))
             same = (old and status == old["state"] and
                     (status != "pending" or (event["request_id"] is not None and old["signature"] == signature)))
             notice = json.loads(old["notice"]) if old and old["notice"] else None
@@ -278,6 +428,9 @@ def main(argv=None):
     source.add_argument("--live", action="store_true")
     orca.add_argument("--observed-at", help="Required snapshot capture time; never use the import time")
     orca.add_argument("--orca-cli", help="Pinned local executable; no fallback or remote routing")
+    approval = sub.add_parser("orca-approval", help="Import one explicitly bound v1 approval capture; never live")
+    approval.add_argument("event", type=Path, help="Captured scope, observed_at and payload envelope")
+    approval.add_argument("--binding", type=Path, required=True, help="Independently confirmed capture identity")
     sub.add_parser("pending")
     sub.add_parser("ack").add_argument("notice_id")
     args = parser.parse_args(argv)
@@ -286,10 +439,14 @@ def main(argv=None):
         project = args.project.expanduser().resolve(strict=True)
         if not project.is_dir():
             raise ValueError("Project must be a directory")
-        if args.chat and args.command not in {"orca", "observe"}:
+        if args.chat and args.command not in {"orca", "observe", "orca-approval"}:
             raise ValueError("Chat preparation requires an observation")
         event = None
-        if args.command == "observe":
+        if args.command == "orca-approval":
+            envelope = read_approval_json(args.event)
+            binding = read_approval_json(args.binding)
+            normalize_approval(envelope, binding)  # Reject malformed input before opening a DB.
+        elif args.command == "observe":
             event = validate(read_json(args.event))
         elif args.command == "orca":
             if args.snapshot:
@@ -304,7 +461,9 @@ def main(argv=None):
                     raise ValueError("Explicit Orca CLI must not be empty")
                 event = probe_orca(cli, project, args.scope, args.dispatch)
         store = WaitStore(args.state_db, project)
-        if event:
+        if args.command == "orca-approval":
+            result = store.observe_approval(envelope, binding)
+        elif event:
             result = store.observe(event)
         elif args.command == "ack":
             result = store.ack(args.notice_id)

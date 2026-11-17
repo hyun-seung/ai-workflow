@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from approval_wait import WaitStore, chat_notice, main, normalize_orca, probe_orca, validate
+from approval_wait import WaitStore, chat_notice, main, normalize_orca, probe_orca, validate, normalize_approval, read_approval_json, instant
 
 
 def event(second=1, **values):
@@ -233,6 +233,215 @@ class WaitTests(unittest.TestCase):
         with redirect_stdout(output):
             self.assertEqual(main(args[:-3]+['--snapshot',str(source),'--observed-at','2026-01-01T00:00:03Z']),0)
         self.assertFalse(json.loads(output.getvalue())['chat']['deliver'])
+
+
+def approval(second=1, state="open", by="person", **changes):
+    """Synthetic data shaped like installed WorkerApprovalPayloadSchema v1."""
+    payload = {"v": 1, "approvalId": "approval-1", "state": state,
+               "worker": {"handle": "worker-test", "dispatchId": "dispatch-test", "taskId": "task-test"},
+               "summary": {"title": "PRIVATE_COMMAND", "detail": "PRIVATE_DETAIL", "reason": None},
+               "allowedActions": ["allow", "deny"]}
+    if state != "open":
+        payload.update(allowedActions=[], outcome={"by": by, "decision": None,
+                                                  "reason": None, "reasonDelivered": False})
+    payload.update(changes)
+    envelope = {"scope": "orca.test-host", "observed_at": f"2026-01-01T00:00:{second:02d}Z", "payload": payload}
+    binding = {"scope": envelope["scope"], "observed_at": envelope["observed_at"],
+               "dispatch_id": payload["worker"]["dispatchId"], "task_id": payload["worker"]["taskId"],
+               "worker_handle": payload["worker"]["handle"], "approval_id": payload["approvalId"]}
+    return envelope, binding
+
+
+class ApprovalTests(unittest.TestCase):
+    setUp = WaitTests.setUp
+    def test_v1_repeat_restart_ack_changes_new_identity_and_reappearance(self):
+        first = self.store.observe_approval(*approval())
+        self.assertEqual(first["state"], "pending")
+        self.assertEqual(first["source"], "orca.worker-approval.v1")
+        self.assertEqual(first["current_identity"], "unknown")
+        with closing(WaitStore(self.path, self.project)) as restarted:
+            self.assertEqual(restarted.observe_approval(*approval(2))["notice"], first["notice"])
+            restarted.ack(first["notice"]["id"])
+        self.assertEqual(self.store.observe_approval(*approval(3))["action"], "suppressed")
+        changed = self.store.observe_approval(*approval(4, summary={"title":"CHANGED", "detail":None, "reason":None}))
+        self.assertNotEqual(changed["notice"]["id"], first["notice"]["id"])
+        new = self.store.observe_approval(*approval(5, approvalId="approval-2"))
+        self.assertNotEqual(new["notice"]["id"], changed["notice"]["id"])
+        closed = self.store.observe_approval(*approval(6, state="answered", approvalId="approval-2"))
+        self.assertEqual(closed["state"], "clear")
+        reopened = self.store.observe_approval(*approval(7, approvalId="approval-2"))
+        self.assertNotEqual(reopened["notice"]["id"], new["notice"]["id"])
+        for result in (first, changed, new, closed, reopened):
+            self.assertEqual(result["permission_decision"], "unknown")
+        self.assertNotIn(b"PRIVATE_COMMAND", self.path.read_bytes())
+        self.assertNotIn(b"PRIVATE_DETAIL", self.path.read_bytes())
+        self.assertNotIn(b"approval-1", self.path.read_bytes())
+        self.assertNotIn("PRIVATE", json.dumps(first))
+
+    def test_v1_closed_outcomes_and_person_only(self):
+        for by, state, expected in [("person","answered","clear"), ("auto","expired","clear"),
+                ("worker-ended","answered","ended"), ("terminal-only","answered","unknown"),
+                ("unknown","answered","clear"), ("worker-chat","answered","clear"),
+                ("worker-terminal","answered","clear"), ("coordinator","answered","clear")]:
+            with self.subTest(by=by):
+                value, _ = normalize_approval(*approval(state=state, by=by, personOnly=True))
+                self.assertEqual(value["state"], expected)
+        value, _ = normalize_approval(*approval(personOnly=True, expiresAt="2026-01-01T00:01:00Z"))
+        self.assertEqual(value["request_id"], "approval-1")
+        self.assertEqual(value["source"], "orca.worker-approval.v1")
+        self.assertEqual(normalize_approval(*approval(allowedActions=["deny","allow"]))[0]["revision"],
+                         normalize_approval(*approval())[0]["revision"])
+
+    def test_v1_identity_binding_and_rebinding_survive_restart(self):
+        self.store.observe_approval(*approval())
+        for key in ("scope", "observed_at", "dispatch_id", "task_id", "worker_handle", "approval_id"):
+            data, binding = approval(2)
+            binding[key] = "other" if key != "observed_at" else "2026-01-01T00:00:03Z"
+            with self.subTest(key=key), self.assertRaises(ValueError):normalize_approval(data, binding)
+        with closing(WaitStore(self.path, self.project)) as restarted:
+            for key in ("handle", "dispatchId", "taskId"):
+                data, binding = approval(3, worker=dict(approval()[0]["payload"]["worker"], **{key:"other"}))
+                with self.subTest(key=key), self.assertRaises(ValueError):restarted.observe_approval(data, binding)
+        data, binding = approval(4)
+        data["scope"] = binding["scope"] = "orca.other-host"
+        self.assertIsNotNone(self.store.observe_approval(data, binding)["notice"])
+
+    def test_v1_strict_contract_and_contradictions(self):
+        bad = [{"v":None}, {"v":2}, {"v":True}, {"state":None}, {"personOnly":False},
+               {"allowedActions":[]}, {"allowedActions":["allow","allow"]},
+               {"allowedActions":["execute"]}, {"outcome":None}, {"summary":{}}, {"unknown":"x"},
+               {"expiresAt":None}, {"expiresAt":"yesterday"}]
+        for changes in bad:
+            with self.subTest(changes=changes), self.assertRaises(ValueError):normalize_approval(*approval(**changes))
+        for state, by, outcome_changes in [("answered","auto",{}), ("expired","person",{}),
+                ("answered","person",{"reasonDelivered":True}),
+                ("answered","worker-ended",{"decision":"allow"}),
+                ("answered","terminal-only",{"decision":"deny"}),
+                ("answered","coordinator",{"decision":"allow"}),
+                ("answered","person",{"by":"invented"}), ("answered","person",{"decision":"yes"})]:
+            data, binding = approval(state=state, by=by, personOnly=True)
+            data["payload"]["outcome"].update(outcome_changes)
+            with self.subTest(state=state, by=by, changes=outcome_changes), self.assertRaises(ValueError):normalize_approval(data, binding)
+        for field in ("outcome", "summary", "worker"):
+            data, binding = approval(state="answered")
+            del data["payload"][field]
+            with self.assertRaises(ValueError):normalize_approval(data, binding)
+        for data in (None, [], {}, {"scope":"test"}):
+            with self.assertRaises(ValueError):normalize_approval(data, approval()[1])
+
+    def test_v1_ordering_old_close_and_lifecycle(self):
+        first = self.store.observe_approval(*approval(3))
+        self.assertEqual(self.store.observe_approval(*approval(1))["action"], "stale_or_conflicting_observation")
+        self.assertEqual(self.store.observe_approval(*approval(3, personOnly=True))["action"], "stale_or_conflicting_observation")
+        new = self.store.observe_approval(*approval(4, approvalId="approval-2"))
+        self.assertEqual(self.store.observe_approval(*approval(5, state="answered"))["action"], "inspect_conflicting_approval")
+        self.assertEqual(self.store.pending()[0]["notice"], new["notice"])
+        self.store.observe_approval(*approval(6, state="answered", by="worker-ended", approvalId="approval-2"))
+        self.assertEqual(self.store.observe_approval(*approval(7, approvalId="approval-2"))["action"], "inspect_conflicting_lifecycle")
+
+    def test_v1_concurrent_atomic_ack_and_no_raw_outcome_storage(self):
+        def update(_):
+            with closing(WaitStore(self.path, self.project)) as store:
+                return store.observe_approval(*approval())["notice"]["id"]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            ids = list(pool.map(update, range(2)))
+        self.assertEqual(ids[0], ids[1])
+        self.store.ack(ids[0])
+        self.assertIsNone(self.store.observe_approval(*approval())["notice"])
+        data, binding = approval(2, state="answered")
+        data["payload"]["outcome"].update(decision="allow", reason="PRIVATE_OUTCOME", reasonDelivered=True)
+        result = self.store.observe_approval(data, binding)
+        self.assertEqual(result["state"], "clear")
+        self.assertEqual(result["permission_decision"], "unknown")
+        self.assertNotIn("PRIVATE_OUTCOME", json.dumps(result))
+        self.assertNotIn(b"PRIVATE_OUTCOME", self.path.read_bytes())
+        self.assertFalse(chat_notice(result, live=True)["deliver"])
+        before = self.store.db.execute("SELECT * FROM waits").fetchall()
+        data, binding = approval(3, worker={"handle":"different", "dispatchId":"dispatch-test", "taskId":"task-test"})
+        with self.assertRaises(ValueError):self.store.observe_approval(data, binding)
+        self.assertEqual(before, self.store.db.execute("SELECT * FROM waits").fetchall())
+        self.assertFalse(self.store.db.in_transaction)
+
+    def test_v1_old_database_compatibility_and_terminal_only(self):
+        self.store.db.execute("DROP TABLE approval_bindings")
+        self.store.db.execute("DROP TABLE approval_heads")
+        self.store.db.commit()
+        first = self.store.observe(event())
+        with closing(WaitStore(self.path, self.project)) as reopened:
+            self.assertEqual(reopened.pending()[0]["notice"], first["notice"])
+            reopened.observe_approval(*approval(2))
+            unknown = reopened.observe_approval(*approval(3, state="answered", by="terminal-only"))
+            self.assertEqual(unknown["state"], "unknown")
+            self.assertEqual(unknown["action"], "inspect_unknown")
+            self.assertEqual(reopened.pending()[0]["latest_observation"], "unknown")
+            self.assertFalse(chat_notice(unknown, live=True)["deliver"])
+
+    def test_v1_cli_timestamp_overflow_is_private_and_does_not_touch_db(self):
+        self.store.observe(event())
+        before = {p.name: p.read_bytes() for p in self.path.parent.iterdir()}
+        cases = [("observed_at", "0001-01-01T00:00:00+14:00"),
+                 ("expiresAt", "9999-12-31T23:59:59-14:00")]
+        for field, timestamp in cases:
+            data, binding = approval()
+            if field == "observed_at":
+                data[field] = binding[field] = timestamp
+            else:
+                data["payload"][field] = timestamp
+            source, bound = self.root / "extreme.json", self.root / "extreme-binding.json"
+            source.write_text(json.dumps(data)); bound.write_text(json.dumps(binding))
+            for existing in (True, False):
+                path = self.path if existing else self.root / "not-created" / "waits.sqlite3"
+                with self.subTest(field=field, existing_db=existing):
+                    result = subprocess.run(
+                        [sys.executable, str(ROOT / "scripts/approval_wait.py"),
+                         "--project", str(self.project), "--state-db", str(path),
+                         "orca-approval", str(source), "--binding", str(bound)],
+                        capture_output=True, text=True, timeout=10)
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertEqual(result.stdout, "")
+                    self.assertEqual(result.stderr, "Wait handling failed; check inputs or use formal access approval. State was not assumed clear.\n")
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertNotIn(timestamp, result.stderr)
+                    self.assertEqual(before, {p.name: p.read_bytes() for p in self.path.parent.iterdir()})
+                    self.assertFalse((self.root / "not-created").exists())
+
+    def test_instant_normal_boundaries_and_legacy_validation(self):
+        for source, expected in [
+                ("0001-01-01T00:00:00Z", "0001-01-01T00:00:00.000000+00:00"),
+                ("0001-01-01T14:00:00+14:00", "0001-01-01T00:00:00.000000+00:00"),
+                ("9999-12-31T23:59:59.999999Z", "9999-12-31T23:59:59.999999+00:00"),
+                ("9999-12-31T09:59:59.999999-14:00", "9999-12-31T23:59:59.999999+00:00"),
+                ("2026-01-01T09:00:00+09:00", "2026-01-01T00:00:00.000000+00:00")]:
+            with self.subTest(source=source):self.assertEqual(instant(source), expected)
+        for value in (None, 1, "invalid", "2026-01-01T00:00:00", "2026-02-30T00:00:00Z"):
+            with self.subTest(value=value), self.assertRaises(ValueError):instant(value)
+        for value in ("0001-01-01T00:00:00+14:00", "9999-12-31T23:59:59-14:00"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError) as error:
+                    instant(value)
+                self.assertNotIn(value, str(error.exception))
+
+    def test_v1_cli_history_no_live_and_bounded_failure_no_leak(self):
+        data, binding = approval()
+        source = self.root / "approval.json"
+        bound = self.root / "binding.json"
+        source.write_text(json.dumps(data)); bound.write_text(json.dumps(binding))
+        args = ["--project", str(self.project), "--state-db", str(self.path), "--chat",
+                "orca-approval", str(source), "--binding", str(bound)]
+        output = io.StringIO()
+        with redirect_stdout(output):self.assertEqual(main(args), 0)
+        result = json.loads(output.getvalue())
+        self.assertFalse(result["chat"]["deliver"])
+        self.assertEqual(result["chat"]["reason"], "historical_observation_not_live")
+        self.assertEqual(result["evidence"], "manual_source_unverified")
+        for raw in ('{"x":NaN}', '{"x":1e999}', '[' * 2000 + ']' * 2000,
+                    json.dumps({"x":"a" * 65536}), '{"v":1,"v":1}'):
+            source.write_text(raw)
+            with self.subTest(raw=raw[:30]), self.assertRaises(ValueError):read_approval_json(source)
+        source.write_text('{"scope":"PRIVATE_SECRET", "payload":null}')
+        with redirect_stdout(io.StringIO()), patch('sys.stderr', new_callable=io.StringIO) as error:
+            self.assertEqual(main(args), 2)
+            self.assertNotIn("PRIVATE_SECRET", error.getvalue())
 
 
 class NativeTests(unittest.TestCase):

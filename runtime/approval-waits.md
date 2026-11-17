@@ -34,9 +34,9 @@ python3 scripts/approval_wait.py --project /path/to/project \
 
 Orca adapter는 dispatch 일치와 `observation.exactWorker`를 확인한다. 정확한 live 관측에서 `agentWait`가 명시 null이면 clear, 비어 있지 않은 객체면 pending이다. 정확한 exited 관측은 ended로 처리한다. `agentWait` 부재·liveness 미확인·잘못된 값·exited와 pending의 상충은 unknown이다. 조회 실패나 성공과 error가 섞인 응답은 오류이며 clear로 저장하지 않는다. 필드 부재/null의 의미는 설치 CLI의 `orchestration worker-show --help`에 명시되어 있다. [공식 CLI 안내](https://www.onorca.dev/docs/cli/overview)에 따라 설치 버전의 계약을 우선 확인한다.
 
-**현재 확인한 CLI 계약에는 대기의 안정적인 원본 요청 ID·내용 버전 규약이 없다.** 따라서 native pending을 같은 명령·같은 dispatch라는 이유만으로 자동 억제하지 않는다. `pending_identity_unavailable`로 남겨 실제 요청을 확인하게 한다. native의 종료된 worker·대기 해소·확인 불가 처리는 연결됐고, pending 원본 식별자 연결은 후속이다. 이 제한 때문에 현재 도구만으로 Orca의 모든 반복 알림이 없어지지는 않는다.
+**현재 확인한 worker-show의 agentWait 계약에는 대기의 안정적인 원본 요청 ID·내용 버전 규약이 없다.** 따라서 native pending을 같은 명령·같은 dispatch라는 이유만으로 자동 억제하지 않는다. `pending_identity_unavailable`로 남겨 실제 요청을 확인하게 한다. native의 종료된 worker·대기 해소·확인 불가 처리는 연결됐다. 별도 v1 승인 payload의 명시 수입은 아래 `orca-approval`로 연결하지만, worker-show의 live pending과 그 ID를 연결하는 공개 규약은 여전히 확인되지 않았다. 이 제한 때문에 현재 도구만으로 Orca의 모든 반복 알림이 없어지지는 않는다.
 
-2026-11-11 설치된 Orca 1.4.256의 `agent-context`·`worker-show --help`와 배포본 CLI handler를 대조했다. 이 공개 경로에서 원본 승인 요청 ID와 변경 버전의 규약을 확인하지 못했다. `msg_stop_*` 등의 알림 메시지 ID, 명령 해시, 앱 내부의 비공개 prompt key를 원본 승인 ID로 대체하지 않는다. live pending의 ID 연결 검증은 이 계약이 확보될 때까지 보류한다.
+2026-11-11 설치된 Orca 1.4.256의 `agent-context`·`worker-show --help`와 배포본 CLI handler를 대조했다. 이 worker-show 공개 경로에서 원본 승인 요청 ID와 변경 버전의 규약을 확인하지 못했다. `msg_stop_*` 등의 알림 메시지 ID, 명령 해시, 앱 내부의 비공개 prompt key를 원본 승인 ID로 대체하지 않는다. live pending의 ID 연결 검증은 worker-show와 승인 payload의 동일성을 대조할 공개 계약이 확보될 때까지 보류한다.
 
 ## Orca 대화용 안내 준비
 
@@ -95,3 +95,60 @@ ack는 **알림 전달 확인**이다. 승인 버튼을 대신 누르거나 도�
 검증은 `python3 -m unittest discover -s tests -p test_approval_wait.py -v`로 수행한다. 가상 pending/clear/unknown 입력으로 중복·내용 변경·재시작·동시 처리·오래된 관측·CLI·비공개 저장을 확인한다. 실제 native 검증은 종료된 worker 조회를 별도 기록했으며, 실제 pending ID 수집·모바일 승인·외부 알림 전송은 미검증/미구현이다.
 
 이 도구는 조율자가 알림 수신 시 호출하는 연결이다. background watcher나 Orca 알림 hook 설치는 없다. Orca 자체 메시지의 생성 빈도·UI 표시를 바꾸지 않는다. 새 Codex worker의 대신 승인 적용은 제한된 별도 시험에서 확인했지만, 이 도구가 모드를 설정·검증하지는 않는다. [권한 정책](permission-policy.md)에 따라 대상 프로필의 적용을 확인하며 전역 권한을 넓혀 알림 수를 줄이지 않는다.
+
+## 버전형 Orca 승인 payload 단발 수입
+
+`orca-approval`은 Orca 1.4.261 배포 계약 `shared/orchestration/approvals/worker-approval-payload.js`의 `WorkerApprovalPayloadSchema` v1을 기존 관측·ack에 연결한다. 이 계약은 escalation과 closing 메시지가 지닌 승인 카드 데이터다. `approvalId`만 원본 요청 ID로 사용하고 source는 `orca.worker-approval.v1`로 분리한다. `worker-show`의 `agentWait`에서 ID를 추출하거나 추정하지 않는다.
+
+조율자는 네이티브로 도착한 escalation/closing 알림 또는 **현재 알림이 지시한** 공식 orchestration 수신 경로에서 payload를 확인한다. 설치 버전의 `skills get orchestration`과 해당 수신 명령의 `--help`를 우선한다. 새 check 감시 루프, subscribe/RPC/client/daemon, 내부 prompt key 탐색, 시험 승인 생성은 필요하지 않다. 수신 메시지에서 버전형 payload가 제공되지 않거나 구조가 모호하면 이 어댑터로 변환하지 않는다. 기존 `orca --live` 관측 또는 manual-source/unverified 근거로 남긴다. 메시지 ID·명령 해시·비공개 key를 approvalId로 대체하지 않는다.
+
+실제 받은 원본의 host 범위·dispatch·task·worker handle·approvalId와 실제 관측 시각을 확인하고, 필요한 값만 독립된 binding 파일에 적는다. 두 파일 모두 비공개 위치에 둔다. 아래 값은 배포 스키마와 동형인 **가상 예시**다. payload 자체에 host나 관측 시각이 없으므로 envelope가 이를 명시하며 binding과 문자열까지 정확히 같아야 한다.
+
+```json
+{
+  "scope": "orca.example-host",
+  "observed_at": "2026-01-01T00:00:01Z",
+  "payload": {
+    "v": 1,
+    "approvalId": "example-approval-1",
+    "state": "open",
+    "worker": {"handle": "example-worker", "dispatchId": "example-dispatch", "taskId": "example-task"},
+    "summary": {"title": "Example permission request", "detail": null, "reason": null},
+    "allowedActions": ["allow", "deny"],
+    "personOnly": true
+  }
+}
+```
+
+대조할 binding 파일:
+
+```json
+{
+  "scope": "orca.example-host",
+  "observed_at": "2026-01-01T00:00:01Z",
+  "dispatch_id": "example-dispatch",
+  "task_id": "example-task",
+  "worker_handle": "example-worker",
+  "approval_id": "example-approval-1"
+}
+```
+
+```sh
+python3 scripts/approval_wait.py --project /path/to/project \
+  --state-db /private/path/approval-waits/state.sqlite3 --chat \
+  orca-approval /private/path/approval-capture.json --binding /private/path/approval-binding.json
+```
+
+binding은 단순히 payload에서 자동 복사해 만드는 인증 수단이 아니다. 비교는 입력 사이의 일치만 검증하며 임의 입력의 진위나 host 소유권을 보증하지 않는다. 결과는 항상 `evidence=manual_source_unverified`, `current_identity=unknown`이다. 과거 파일·snapshot·이 어댑터의 수입 성공으로 현재 대기라고 선언하지 않는다. `--chat`은 기존 신선도 검사를 유지하여 이 명령에서는 항상 `deliver=false`다. 입력 시각을 현재 시각으로 바꾸어 이 제한을 우회하지 않는다.
+
+관측 처리 규칙:
+
+- open은 pending이다. summary 전체·allowedActions의 정렬된 집합·personOnly·expiresAt을 정규화해 revision 해시만 만든다. 같은 approvalId·내용의 반복은 미전달 notice를 재사용하고, 전달 뒤 ack한 경우 억제한다. 내용 변경·새 ID·clear 후 재등장은 새 알림이다. ack는 로컬 전달 확인이며 원본 승인이나 Orca로의 ack 전송이 아니다.
+- closed는 outcome 필수, allowedActions는 빈 배열, expiresAt은 없어야 한다. `auto`만 expired이고 다른 by는 answered다. `worker-ended`는 ended, `terminal-only`는 원래 프롬프트가 남는다는 계약 때문에 unknown, 나머지는 clear다. clear는 Orca 카드의 해소만 나타내며 권한 결정은 항상 unknown이다. outcome의 allow/deny를 실행 권한으로 사용하지 않는다.
+- personOnly는 생략 또는 true만 받는다. personOnly에서 coordinator allow, reason 없는 reasonDelivered=true, worker-ended/terminal-only의 비어 있지 않은 decision 등 모순을 거부한다. 자동 승인·버튼 호출 기능은 없다.
+- 같은 host/source/approvalId의 task·dispatch·handle 변경은 재시작 후에도 거부한다. DB에는 ID와 worker 조합의 해시만 저장한다. 같은 dispatch에서 새 ID가 열린 뒤 이전 ID의 늦은 closing이 오면 `inspect_conflicting_approval`로 남기고 새 대기를 해소하지 않는다. 오래되거나 같은 시각의 상충 관측과 종료 후 재등장은 기존 WaitStore 정책을 유지한다.
+- v unknown/null, 필수 nullable 필드 누락, 임의 필드·형식, binding 불일치, 비유한 수, 중복 JSON key, 64 KiB 초과 또는 8단계 초과 입력은 거부한다. ID는 기존 안전 식별자 형식(영숫자·`_.:-`, 1–200자)만 받는다. 모르는 구조를 성공으로 변환하지 않는다.
+
+DB와 결과 안내에는 명령·summary·reason 원문을 저장하지 않는다. 입력 파일의 비공개 보관은 호출자의 책임이다. 기존 DB 형식을 유지하며 approval binding/head 해시 테이블만 부가한다. 운영 DB를 자동 이전하거나 원본 알림을 제거하지 않는다.
+
+현재 공개 `worker-show` 경로는 approvalId를 현재 agentWait와 대조하는 규약을 제공하지 않는다. 따라서 현재 ID의 live 동일성, 현재 대기의 자동 억제, Orca 승인 버튼 연결 성공은 미검증이다. 조율자가 확인한 현재 Run 최근 50개 범위(실제 메시지 7개)에서 해당 payload는 0개였으며, 가상 open/변경/answered/expired/worker-ended/personOnly 테스트를 실제 승인 시험으로 보고하지 않는다. 알림 전송·권한 승인·새 에이전트·원본 세션 수정은 수행하지 않는다.
