@@ -1,0 +1,185 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "id": "frontend-design",
+      "repo": "anthropics/skills",
+      "path": "skills/frontend-design",
+      "ref": "2c5958ecac7cee2b583967a2c4981d0f4a75c579",
+      "roles": [
+        "designer"
+      ],
+      "tags": [
+        "common"
+      ],
+      "mode": "skill",
+      "license": "Apache-2.0",
+      "license_paths": [
+        "skills/frontend-design/LICENSE.txt"
+      ],
+      "reviewed_at": "2026-11-14",
+      "review": "source-reviewed; pilot only; runtime/skill-maintenance.md and role adapter apply"
+    },
+    {
+      "id": "impeccable",
+      "repo": "pbakaus/impeccable",
+      "path": ".agents/skills/impeccable",
+      "ref": "c4cd1924c389f68d37c687d9c2bbf13f12547c41",
+      "roles": [
+        "designer",
+        "frontend",
+        "verifier"
+      ],
+      "tags": [
+        "common"
+      ],
+      "mode": "reference-only",
+      "license": "Apache-2.0",
+      "license_paths": [
+        "LICENSE",
+        "NOTICE.md"
+      ],
+      "reviewed_at": "2026-11-14",
+      "review": "source-reviewed; pilot only; runtime/skill-maintenance.md and role adapter apply"
+    },
+    {
+      "id": "web-design-guidelines",
+      "repo": "vercel-labs/agent-skills",
+      "path": "skills/web-design-guidelines",
+      "ref": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "roles": [
+        "frontend",
+        "verifier"
+      ],
+      "tags": [
+        "web"
+      ],
+      "mode": "skill",
+      "license": "MIT",
+      "license_paths": [],
+      "reviewed_at": "2026-11-14",
+      "review": "source-reviewed; pilot only; runtime/skill-maintenance.md and role adapter apply"
+    },
+    {
+      "id": "react-best-practices",
+      "repo": "vercel-labs/agent-skills",
+      "path": "skills/react-best-practices",
+      "ref": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "roles": [
+        "frontend"
+      ],
+      "tags": [
+        "react-web"
+      ],
+      "mode": "skill",
+      "license": "MIT",
+      "license_paths": [],
+      "reviewed_at": "2026-11-14",
+      "review": "source-reviewed; pilot only; runtime/skill-maintenance.md and role adapter apply"
+    },
+    {
+      "id": "react-native-skills",
+      "repo": "vercel-labs/agent-skills",
+      "path": "skills/react-native-skills",
+      "ref": "1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62",
+      "roles": [
+        "frontend"
+      ],
+      "tags": [
+        "react-native",
+        "expo"
+      ],
+      "mode": "skill",
+      "license": "MIT",
+      "license_paths": [],
+      "reviewed_at": "2026-11-14",
+      "review": "source-reviewed; pilot only; runtime/skill-maintenance.md and role adapter apply"
+    },
+    {
+      "id": "expo-design-system",
+      "repo": "expo/skills",
+      "path": "plugins/expo/skills/expo-design-system",
+      "ref": "cd91460c0834e29ebb5fad92c34a690a3b207ed2",
+      "roles": [
+        "designer",
+        "frontend"
+      ],
+      "tags": [
+        "expo"
+      ],
+      "mode": "skill",
+      "license": "MIT",
+      "license_paths": [
+        "LICENSE"
+      ],
+      "reviewed_at": "2026-11-14",
+      "review": "source-reviewed; pilot only; runtime/skill-maintenance.md and role adapter apply"
+    },
+    {
+      "id": "break-ui",
+      "repo": "emilkowalski/skills",
+      "path": "skills/break-ui",
+      "ref": "f7ce8c02d6e3c8f0d980a44c57bcc41a40254349",
+      "roles": [
+        "frontend",
+        "verifier"
+      ],
+      "tags": [
+        "common"
+      ],
+      "mode": "skill",
+      "license": "MIT",
+      "license_paths": [
+        "LICENSE"
+      ],
+      "reviewed_at": "2026-11-14",
+      "review": "source-reviewed; pilot only; runtime/skill-maintenance.md and role adapter apply"
+    },
+    {
+      "id": "systematic-debugging",
+      "repo": "obra/superpowers",
+      "path": "skills/systematic-debugging",
+      "ref": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "roles": [
+        "frontend",
+        "backend",
+        "verifier"
+      ],
+      "tags": [
+        "debugging"
+      ],
+      "mode": "reference-only",
+      "license": "MIT",
+      "license_paths": [
+        "LICENSE"
+      ],
+      "reviewed_at": "2026-11-14",
+      "review": "source-reviewed; pilot only; runtime/skill-maintenance.md and role adapter apply"
+    }
+  ],
+  "discovery_sources": [
+    "https://github.com/anthropics/skills",
+    "https://github.com/vercel-labs/agent-skills",
+    "https://github.com/expo/skills",
+    "https://github.com/emilkowalski/skills",
+    "https://github.com/pbakaus/impeccable",
+    "https://github.com/obra/superpowers",
+    "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill"
+  ],
+  "deferred": [
+    {
+      "repo": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "reason": "Compare incremental benefit with current design skills before installation."
+    },
+    {
+      "repo": "anthropics/skills",
+      "path": "skills/webapp-testing",
+      "reason": "Playwright execution must be adapted to the selected runtime browser."
+    },
+    {
+      "repo": "obra/superpowers",
+      "path": "skills/writing-plans",
+      "reason": "Native delegation and commit instructions overlap with Orca and repository policies."
+    }
+  ]
+}

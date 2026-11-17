@@ -309,7 +309,7 @@ class RecordIntegrationTests(unittest.TestCase):
         popen.assert_not_called()
         self.assertEqual(self.record()["execution_status"], "timed_out")
 
-    def check_stop(self, signum=None, timeout=False, descendants=False):
+    def check_stop(self, signum=None, timeout=False, descendants=False, startup_delay=0):
         ready = self.root / "ready"
         child_ready = self.root / "child-ready"
         extra = ""
@@ -319,16 +319,36 @@ class RecordIntegrationTests(unittest.TestCase):
                           f"Path({str(child_ready)!r}).write_text(str(os.getpid()))\ntime.sleep(60)\n")
             extra += f"subprocess.Popen([sys.executable, '-c', {child_code!r}])\n"
             extra += f"while not Path({str(child_ready)!r}).exists():\n    time.sleep(0.01)\n"
-        extra += f"Path({str(ready)!r}).write_text(str(os.getpid()))\n"
         if timeout:
             extra += "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        if startup_delay:
+            extra += f"time.sleep({startup_delay!r})\n"
+        extra += f"Path({str(ready)!r}).write_text(str(os.getpid()))\n"
         extra += "time.sleep(60)"
         self.fake_codex(extra=extra)
         args = self.args() + (["--timeout-seconds", "1"] if timeout else [])
-        process = subprocess.Popen([sys.executable, str(ROOT / "scripts/workflow.py"), *args],
+        command = [sys.executable, str(ROOT / "scripts/workflow.py"), *args]
+        if timeout:
+            # Test forced shutdown of an already unresponsive real process. Advance
+            # only the runner's deadline clock after SIGTERM-ignore and readiness;
+            # startup-budget expiry has its own test above. Real process waits and
+            # SIGKILL remain active, with a five-second startup failsafe.
+            driver = (
+                "import sys, time\nfrom pathlib import Path\nfrom types import SimpleNamespace\n"
+                f"sys.path.insert(0, {str(ROOT / 'scripts')!r})\n"
+                "import workflow, codex_runner\n"
+                "real_clock = time.monotonic\nstarted = real_clock()\n"
+                f"ready = Path({str(ready)!r})\n"
+                "def deadline_clock():\n"
+                "    return started + 2 if ready.exists() or real_clock() - started >= 5 else started\n"
+                "codex_runner.time = SimpleNamespace(monotonic=deadline_clock)\n"
+                "raise SystemExit(workflow.main(sys.argv[1:]))\n"
+            )
+            command = [sys.executable, '-c', driver, *args]
+        process = subprocess.Popen(command,
                                    env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + (8 if timeout else 5)
             while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.01)
             self.assertTrue(ready.exists())
@@ -343,6 +363,8 @@ class RecordIntegrationTests(unittest.TestCase):
             self.assertEqual(record["usage"]["status"], "unavailable")
             self.assertIsNotNone(record["finished_at"])
             self.assertIsNotNone(record["exit_code"])
+            if timeout:
+                self.assertEqual(record["exit_code"], -signal.SIGKILL)
             # The 60-second child and grandchild inherit this pipe's stderr.
             # communicate() receiving EOF within 8 seconds proves they closed it;
             # a surviving grandchild would keep this call blocked, even after parent exit.
@@ -368,6 +390,10 @@ class RecordIntegrationTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "POSIX process groups")
     def test_timeout_kills_unresponsive_process(self):
         self.check_stop(timeout=True)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX process groups")
+    def test_timeout_shutdown_waits_for_slow_fixture_readiness(self):
+        self.check_stop(timeout=True, startup_delay=1.2)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>역할 스킬 · 업무 화면 시험</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 이동</a>
+  <header class="page-header">
+    <p class="eyebrow">가상 데이터 · 로컬 시험 API</p>
+    <h1>팀 작업</h1>
+    <p>기존 화면을 유지하며 긴 데이터와 실패·복구 동작을 확인합니다.</p>
+  </header>
+  <aside class="trial-tools" aria-label="시험 조건">
+    <label>비교본 <select id="revision"><option value="baseline">수정 전</option><option value="fixed">수정 후</option></select></label>
+    <label>데이터 <select id="dataset"><option value="demo">기본</option><option value="worst">긴 값</option><option value="empty">빈 목록</option><option value="one">1개</option><option value="huge">1,000개</option></select></label>
+    <label>테마 <select id="theme"><option value="light">밝게</option><option value="dark">어둡게</option></select></label>
+    <label>방향 <select id="direction"><option value="ltr">LTR</option><option value="rtl">RTL</option></select></label>
+    <label>글자 <select id="text-size"><option value="normal">100%</option><option value="large">200%</option></select></label>
+  </aside>
+  <main id="main">
+    <section class="members-panel" aria-labelledby="members-heading">
+      <div class="section-heading"><h2 id="members-heading">함께하는 사람</h2><span id="member-count"></span></div>
+      <ul id="members" aria-label="팀원 목록"></ul>
+      <p id="empty" hidden>아직 함께하는 사람이 없습니다.</p>
+      <button id="more" class="secondary" type="button">목록 더 보기</button>
+      <p id="member-detail" role="status" aria-live="polite"></p>
+    </section>
+    <section class="capture-panel" aria-labelledby="capture-heading">
+      <h2 id="capture-heading">할 일 추가</h2>
+      <p class="muted">첫 저장은 실패하며 다음 요청은 성공합니다. 실제 서비스로 전송되지 않습니다.</p>
+      <form id="task-form">
+        <label for="task-title">할 일 제목</label>
+        <input id="task-title" name="title" type="text" maxlength="120" required autocomplete="off" aria-describedby="title-hint">
+        <p id="title-hint" class="muted">1~120자. 실패해도 내용을 유지해야 합니다.</p>
+        <button id="save" type="submit">할 일 저장</button>
+        <p id="save-status" role="status" aria-live="polite"></p>
+      </form>
+      <div class="section-heading"><h3>저장된 할 일</h3><button id="refresh" class="secondary" type="button">다시 조회</button></div>
+      <ul id="saved-tasks" aria-label="저장된 할 일"></ul>
+      <p id="api-count" class="muted" aria-live="polite">API 요청 0회 · 저장 0개</p>
+      <button id="reset" class="secondary" type="button">시험 API 초기화</button>
+    </section>
+  </main>
+  <footer>스킬의 적용 방법을 확인하는 시험 화면입니다. 제품·native 검증과 구분합니다.</footer>
+</body>
+</html>

@@ -174,7 +174,7 @@ def launch_requested(snapshot, target, stage="requested"):
                 'path': str(path), 'sha256': hashlib.sha256(raw).hexdigest()})
 
 
-def read_session(project, session_file, session_id, archived_project=False):
+def _read_session_snapshot(project, session_file, session_id, archived_project=False):
     """Read metadata only from one explicit, stable Orca/Codex source."""
     original = Path(project).expanduser()
     if archived_project and not original.is_absolute():
@@ -254,9 +254,45 @@ def read_session(project, session_file, session_id, archived_project=False):
         raise ValueError("session_changed_during_read")
     if meta is None:
         raise ValueError('missing_initial_session_meta')
-    return dict(project=project, path=path, contexts=contexts, assignments=assignments,
+    data = dict(project=project, path=path, contexts=contexts, assignments=assignments,
                 measurements=measurements, boundaries=boundaries, user_lines=user_lines,
                 inherited=inherited, meta=meta, sha256=digest.hexdigest(), size=size, lines=n)
+    return data, fingerprint(current)
+
+
+def read_session(project, session_file, session_id, archived_project=False):
+    return _read_session_snapshot(project, session_file, session_id, archived_project)[0]
+
+
+def _source_identity(path):
+    p = Path(path)
+    if str(p.resolve(strict=True)) != str(p):
+        raise ValueError('session_changed_during_read')
+    s = p.stat()
+    return (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+
+
+class _SelectedSource:
+    """One invocation's single parsed source plus bounded metadata guards."""
+    def __init__(self):
+        self.key = None
+        self.data = None
+        self.guards = {}
+
+    def check(self):
+        for path, identity in self.guards.items():
+            if _source_identity(path) != identity:
+                raise ValueError('session_changed_during_read')
+
+    def read(self, project, source, session):
+        self.check()
+        key = (str(Path(project).resolve(strict=True)), str(source), session)
+        if key != self.key:
+            data, identity = _read_session_snapshot(project, source, session)
+            self.guards[str(data['path'])] = identity
+            self.key, self.data = key, data
+        self.check()
+        return self.data
 
 
 def inspect_session(project, session_file, session_id, task_id, dispatch_id, expected=None, worker_snapshot=None,

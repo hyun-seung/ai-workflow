@@ -1,6 +1,20 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { skillUses } = require('../scripts/trace_web/app.js');
+test('skill records preserve declared stages and never infer missing usage', () => {
+  const fixture = require('./fixtures/traces/skill-flow.json');
+  assert.equal(skillUses(fixture, 'skill-coordinator').length, 0);
+  assert.deepEqual(skillUses(fixture, 'skill-frontend').map(x => [x.stage,x.result]), [['작업 적용','통과 기록'],['선택','미검증']]);
+  const reference = skillUses(fixture, 'skill-verifier')[0];
+  assert.equal(reference.stage, '문서 참고');assert.equal(reference.result, '미검증');
+  const bad = structuredClone(fixture);
+  bad.events.find(e => e.id === 'skill-reference').detail.stage = 'executed';
+  assert.equal(skillUses(bad,'skill-verifier')[0].valid,false);
+  assert.equal(skillUses(bad,'skill-verifier')[0].result,'미검증');
+  bad.events.find(e => e.id === 'skill-selected').detail.result.status = 'pass';
+  assert.equal(skillUses(bad,'skill-frontend')[1].valid,false);
+});
 const { extractBody, displayTime, eventWarnings, filterEvents, collectionWarning, statusText, closeoutLines } = require('../scripts/trace_web/app.js');
 
 test('native bodies preserve literal whitespace and inert HTML', () => {
@@ -243,4 +257,133 @@ test('observed native defaults remain distinct from unknown and registered actor
   assert.equal(p.effective.model.text,'적용값 미제공');assert.equal(p.actual.model.text,'actual-model');
   const later=structuredClone(f.profile);later.id='contradiction';later.detail.requested.model='explicit-model';f.bundle.events.push(later);
   p=profileFor(f.bundle,f.actor);assert.equal(p.requested.model.state,'conflict');
+});
+
+test('logical tasks consume current explicit groups once, retain physical and unmeasured rows, and never add totals', () => {
+  const {logicalTasks,effectiveBundle,usageUnits,roleUsage}=require('../scripts/trace_web/app.js');
+  const fixture=require('./fixtures/traces/dashboard-flow.json');
+  const bundle=effectiveBundle(fixture), before=JSON.stringify(bundle), measured=usageSummary(usageUnits(bundle));
+  const tasks=logicalTasks(bundle,measured), grouped=tasks.filter(t=>t.group);
+  assert.equal(grouped.length,1);assert.equal(grouped[0].title,'정정된 화면 구현 · 여러 구간의 공백 보존');
+  assert.deepEqual(grouped[0].rows.map(r=>r.actor.observation_id),['usage-0','usage-1']);
+  assert.equal(tasks.flatMap(t=>t.rows).length,measured.rows.length);
+  assert.equal(new Set(tasks.flatMap(t=>t.rows.map(r=>r.actor.id))).size,measured.rows.length);
+  assert.ok(tasks.some(t=>t.rows[0].actor.id==='sample-unmeasured'));
+  assert.ok(tasks.some(t=>!t.group && t.rows[0].actor.id==='usage-2'));
+  const ungrouped={...bundle,usage_groups:[]};
+  assert.equal(usageSummary(usageUnits(ungrouped)).total,measured.total);
+  assert.deepEqual(roleUsage(usageSummary(usageUnits(ungrouped))),roleUsage(measured));
+  assert.equal(measured.total,840);assert.equal(JSON.stringify(bundle),before);
+  assert.equal(bundle.original_events.find(e=>e.id==='synthetic-group').detail.title,'최초 가상 제목');
+  assert.match(bundle.event_revisions['synthetic-group'][0].detail.reason,/Synthetic/);
+});
+test('timeline uses only timezone-bearing interval bounds, keeps gaps, overlaps and zero-duration points', () => {
+  const {logicalTasks,effectiveBundle,usageUnits,measurementTimeline,instant}=require('../scripts/trace_web/app.js');
+  const bundle=effectiveBundle(require('./fixtures/traces/dashboard-flow.json'));
+  const view=measurementTimeline(logicalTasks(bundle,usageSummary(usageUnits(bundle))));
+  assert.equal(view.rows.filter(r=>r.valid).length,4);
+  assert.equal(view.rows.filter(r=>!r.valid).length,5); // three invalid intervals plus two unmeasured actors
+  assert.equal(view.rows.filter(r=>r.point).length,1);
+  const grouped=view.rows.filter(r=>r.task.group);
+  assert.equal(grouped[1].start-grouped[0].end,120000);
+  const overlap=view.rows.find(r=>r.row.actor.id==='usage-2');
+  assert.ok(overlap.start < grouped[0].end && overlap.end > grouped[0].start);
+  assert.equal(view.end-view.start,240000);
+  assert.equal(durationText(bundle.requests[0]),null);
+  for(const bad of [null,'bad','2026-01-01T00:00:00','2026-02-30T00:00:00Z','2026-01-01T24:00:00Z']) assert.equal(instant(bad),null);
+  assert.equal(instant('2026-01-01T09:00:00+09:00'),instant('2026-01-01T00:00:00Z'));
+  assert.equal(durationText({execution:{started_at:'2026-01-01T00:00:00',finished_at:'2026-01-01T00:01:00'}}),null);
+  assert.deepEqual(measurementTimeline([]),{rows:[],start:null,end:null});
+});
+
+test('millisecond chart points do not assert identical sub-millisecond instants; reversed fractional bounds stay unknown', () => {
+  const {measurementInterval,compareInstants}=require('../scripts/trace_web/app.js');
+  const row=(a,b)=>({actor:{usage_event:{detail:{usage:{interval:{started_at:a,finished_at:b}}}}}});
+  const a='2026-01-01T00:00:00.000001Z',b='2026-01-01T00:00:00.000999Z';
+  assert.equal(measurementInterval(row(a,b)).valid,true);
+  assert.equal(measurementInterval(row(a,b)).point,true); // position is only millisecond precision
+  assert.ok(compareInstants(a,b)<0);
+  assert.equal(measurementInterval(row(b,a)).valid,false);
+  assert.equal(durationText({execution:{started_at:b,finished_at:a}}),null);
+  assert.equal(durationText({execution:{started_at:a,finished_at:b}}),'0초');
+  assert.equal(compareInstants(a,'2026-01-01T09:00:00.000001+09:00'),0);
+  assert.equal(compareInstants(a,'2026-01-01T00:00:00.0000010Z'),0);
+  assert.equal(measurementInterval(row(a,'2026-01-01T00:00:00.001Z')).point,false);
+});
+test('adjacent segment identity uses member title and individual attributed tokens without group totals', () => {
+  const {segmentLabel}=require('../scripts/trace_web/app.js');
+  const row={actor:{display_task:'가상 물리 작업 <literal>'},kind:'attributed',total:120};
+  assert.equal(segmentLabel(row,1),'구간 2 · 가상 물리 작업 <literal> · 120 tokens');
+  assert.equal(segmentLabel({...row,kind:'reference'},0),'구간 1 · 가상 물리 작업 <literal> · — tokens');
+});
+
+test('coverage distinguishes imported actors, atomic observations and explicit groups without certifying collection', () => {
+  const {usageCoverage,coverageCounts,coverageReason,effectiveBundle,usageUnits,logicalTasks,roleUsage}=require('../scripts/trace_web/app.js');
+  const bundle=effectiveBundle(require('./fixtures/traces/usage-coverage.json'));
+  const before=JSON.stringify(bundle), summary=usageSummary(usageUnits(bundle)), c=usageCoverage(bundle,summary);
+  assert.equal(summary.total,840); assert.equal(c.registeredActors,bundle.actors.length);
+  assert.equal(c.physicalObservations,10); assert.equal(c.explicitGroups,1);
+  assert.equal(c.measured,7); assert.equal(c.excluded,3); assert.equal(c.unavailable,4);
+  assert.equal(c.requestCollectionComplete,false);
+  assert.equal(c.ungroupedObservations,8);
+  assert.match(coverageReason(summary.rows.find(r=>r.actor.id==='missing-reason')),/<script>literal<\/script>/);
+  assert.equal(coverageReason(summary.rows.find(r=>r.actor.id==='conflicting')),'합계 불일치 · 유효한 측정값 미확인 · 요청 합계에 더하지 않음');
+  assert.ok(summary.rows.filter(r=>r.actor.id.startsWith('duplicate')).every(r=>/중복/.test(coverageReason(r))));
+  assert.equal(roleUsage(summary).reduce((n,r)=>n+(r.total??0),0),840);
+  assert.deepEqual(coverageCounts(summary.rows),{measured:7,excluded:3,unavailable:4});
+  const ungrouped={...bundle,usage_groups:[]};
+  assert.equal(usageCoverage(ungrouped,summary).explicitGroups,0);
+  assert.equal(usageSummary(usageUnits(ungrouped)).total,840);
+  assert.equal(logicalTasks(bundle,summary).flatMap(t=>t.rows).length,summary.rows.length);
+  assert.equal(JSON.stringify(bundle),before);
+});
+test('empty and fully measured imports both leave request completeness unconfirmed; role mismatch remains ungrouped',()=>{
+  const {usageCoverage,usageUnits,logicalTasks,effectiveBundle}=require('../scripts/trace_web/app.js');
+  assert.deepEqual(usageCoverage({actors:[],events:[]},usageSummary([])),{registeredActors:0,physicalObservations:0,explicitGroups:0,ungroupedObservations:0,measured:0,excluded:0,unavailable:0,requestCollectionComplete:false});
+  const a=measuredActor('root'), b={actors:[a],events:[]};
+  assert.equal(usageCoverage(b,usageSummary(usageUnits(b))).requestCollectionComplete,false);
+  const f=effectiveBundle(require('./fixtures/traces/dashboard-flow.json'));
+  f.usage_groups[0].role='backend';
+  assert.equal(logicalTasks(f,usageSummary(usageUnits(f))).filter(t=>t.group).length,0);
+  assert.equal(usageSummary(usageUnits(f)).total,840);
+});
+
+test('coverage requires validated numeric values rather than empty objects or explicit event presence',()=>{
+  const {usageCoverage,usageUnits}=require('../scripts/trace_web/app.js');
+  const check=usage=>{const b={actors:[{id:'a',request_id:'request',usage}],events:[]};const s=usageSummary(usageUnits(b));return {s,c:usageCoverage(b,s)}};
+  for(const usage of [{status:'unavailable',measurements:{}},{status:'unavailable',tokens:{}},
+    {status:'measured',measurements:{note:'missing numbers'}},
+    measuredActor('a',{measurements:{input_tokens:10,output_tokens:2,total_tokens:99}}).usage,
+    measuredActor('a',{measurements:{input_tokens:-1,output_tokens:2}}).usage]) {
+    const {s,c}=check(usage);assert.equal(c.physicalObservations,0);assert.equal(c.ungroupedObservations,0);
+    assert.equal(c.registeredActors,1);assert.equal(c.unavailable,1);assert.equal(c.excluded,0);assert.equal(s.total,null);
+  }
+  const b={actors:[{id:'a',request_id:'request'}],events:[{id:'empty-event',kind:'usage',actor_id:'a',detail:{usage:{status:'unavailable',measurements:{}}}}]};
+  const c=usageCoverage(b,usageSummary(usageUnits(b)));assert.equal(c.physicalObservations,0);assert.equal(c.unavailable,1);
+});
+test('valid zero, tokens alias, partial references, cumulative and duplicate values are numeric records without promotion',()=>{
+  const {usageCoverage}=require('../scripts/trace_web/app.js');
+  const a=measuredActor('zero',{measurements:{input_tokens:0,output_tokens:0}});
+  const alias=measuredActor('alias');delete alias.usage.measurements;alias.usage.tokens={input_tokens:0,output_tokens:0};
+  const actors=[a,alias,measuredActor('partial',{status:'partial'}),measuredActor('cumulative',{scope:'session_cumulative'}),
+    measuredActor('d1',{measurement_key:'same'}),measuredActor('d2',{measurement_key:'same'})];
+  const s=usageSummary(actors),c=usageCoverage({actors,events:[]},s);
+  assert.equal(c.physicalObservations,6);assert.equal(c.ungroupedObservations,6);assert.equal(c.measured,2);assert.equal(c.excluded,4);assert.equal(c.unavailable,0);assert.equal(s.total,0);
+});
+test('multiple events and explicit groups count valid members only while retaining invalid status rows',()=>{
+  const {usageCoverage,usageUnits,logicalTasks}=require('../scripts/trace_web/app.js');
+  const events=['one','two','invalid'].map(id=>({id,kind:'usage',actor_id:'owner',detail:{usage:{...measuredActor('native-'+id).usage,role:'frontend',...(id==='invalid'?{measurements:{}}:{})}}}));
+  const b={actors:[{id:'owner',request_id:'request'}],events,usage_groups:[{event_id:'group',actor_id:'owner',role:'frontend',measurement_event_ids:['one','invalid']}]};
+  const s=usageSummary(usageUnits(b)),c=usageCoverage(b,s);
+  assert.equal(c.registeredActors,1);assert.equal(c.physicalObservations,2);assert.equal(c.ungroupedObservations,1);assert.equal(c.explicitGroups,1);assert.equal(c.unavailable,1);assert.equal(s.total,260);
+  assert.equal(logicalTasks(b,s).flatMap(t=>t.rows).length,3);
+  b.usage_groups[0].measurement_event_ids=['invalid'];const invalidGroup=usageCoverage(b,s);
+  assert.equal(invalidGroup.explicitGroups,1);assert.equal(invalidGroup.ungroupedObservations,2);
+  b.usage_groups=[];assert.equal(usageCoverage(b,s).ungroupedObservations,2);
+});
+test('conflicting total reason clearly stays unavailable rather than reference/excluded',()=>{
+  const {coverageReason,coverageCounts}=require('../scripts/trace_web/app.js');
+  const row=usageSummary([measuredActor('bad',{measurements:{input_tokens:10,output_tokens:2,total_tokens:99}})]).rows[0];
+  assert.equal(row.kind,'unavailable');assert.deepEqual(coverageCounts([row]),{measured:0,excluded:0,unavailable:1});
+  assert.equal(coverageReason(row),'합계 불일치 · 유효한 측정값 미확인 · 요청 합계에 더하지 않음');assert.doesNotMatch(coverageReason(row),/집계 제외|참고값/);
 });

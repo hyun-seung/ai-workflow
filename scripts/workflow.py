@@ -145,7 +145,7 @@ def prepare_run(config, project_root, role_name, task, context_files=()):
     for index, path in enumerate(paths, 1):
         content = path.read_text(encoding='utf-8')
         instruction_characters += len(content)
-        prompt += f"## 적용 문서 {index}\n{content}\n\n"
+        prompt += f"## 적용 문서 {index}\n자료 기준 경로: {path}\n{content}\n\n"
     context_text, context_stats = load_context(project_root, context_files)
     prompt += context_text
     prompt += f"## 현재 작업 요청\n{task}\n"

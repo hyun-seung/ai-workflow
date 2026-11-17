@@ -1,6 +1,6 @@
 # 작업 공간 생성·보관·정리
 
-새 프로젝트를 만드는 일, 도구에 폴더를 등록하는 일, 임시 작업 파일을 만드는 일을 구분한다. 작업이 길거나 역할이 여러 개라는 이유만으로 프로젝트·Git 저장소·worktree를 새로 만들지 않는다. 명시한 로컬 임시 폴더는 [완료 처리 도구](completion.md)로 보관본 검증·등록 해제·삭제를 연결할 수 있다. 자동 생성·보관본 생성·전역 프로젝트 탐색은 구현하지 않았다.
+새 프로젝트를 만드는 일, 도구에 폴더를 등록하는 일, 임시 작업 파일을 만드는 일을 구분한다. 작업이 길거나 역할이 여러 개라는 이유만으로 프로젝트·Git 저장소·worktree를 새로 만들지 않는다. 새 로컬 임시 폴더는 아래 도구로 생성 기록과 보관·정리를 연결한다. 기존 폴더는 [완료 처리 도구](completion.md)의 별도 승인·보관 검사를 적용한다. 전역 프로젝트 탐색은 하지 않는다.
 
 ## 언제 만드는가
 
@@ -44,7 +44,35 @@
 
 원본과 보관 위치가 같거나 중첩되면 삭제하지 않는다. 이번 작업이 만든 정확한 경로만 대상으로 삼으며 scratch 상위 폴더 전체·공유 캐시·다른 프로젝트를 일괄 삭제하지 않는다. 심볼릭 링크나 실행 상태 때문에 대상이 불분명하면 정리를 멈춘다. 자동 TTL만으로 사용자 산출물을 지우는 정책은 기본으로 사용하지 않는다.
 
-## 정리 도구 적용과 남은 범위
+## 새 임시 폴더의 등록·보관 연결
+
+`scripts/workspace_resources.py`는 명시한 새 폴더 하나를 생성하면서 요청·담당자·목적·정리 권한·정확한 경로와 inode를 비공개 기록에 고정한다. 유지할 조율 프로젝트를 `--project`로 지정한다. 기존 경로나 보관 폴더는 채택하지 않으며 Git 초기화·앱 등록·에이전트 생성은 하지 않는다. 같은 resource ID의 입력 변경을 거부하고, 완료 뒤 replay로 원본을 다시 생성하지 않는다.
+
+다음은 가상 경로·ID다. 허용 루트는 이미 존재해야 하며 소스는 그 바로 아래 새 폴더여야 한다. 기록 디렉터리와 보관 위치는 프로젝트·소스 밖에 둔다.
+
+```sh
+python3 scripts/workspace_resources.py \
+  --project /path/to/coordinator-project --directory /path/to/private/resources \
+  create --resource-id resource_example --request-id request_example --owner backend_example \
+  --source /path/to/private-scratch/experiment --allowed-root /path/to/private-scratch \
+  --archive /path/to/private-delivery/experiment \
+  --purpose '이번 요청의 재현 실험' --authorization '승인된 임시 실험의 보관 후 정리'
+```
+
+모든 쓰기 작업이 끝나고 수용 근거를 확정하면 다음 명령을 한 번 호출한다. `--worker`에는 이 폴더를 사용한 모든 배정을 반복 지정한다. 정확한 종료와 열린 파일을 확인한 뒤 빈 디렉터리·바이너리를 포함해 복사하고 목록·크기·해시를 대조한다. 기본 보관 상한은 64 MiB이며 생성 시 `--max-bytes`로 명시 변경한다. Git·심볼릭 링크·하드링크·특수 파일은 보관하지 않고 보존·중단한다.
+
+```sh
+python3 scripts/workspace_resources.py \
+  --project /path/to/coordinator-project --directory /path/to/private/resources \
+  finalize --resource-id resource_example --acceptance /path/to/private/accepted.json \
+  --worker task_example/ctx_example
+```
+
+보관 뒤 기존 `workspace_cleanup.py prepare/apply`에 같은 수용 근거와 배정을 전달한다. 보관본의 전체 목록·내용·파일 메타데이터와 루트 inode를 고정해 추가 파일·링크와 폴더 교체도 거부한다. 기본 Y는 보관본·경로·등록·종료 검사를 모두 통과해야 원본을 지운다. 정책이 N이거나 `--auto-cleanup N`이면 보관까지만 하고 정리 계획 생성·삭제를 건너뛴다. 이후 명시 Y 재호출은 원본·보관본·수용 근거·배정이 그대로일 때만 가능하다. 프로세스나 앱 프로젝트를 자동으로 종료하지 않는다.
+
+`status --resource-id resource_example`은 해당 비공개 기록만 읽는다. 완료 재호출은 기존 영수증을 대조하며, 원래 경로에 새 폴더가 생겼으면 지우지 않는다. 생성/복사 도중 중단된 기록은 원본과 불완전 보관본을 남기고 명시 점검을 요구한다. 자동 재복사·덮어쓰기·TTL 삭제는 하지 않는다. 등록한 경로와 배정 목록은 조율자의 선언이며 다른 프로세스의 쓰기를 OS에서 차단하는 기능은 아니다.
+
+## 기존 정리 도구와 남은 범위
 
 `scripts/workspace_cleanup.py prepare`로 정확한 대상·명시 권한·수용 근거·배정 목록·보관본·파일 해시를 비공개 계획에 저장한다. `apply` 또는 `finish_worker.py --cleanup-plan`은 계획과 실제 상태를 다시 확인한다. 유지할 프로젝트나 아직 기록되지 않은 과거 프로젝트를 자동 삭제 대상으로 추정하지 않는다.
 

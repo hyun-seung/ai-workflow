@@ -196,12 +196,73 @@ class GuardTests(unittest.TestCase):
     def test_followup_and_retry_consume_new_budget_after_exit(self):
         with patch.object(dg,'invoke',return_value=(receipt(),0)):self.launch()
         self.release(outcome='failed')
-        with patch.object(dg,'invoke',return_value=(receipt(2),0)):
+        retried=receipt(2);retried['result']['taskId']='task_1'
+        with patch.object(dg,'invoke',return_value=(retried,0)):
             self.launch('op_2',action='retry',previous='op_1',previous_dispatch='ctx_1',previous_task='task_1',previous_run='run_example')
         self.release('op_2')
         with patch.object(dg,'invoke',return_value=(receipt(3),0)):
             self.launch('op_3',action='followup',previous='op_2',previous_dispatch='ctx_2')
         self.assertEqual(len(self.ledger.read()['operations']),3)
+
+    def test_cancelled_retry_requires_exact_exit_and_preserves_same_task(self):
+        with patch.object(dg,'invoke',return_value=(receipt(),0)):self.launch()
+        retry=dict(action='retry',previous='op_1',previous_dispatch='ctx_1',previous_task='task_1',previous_run='run_example')
+        with patch.object(dg,'invoke') as invoke,self.assertRaisesRegex(dg.LimitReached,'predecessor_exit'):
+            self.launch('op_2',**retry)
+        invoke.assert_not_called()
+        self.release(outcome='cancelled')
+        value=receipt(2);value['result']['taskId']='task_1'
+        with patch.object(dg,'invoke',return_value=(value,0)):
+            result=self.launch('op_2',**retry)
+        self.assertEqual(result['task_id'],'task_1');self.assertEqual(result['dispatch_id'],'ctx_2')
+        self.assertEqual(len(self.ledger.read()['operations']),2)
+
+    def test_retry_wrong_task_or_run_receipt_stays_unknown_and_cannot_relaunch(self):
+        for field,value in [('taskId','another_task'),('runId','another_run')]:
+            with self.subTest(field=field):
+                self.ledger=dg.Ledger(self.root/field,self.project,'coordinator_example')
+                with patch.object(dg,'invoke',return_value=(receipt(),0)):self.launch()
+                self.release(outcome='cancelled')
+                wrong=receipt(2);wrong['result']['taskId']='task_1';wrong['result'][field]=value
+                retry=dict(action='retry',previous='op_1',previous_dispatch='ctx_1',previous_task='task_1',previous_run='run_example')
+                with patch.object(dg,'invoke',return_value=(wrong,0)),self.assertRaisesRegex(ValueError,'retry_native_binding_mismatch'):
+                    self.launch('op_2',**retry)
+                old=self.ledger.read()['operations']['op_2'];self.assertEqual(old['state'],'unknown');self.assertIsNone(old['task_id'])
+                with patch.object(dg,'invoke') as invoke:
+                    result=self.launch('op_2',**retry)
+                self.assertTrue(result['replay']);invoke.assert_not_called()
+
+    def test_native_stopped_retry_releases_only_after_exact_exit(self):
+        with patch.object(dg,'invoke',return_value=(receipt(),0)):self.launch()
+        s=snapshot();s['result']['dispatch'].update(id='ctx_1',taskId='task_1',status='failed',lastFailure='stopped')
+        s['result']['worker'].update(dispatchId='ctx_1',state='stopped',stage='process_stopped')
+        pending=copy.deepcopy(s);pending['result']['observation']['status']='unverifiable'
+        with patch.object(dg,'orca',return_value=pending):
+            self.assertEqual(self.ledger.refresh('op_1','example')['state'],'bound')
+        with patch.object(dg,'orca',return_value=s):
+            released=self.ledger.refresh('op_1','example')
+        self.assertEqual((released['state'],released['outcome']),('released','stopped'))
+        value=receipt(2);value['result']['taskId']='task_1'
+        with patch.object(dg,'invoke',return_value=(value,0)):
+            retried=self.launch('op_2',action='retry',previous='op_1',previous_dispatch='ctx_1',previous_task='task_1',previous_run='run_example')
+        self.assertEqual(retried['task_id'],'task_1')
+
+    def test_successful_predecessor_cannot_use_retry(self):
+        with patch.object(dg,'invoke',return_value=(receipt(),0)):self.launch()
+        self.release()
+        with patch.object(dg,'invoke') as invoke,self.assertRaisesRegex(ValueError,'failed_or_cancelled'):
+            self.launch('op_2',action='retry',previous='op_1',previous_dispatch='ctx_1',previous_task='task_1',previous_run='run_example')
+        invoke.assert_not_called()
+
+    def test_retry_invokes_original_native_task_without_sending_a_new_spec(self):
+        p=plan(self.project,action='retry',previous_task='task_1',previous_dispatch='ctx_1',previous_run='run_example')
+        value=receipt(2);value['result']['taskId']='task_1'
+        with patch.object(dg.subprocess,'run',return_value=subprocess.CompletedProcess([],0,json.dumps(value),'')) as run:
+            dg.invoke('official-orca',p,'unused spec')
+        args=run.call_args.args[0]
+        self.assertEqual(args[args.index('--task')+1],'task_1');self.assertEqual(args[args.index('--retry-of')+1],'ctx_1')
+        self.assertEqual(args[args.index('--run')+1],'run_example');self.assertNotIn('--spec-file',args)
+        self.assertIsNone(run.call_args.kwargs['input'])
 
     def test_active_predecessor_cannot_be_reassigned(self):
         with patch.object(dg,'invoke',return_value=(receipt(),0)):self.launch()

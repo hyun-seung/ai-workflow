@@ -1,5 +1,7 @@
 # 작업 입출력 양식
 
+역할별 스킬을 사용하면 [짧은 확인 기록](role-skill-review.md)을 기존 결과에 통합한다. [주간 스킬 관리 요청문](skill-review-automation.md)은 명시적으로 등록한 예약만 사용하며 일반 작업마다 실행하지 않는다.
+
 작업을 맡기는 입력과 담당자가 돌려주는 결과를 연결하는 권장 양식이다. 개발, 조사, 설계 검토, 글쓰기에 같은 항목을 사용하고 필요한 부분만 확장한다. 실제 기록은 사용자가 지정한 보관 위치 또는 승인된 프로젝트 환경에 작성한다. 이 저장소에는 빈 양식과 가상 예시만 둔다.
 
 | 파일 | 작성 주체와 용도 |
@@ -10,9 +12,22 @@
 | [routing-evaluation.md](routing-evaluation.md) | 튜터·추천의 AC/출처/제어·실제 수집 범위를 기록하는 빈 평가 양식 |
 | [routing-comparison.json](routing-comparison.json) | 동일 완료 기준과 실제 수집 파일로 직접 처리/라우팅 한 쌍을 비교하는 입력 양식 |
 | [routing-comparison-v2.json](routing-comparison-v2.json), [routing-timing.json](routing-timing.json), [routing-rate-card.json](routing-rate-card.json) | 선택적인 요청 전체 시간·관측 모델의 단가 추정 비교. 빈 날짜/단가는 실제 값으로 채우기 전 실행하지 않음 |
+| [guidance-review.md](guidance-review.md) | 공식 모범 사례를 주기적으로 점검할 때 재사용하는 요청문 |
+| [guidance-review-automation.md](guidance-review-automation.md) | Orca 예약에서 읽는 실행 요청: 원본 보존·로컬 보고서·적용 전 패치 |
 | [가상 예시](../examples/task-contract.md) | 개발과 글쓰기 작업의 입력·결과 연결 |
 
-## 최소 계약
+## 직접 요청하는 작은 작업
+
+위임·실행 기록을 연결하지 않는 단일 작업은 아래 네 줄이면 충분하다. 이미 요청에서 명확한 항목은 반복 작성하거나 사용자에게 다시 묻지 않는다. 복잡한 작업의 계획·대화 분리는 [세션 운용](../runtime/session-practices.md)을 따른다.
+
+```text
+목표: 무엇을 바꾸거나 알아낼지
+참고: 관련 파일·오류·예시와 확인된 사실
+제약: 지킬 조건과 작업 범위
+완료: 관찰 가능한 결과와 확인 방법
+```
+
+## 위임·기록용 최소 계약
 
 | 구분 | 필수 항목 | 기준 |
 | --- | --- | --- |

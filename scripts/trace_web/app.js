@@ -4,7 +4,7 @@ const labels = {
   user_request: '사용자 요청', decision: '결정·이유 요약', assignment: '업무 배정',
   instruction: '전달 지시', tool_call: '명령·도구 입력', tool_result: '도구 결과',
   question: '질문', approval_request: '승인 요청 · 결정 미확인',
-  approval_resolution: '승인 처리', handoff: '결과 인계', verification: '검증 판정', explanation: '명시된 설명', completion: '요청 마감', usage: '토큰 측정', usage_group: '논리 작업 묶음', revision: '기록 정정', profile: '실행 프로필 관측'
+  approval_resolution: '승인 처리', handoff: '결과 인계', verification: '검증 판정', explanation: '명시된 설명', completion: '요청 마감', usage: '토큰 측정', usage_group: '논리 작업 묶음', revision: '기록 정정', profile: '실행 프로필 관측', skill_use: '스킬 사용 기록'
 };
 const show = value => JSON.stringify(value, null, 2) ?? String(value);
 const known = value => value === null || value === undefined || value === '' ? '미확인' : value;
@@ -23,6 +23,21 @@ const roleCatalog = {
 };
 function roleKey(value) {
   return Object.hasOwn(roleCatalog, value) ? value : Object.keys(roleCatalog).find(key => roleCatalog[key].label === value) || null;
+}
+const skillStages = { selected: '선택', read: '문서 참고', applied: '작업 적용', executed: '도구 실행' };
+const skillResults = { unverified: '미검증', pass: '통과 기록', fail: '실패 기록', partial: '부분 확인' };
+function skillUses(bundle, actorId) {
+  return (bundle.events || []).filter(e => e.kind === 'skill_use' && e.actor_id === actorId).map(event => {
+    const d = event.detail || {}, skill = d.skill || {}, result = d.result || {};
+    const valid = event.source === 'trace.skill-use.v1' && d.version === 1 &&
+      typeof skill.id === 'string' && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(skill.source_ref || '') &&
+      ['skill', 'reference-only'].includes(skill.mode) && Object.hasOwn(skillStages, d.stage) &&
+      Object.hasOwn(skillResults, result.status) && !(skill.mode === 'reference-only' && d.stage === 'executed') &&
+      (result.status === 'unverified' || ['applied', 'executed'].includes(d.stage) && d.evidence_event_ids?.length > 0);
+    return { event, detail: d, skill, valid,
+      stage: valid ? skillStages[d.stage] : '기록 형식 미확인',
+      result: valid ? skillResults[result.status] : '미검증' };
+  });
 }
 function displayActors(bundle) {
   // Explicit additive labels preserve old source roles; conflicting labels stay unresolved.
@@ -243,6 +258,36 @@ function usageSummary(actors) {
   return { rows, covered: measured.length, total: measured.length && safe ? input + output : null,
     input: measured.length && safe ? input : null, output: measured.length && safe ? output : null };
 }
+// A record has validated numeric values, including zero and reference/duplicate values.
+// Invalid/unavailable usage stays in status rows, but is never a numeric record.
+function hasMeasuredValues(row) { return row.kind === 'attributed' || row.kind === 'reference'; }
+// Coverage describes imported records only; it never certifies request-wide collection.
+function usageCoverage(bundle, summary) {
+  const tasks = logicalTasks(bundle, summary);
+  return { registeredActors: bundle.actors.length,
+    physicalObservations: summary.rows.filter(hasMeasuredValues).length,
+    explicitGroups: tasks.filter(t => t.group).length,
+    ungroupedObservations: tasks.filter(t => !t.group).flatMap(t => t.rows).filter(hasMeasuredValues).length,
+    ...coverageCounts(summary.rows), requestCollectionComplete: false };
+}
+function coverageCounts(rows) {
+  return { measured: rows.filter(r => r.kind === 'attributed').length,
+    excluded: rows.filter(r => r.kind === 'reference').length,
+    unavailable: rows.filter(r => r.kind === 'unavailable').length };
+}
+function coverageText(counts) {
+  return `측정됨 ${counts.measured} · 참고값·집계 제외 ${counts.excluded} · 미측정 ${counts.unavailable} (수입 목록의 항목 수)`;
+}
+function coverageReason(row) {
+  const u = row.actor.usage || {};
+  if (row.kind === 'attributed') return `${row.label} · 출처 ${u.source} · 측정 키 ${u.measurement_key}`;
+  if (row.label === '중복 측정 · 집계 제외') return row.label;
+  if (row.kind === 'reference') return row.label + ' · 요청 합산 계약 미충족';
+  const m = u.measurements || u.tokens || {};
+  if (m.total_tokens != null && Number.isSafeInteger(m.input_tokens) && Number.isSafeInteger(m.output_tokens) && m.total_tokens !== m.input_tokens + m.output_tokens) return '합계 불일치 · 유효한 측정값 미확인 · 요청 합계에 더하지 않음';
+  const observed = typeof u.reason === 'string' && u.reason.trim();
+  return observed ? `수입 자료의 사유: ${observed}` : '미측정 사유 미확인 · 유효한 귀속 측정값 없음';
+}
 function tokenText(value) { return value == null ? '—' : value.toLocaleString('ko-KR'); }
 function brief(text, limit = 155) {
   const clean = String(text ?? '').replace(/^#+\s*/gm, '').replace(/\s+/g, ' ').trim();
@@ -268,18 +313,63 @@ function flowGroups(bundle) {
   return { roots: bundle.actors.filter(a => !a.parent_id), workers: bundle.actors.filter(a => a.parent_id),
     decisions: bundle.events.filter(e => e.kind === 'decision'), assignments: bundle.events.filter(e => e.kind === 'assignment') };
 }
+// Only explicit, timezone-bearing usage intervals position measurements.
+function instant(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
+  const day = Number(value.slice(8, 10)), month = Number(value.slice(5, 7)), year = Number(value.slice(0, 4));
+  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate()) return null;
+  if (Number(value.slice(11, 13)) > 23 || Number(value.slice(14, 16)) > 59 || Number(value.slice(17, 19)) > 59) return null;
+  const time = Date.parse(value); return Number.isFinite(time) ? time : null;
+}
+function compareInstants(a, b) {
+  const first = instant(a), second = instant(b);
+  if (first === null || second === null) return null;
+  if (first !== second) return Math.sign(first - second);
+  const remainder = value => (value.match(/\.(\d+)/)?.[1] || '').slice(3);
+  const x = remainder(a), y = remainder(b), size = Math.max(x.length, y.length);
+  return x.padEnd(size, '0').localeCompare(y.padEnd(size, '0'));
+}
+function segmentLabel(row, index) {
+  return `구간 ${index + 1} · ${row.actor.display_task || '제목 미확인'} · ${tokenText(row.kind === 'attributed' ? row.total : null)} tokens`;
+}
+function measurementInterval(row) {
+  const interval = row.actor.usage_event?.detail?.usage?.interval;
+  const start = instant(interval?.started_at), end = instant(interval?.finished_at);
+  const reason = start === null || end === null ? '시작·종료 시각 미확인 (timezone 포함 필요)' : compareInstants(interval.finished_at, interval.started_at) < 0 ? '종료가 시작보다 앞선 기록' : null;
+  return { start, end, valid: !reason, point: !reason && start === end, reason };
+}
+function logicalTasks(bundle, measured) {
+  const claimed = new Set(), tasks = [];
+  for (const group of bundle.usage_groups || []) {
+    const rows = measured.rows.filter(row => group.measurement_event_ids?.includes(row.actor.observation_id) &&
+      row.actor.owner_actor_id === group.actor_id && row.actor.display_role_id === group.role && !claimed.has(row.actor.id));
+    if (!rows.length) continue;
+    rows.forEach(row => claimed.add(row.actor.id));
+    tasks.push({ id: group.event_id, title: group.title, role: group.role, rows, group });
+  }
+  for (const row of measured.rows) if (!claimed.has(row.actor.id)) tasks.push({ id: row.actor.id,
+    title: row.actor.display_task || '수입된 배정', role: row.actor.display_role_id, rows: [row], group: null });
+  return tasks;
+}
+function measurementTimeline(tasks) {
+  const rows = tasks.flatMap(task => task.rows.map(row => ({ task, row, ...measurementInterval(row) })));
+  const valid = rows.filter(row => row.valid);
+  return { rows, start: valid.length ? Math.min(...valid.map(row => row.start)) : null,
+    end: valid.length ? Math.max(...valid.map(row => row.end)) : null };
+}
 function durationText(request) {
   const a = request.execution?.started_at, b = request.execution?.finished_at;
-  if (!a || !b || !Number.isFinite(Date.parse(a)) || !Number.isFinite(Date.parse(b)) || Date.parse(b) < Date.parse(a)) return null;
+  const order = compareInstants(b, a);
+  if (order === null || order < 0) return null;
   const seconds = Math.round((Date.parse(b) - Date.parse(a)) / 1000);
   return seconds < 60 ? `${seconds}초` : `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
 }
-if (typeof module !== 'undefined') module.exports = { profileFor, profileLine, effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
+if (typeof module !== 'undefined') module.exports = { usageCoverage, coverageCounts, coverageText, coverageReason, skillUses, compareInstants, segmentLabel, instant, measurementInterval, logicalTasks, measurementTimeline, profileFor, profileLine, effectiveBundle, extractBody, displayTime, eventWarnings, filterEvents, statusText, collectionWarning, closeoutLines, usageFor, usageSummary, tokenText, brief, instructionExcerpt, requestExcerpt, flowGroups, durationText, roleCatalog, roleKey, displayActors, roleUsage, usageUnits, actorUsage };
 if (typeof document !== 'undefined') startViewer();
 
 function startViewer() {
   const $ = id => document.getElementById(id), mobile = matchMedia('(max-width: 768px)');
-  let data = null, selectedId = null, selectionVersion = 0, listVersion = 0, listCount = 0;
+  let data = null, selectedId = null, selectionVersion = 0, listVersion = 0, listCount = 0, skillVersion = 0;
   function node(tag, text, className) {
     const e = document.createElement(tag);
     if (text !== undefined) e.textContent = text;
@@ -399,12 +489,30 @@ function startViewer() {
   function paint(e, role) { const color = roleCatalog[role] || { color: '#718096', background: '#f2f4f7' }; e.style.setProperty('--role-color', color.color); e.style.setProperty('--role-bg', color.background); }
   function agentCard(actor, index, bundle, actors, usage) {
     const profile = profileFor(bundle, actor);
+    const skills = skillUses(bundle, actor.id);
     const own = bundle.events.filter(e => e.actor_id === actor.id), instructions = own.filter(e => e.kind === 'instruction');
     const decisions = own.filter(e => e.kind === 'decision'), plans = decisions.filter(e => !e.detail?.limits?.length);
     const selected = actor.parent_id ? instructions[0] : (plans[0] || decisions[0]);
     const text = selected ? extractBody(selected.detail, selected.kind) : null;
     const d = lazyDisclosure('', body => {
       body.append(profileDetails(profile, actor), node('p', usage.label, 'muted'));
+      body.append(lazyDisclosure(`스킬 사용 근거 (${skills.length})`, target => {
+        target.append(node('p', '명시적으로 기록한 내용입니다. 설치 목록이나 문서 연결만으로 실제 사용·품질을 인증하지 않습니다.', 'notice'));
+        if (!skills.length) target.append(node('p', '스킬 사용 미기록 · 사용하지 않았다는 뜻은 아닙니다.', 'muted'));
+        for (const item of skills) {
+          const section = node('article', undefined, 'skill-entry');
+          section.append(node('h4', item.skill.id || '스킬 미확인'), node('p', `${item.stage} · ${item.result}`, 'skill-state'));
+          if (item.valid) {
+            const detail = item.detail;
+            section.append(node('p', `기록 당시 역할: ${roleCatalog[detail.role]?.label || '미확인'} · ${item.skill.mode === 'reference-only' ? '참고 문서만 사용' : '스킬 지침'}`, 'muted'),
+              node('p', detail.purpose), node('p', detail.result.summary),
+              node('p', `원본 버전: ${item.skill.source_ref}`, 'muted'), node('p', `출처: ${item.skill.source_url}`, 'muted'));
+            const ids = new Set(detail.evidence_event_ids || []);
+            section.append(evidenceDetails('연결된 결과·검증 기록', bundle.events.filter(e => ids.has(e.id)), actors));
+          }
+          target.append(section);
+        }
+      }, 'skill-use-details'));
       const grid = node('div', undefined, 'mini-grid');
       for (const [label, value] of [['입력', usage.input], ['출력', usage.output], ['합계', usage.total]]) {
         const cell = node('div', label, 'mini-stat'); cell.append(node('strong', tokenText(value))); grid.append(cell);
@@ -430,6 +538,7 @@ function startViewer() {
     top.append(node('span', actor.display_role, 'card-role'), pill(actor.status));
     const parent = actors.get(actor.parent_id), predecessor = bundle.closeout?.detail.assignments.find(a => a.actor_id === actor.id)?.previous_actor_id;
     head.append(top, node('p', actor.display_task, 'card-task'), node('p', parent ? `${parent.display_role} → ${actor.display_role}` : '최상위 실행 · 조율 기록 확인', 'card-path'));
+    head.append(node('p', skills.length ? `스킬 기록 ${skills.length}개 · 카드를 펼쳐 근거 확인` : '스킬 사용 미기록', 'card-skills'));
     if (actor.display_role_conflict) head.append(node('p', '역할 지정이 서로 충돌합니다. 원문 근거를 확인하세요.', 'warning'));
     if (predecessor) head.append(node('p', '후속 배정 · ' + (actors.get(predecessor)?.display_role || predecessor), 'muted'));
     head.append(node('p', actor.parent_id ? instructionExcerpt(selected) : text && !text.structured ? brief(text.text) : '명시된 계획 기록이 없습니다.', 'card-copy'));
@@ -503,14 +612,113 @@ function startViewer() {
       if (row.kind === 'reference') body.append(node('p', row.label + ' · 요청/역할/작업 합계 제외', 'warning'));
     }, 'plain-disclosure');
   }
+  function renderTasks(bundle, measured, section) {
+    const tasks = logicalTasks(bundle, measured), timeline = measurementTimeline(tasks);
+    const actors = new Map(displayActors(bundle).map(actor => [actor.id, actor]));
+    section.append(node('h3', '작업 묶음과 측정 시간 흐름'), node('p', '명시 묶음만 연결합니다. 토큰 합계는 물리 측정을 한 번만 합산합니다.', 'notice'));
+    const chart = node('div', undefined, 'measurement-chart');
+    chart.tabIndex = 0; chart.setAttribute('role', 'region'); chart.setAttribute('aria-label', '측정 시간 흐름 · 내부 가로 스크롤 가능');
+    const plot = node('div', undefined, 'measurement-plot');
+    if (timeline.start !== null) plot.append(node('p', `${displayTime(new Date(timeline.start).toISOString())} → ${displayTime(new Date(timeline.end).toISOString())}`, 'muted'));
+    else plot.append(node('p', '위치를 표시할 유효 측정 시각이 없습니다.', 'empty'));
+    const taskList = node('div', undefined, 'logical-tasks');
+    tasks.forEach((task, index) => {
+      const detail = lazyDisclosure('', body => {
+        if (task.group) {
+          const event = bundle.events.find(e => e.id === task.group.event_id);
+          if (event) body.append(eventList([event], actors));
+          body.append(disclosure('현재 묶음 구성·합계 원문', node('pre', show(task.group))));
+        }
+        for (const [memberIndex, row] of task.rows.entries()) {
+          const member = node('article', undefined, 'task-usage'), interval = measurementInterval(row);
+          member.id = `logical-task-${index}-member-${memberIndex}`; member.tabIndex = -1;
+          member.append(node('h4', segmentLabel(row, memberIndex)),
+            node('p', `${coverageReason(row)} · 입력 ${tokenText(row.input)} · 출력 ${tokenText(row.output)}`, 'muted'),
+            node('p', interval.valid ? `${displayTime(row.actor.usage.interval.started_at)} → ${displayTime(row.actor.usage.interval.finished_at)}${interval.point ? ' · 같은 밀리초로 표시' : ''}` : interval.reason, 'muted'),
+            tokenDetails(row), profileDetails(profileFor(bundle, row.actor), row.actor));
+          if (interval.valid) member.append(node('p', `원본 구간: ${row.actor.usage.interval.started_at} → ${row.actor.usage.interval.finished_at}`, 'body-text'));
+          const events = bundle.events.filter(e => e.actor_id === (row.actor.owner_actor_id || row.actor.id) && ['instruction', 'assignment', 'tool_call', 'tool_result', 'handoff'].includes(e.kind));
+          member.append(evidenceDetails('담당자 지시·명령·결과 (해당 구간 귀속 미확인)', events, actors));
+          if (row.actor.usage_event) member.append(eventList([row.actor.usage_event], actors));
+          body.append(member);
+        }
+      }, 'logical-task');
+      detail.id = `logical-task-${index}`; paint(detail, task.role);
+      const m = task.group?.measurements;
+      const total = m ? m.total_tokens : task.rows[0].kind === 'attributed' ? task.rows[0].total : null;
+      const intervals = task.rows.map(measurementInterval), valid = intervals.filter(i => i.valid).length;
+      detail.firstChild.append(node('span', roleCatalog[task.role]?.label || '역할 미분류', 'card-role'),
+        node('strong', task.title || '제목 미확인', 'logical-title'),
+        node('span', `${tokenText(total)} tokens · ${task.rows.length}개 ${task.group ? '측정 구간 · 명시 묶음' : task.rows[0].actor.observation_id ? '물리 측정' : '미측정 담당자'}`, 'muted'),
+        node('small', `시각 확인 ${valid} · 미확인 ${intervals.length - valid} · 상세 펼치기`));
+      if (bundle.event_revisions?.[task.id]?.length) detail.firstChild.append(node('span', '정정됨 · 이력은 상세에서 확인', 'warning'));
+      taskList.append(detail);
+      const validRows = timeline.rows.filter(r => r.task === task && r.valid);
+      if (!validRows.length) return;
+      const lane = node('div', undefined, 'measurement-lane'); paint(lane, task.role);
+      lane.append(node('p', `${roleCatalog[task.role]?.label || '역할 미분류'} · ${task.title}`, 'lane-label'));
+      // A full-width labelled control keeps short/point intervals reachable without stretching time.
+      for (const segment of validRows) {
+        const memberIndex = task.rows.indexOf(segment.row), memberId = `logical-task-${index}-member-${memberIndex}`;
+        const label = segmentLabel(segment.row, memberIndex);
+        const control = button('', () => {
+          const enterMember = () => {
+            const member = document.getElementById(memberId);
+            if (!member) return;
+            taskList.querySelectorAll('.selected-member').forEach(e => e.classList.remove('selected-member'));
+            member.classList.add('selected-member'); member.scrollIntoView({ block: 'start' }); member.focus();
+          };
+          if (!detail.dataset.loaded) detail.addEventListener('toggle', enterMember, { once: true });
+          detail.open = true; enterMember();
+        });
+        control.className = 'measurement-link'; control.setAttribute('aria-controls', memberId);
+        control.addEventListener('focus', () => control.classList.add('focused-segment'));
+        control.addEventListener('blur', () => control.classList.remove('focused-segment'));
+        control.append(node('span', label, 'segment-label'));
+        const track = node('span', undefined, 'measurement-track');
+        const bar = node('span', segment.point ? '◆' : '', 'measurement-segment' + (segment.point ? ' point' : ''));
+        bar.setAttribute('aria-hidden', 'true');
+        const span = timeline.end - timeline.start;
+        bar.style.left = `${span ? (segment.start - timeline.start) / span * 100 : 0}%`;
+        bar.style.width = `${span ? (segment.end - segment.start) / span * 100 : 0}%`;
+        const interval = segment.row.actor.usage.interval;
+        const precision = segment.point ? '같은 밀리초로 표시 · 밀리초 미만 차이는 원문 확인' : `${(segment.end - segment.start) / 1000}초 (밀리초 정밀도)`;
+        control.setAttribute('aria-label', `${label} · ${roleCatalog[task.role]?.label || '역할 미분류'} · 원본 ${interval.started_at} → ${interval.finished_at} · ${precision} · 이 멤버 상세 열기`);
+        control.append(node('span', precision, 'segment-precision')); track.append(bar); control.append(track); lane.append(control);
+      }
+      plot.append(lane);
+    });
+    chart.append(plot); section.append(chart,
+      node('p', '막대는 기록된 측정 구간이며 공백을 메우지 않습니다. 겹침은 기록의 겹침일 뿐 병렬 스케줄링이나 요청 전체 처리시간을 확정하지 않습니다. 구간 라벨이나 막대를 클릭하거나 Tab·Enter로 해당 멤버 상세를 엽니다. 차트 위치·길이는 밀리초 정밀도입니다.', 'notice'),
+      node('p', `시각 미확인 영역: ${timeline.rows.filter(row => !row.valid).length}개 · 아래 작업 상세에 보존합니다. 같은 밀리초로 표시되는 구간은 ◆이며 실제 동일 시각으로 단정하지 않습니다. 길이를 늘리지 않으며 세부 시각은 원문에서 확인합니다.`, 'notice'), taskList);
+    if (!tasks.length) section.append(node('p', '수입된 작업이나 담당자가 없습니다.', 'empty'));
+  }
   function renderUsage(bundle, measured) {
     const section = $('usage'); section.className = 'section-panel';
     const heading = node('div', undefined, 'section-heading'), h = node('div');
-    h.append(node('h3', '토큰 사용량'), node('p', '요청 전체 → 역할별 → 작업별 → 세부 항목')); heading.append(h); section.append(heading);
+    h.append(node('h3', '토큰 사용량'), node('p', '요청의 측정된 합계 → 역할별 → 작업별 → 세부 항목')); heading.append(h); section.append(heading);
     const total = node('div', undefined, 'request-token-total');
     total.append(node('span', '이 요청의 측정된 총 토큰'), node('strong', tokenText(measured.total)),
-      node('small', `입력 ${tokenText(measured.input)} · 출력 ${tokenText(measured.output)} · 측정 ${measured.covered}/${measured.rows.length}개 작업`));
-    section.append(total, node('h4', '역할별 사용량'));
+      node('small', `입력 ${tokenText(measured.input)} · 출력 ${tokenText(measured.output)} · 수입 목록에서 합산한 값`));
+    section.append(total);
+    const coverage = usageCoverage(bundle, measured), panel = node('div', undefined, 'usage-coverage');
+    panel.append(node('h4', '현재 수입 목록의 측정 범위'),
+      node('p', `등록된 담당 실행 ${coverage.registeredActors}개 · 개별 측정 기록 ${coverage.physicalObservations}개 · 지정한 작업 묶음 ${coverage.explicitGroups}개 · 묶음 없는 측정 기록 ${coverage.ungroupedObservations}개`),
+      node('p', coverageText(coverage)),
+      node('p', '개별 측정 기록은 유효 수치가 있는 항목만 셉니다. 수치 미확인 항목은 미측정 목록에 남습니다.', 'notice'),
+      node('p', '부분 범위의 측정된 합계입니다. 요청 전체 수집 여부는 미확인입니다. 미등록 작업이나 조율자의 추가 턴은 개수를 추정하지 않습니다.', 'notice'));
+    panel.append(lazyDisclosure(`미측정·집계 제외 목록 (${coverage.unavailable + coverage.excluded}개 항목)`, body => {
+      const missing = measured.rows.filter(r => r.kind !== 'attributed');
+      if (!missing.length) body.append(node('p', '현재 수입 목록에 미측정·제외 항목이 없습니다. 전체 요청의 완전 수집을 뜻하지 않습니다.'));
+      for (const row of missing) {
+        const item = node('article', undefined, 'task-usage');
+        item.append(node('h4', `${row.actor.display_role || '역할 미분류'} · ${row.actor.display_task || '작업명 미확인'}`),
+          node('p', row.actor.observation_id ? hasMeasuredValues(row) ? '개별 측정 기록 항목' : '사용량 항목 · 유효 수치 미확인' : '등록된 담당 실행 항목'),
+          node('p', coverageReason(row)), tokenDetails(row));
+        body.append(item);
+      }
+    }, 'coverage-disclosure'));
+    section.append(panel, node('h4', '역할별 사용량'));
     const roles = node('div', undefined, 'role-usage-grid');
     for (const group of roleUsage(measured)) {
       const card = lazyDisclosure('', body => {
@@ -524,7 +732,7 @@ function startViewer() {
           for (const [label, key] of [['입력', 'input'], ['출력', 'output'], ['합계', 'total']]) {
             const cell = node('div', label, 'mini-stat'); cell.append(node('strong', tokenText(r.kind === 'attributed' ? r[key] : null))); grid.append(cell);
           }
-          task.append(grid, node('p', r.label, 'muted'), tokenDetails(r));
+          task.append(grid, node('p', coverageReason(r), 'muted'), tokenDetails(r));
           if (r.actor.observation_id) task.append(lazyDisclosure('이 작업의 측정 원문·출처', target => {
             target.append(node('p', `작업 ${r.actor.task_id} · dispatch ${r.actor.dispatch_id}`, 'muted'));
             target.append(node('pre', show({ event: r.actor.usage_event,
@@ -537,11 +745,11 @@ function startViewer() {
       paint(card, group.key); card.dataset.roleId = group.key;
       card.firstChild.append(node('span', group.label, 'card-role'), node('strong', tokenText(group.total), 'role-token-total'),
         node('small', `입력 ${tokenText(group.input)} · 출력 ${tokenText(group.output)}`),
-        node('small', `${group.rows.length}개 작업 · 측정 ${group.covered}/${group.rows.length} · 작업별 펼치기`));
+        node('small', `부분 범위 · ${coverageText(coverageCounts(group.rows))} · 작업별 펼치기`));
       roles.append(card);
     }
-    section.append(roles);
-    const note = measured.total == null ? '배정별 수치가 아직 연결되지 않았습니다. 미측정은 0이 아니며 세션 누적값은 요청 합계에 더하지 않습니다.' : `측정된 합계 ${tokenText(measured.total)} tokens · 표시된 작업 ${measured.covered}/${measured.rows.length}개 측정. 조율·검증·추가 작업의 전체 수집을 뜻하지 않습니다.`;
+    section.append(roles); renderTasks(bundle, measured, section);
+    const note = measured.total == null ? '배정별 수치가 아직 연결되지 않았습니다. 미측정은 0이 아니며 세션 누적값은 요청 합계에 더하지 않습니다.' : `측정된 합계 ${tokenText(measured.total)} tokens · 현재 수입 목록의 측정됨 ${measured.covered}개 항목. 조율·검증·추가 작업의 전체 수집을 뜻하지 않습니다.`;
     section.append(node('p', note, 'usage-note'));
   }
   function renderMetadata(bundle) {
@@ -566,7 +774,7 @@ function startViewer() {
       const displayed = displayActors(bundle), actors = new Map(displayed.map(a => [a.id, a])), units = usageUnits(bundle, displayed), measured = usageSummary(units), title = renderSummary(bundle, actors);
       const duration = durationText(bundle.requests[0]);
       $('metrics').append(metric('참여한 담당 실행', bundle.actors.length + '개', new Set(displayed.map(a => a.display_role)).size + '개 역할 · 수입된 배정 기준'),
-        metric('측정된 요청 토큰', tokenText(measured.total), `배정별 측정 ${measured.covered}/${measured.rows.length} · 입력 ${tokenText(measured.input)} / 출력 ${tokenText(measured.output)}`),
+        metric('측정된 요청 토큰', tokenText(measured.total), `수입 목록 기준 · 전체 수집 미확인 · ${coverageText(coverageCounts(measured.rows))}`),
         metric('전체 실행 시간', duration || '미확인', duration ? '명시된 시작 → 종료 기준' : '시작·종료 구간 미수집'),
         metric('수집된 실행 기록', bundle.events.length + '개', '명령·지시·검증을 펼쳐 확인'));
       renderFlow(bundle, actors, measured); renderUsage(bundle, measured); renderMetadata(bundle);
@@ -591,7 +799,51 @@ function startViewer() {
   $('all-records').addEventListener('toggle', renderTimeline);
   $('role').onchange = $('kind').onchange = renderTimeline;
   $('reset').onclick = () => { $('role').value = ''; $('kind').value = ''; renderTimeline(); };
-  $('refresh').onclick = () => list(true);
+  async function loadSkills(restoreFocus = false) {
+    const version = ++skillVersion, target = $('skill-library-body'), panel = $('skill-library'), active = document.activeElement;
+    const status = $('skill-library-status'); status.setAttribute('role', 'status'); status.textContent = '스킬 점검 정보 불러오는 중…';
+    try {
+      const snapshot = await get('/api/skills');
+      if (version !== skillVersion) return;
+      target.replaceChildren();
+      status.textContent = snapshot.status === 'connected' ? '연결된 관리 라이브러리 · 읽기 전용' : '관리 라이브러리가 이 서버에 연결되지 않았습니다.';
+      target.append(node('p', '설치 상태와 요청별 실제 사용 기록은 별개입니다. 이 화면에서는 스킬을 변경하거나 실행하지 않습니다.', 'notice'));
+      const review = snapshot.review;
+      if (snapshot.invalid_reviews) target.append(node('p', `형식을 확인하지 못한 검토 보고서 ${snapshot.invalid_reviews}개 · 아래 결과를 전체 최신 검토로 단정하지 마세요.`, 'warning'));
+      if (review) {
+        const states = { complete: '검토 완료', partial: '일부 확인', failed: '검토 실패' };
+        target.append(node('h3', '최근 연결된 정기 검토'), node('p', `${states[review.status] || '상태 미확인'} · ${displayTime(review.reviewed_at)}`), node('p', review.summary));
+        const decisions = { add: '추가 판단', update: '업데이트 판단', hold: '보류', disabled: '비활성화 판단', retired: '보관 판단', error: '확인 실패' };
+        for (const item of review.candidates) {
+          const entry = node('article', undefined, 'skill-entry');
+          entry.append(node('h4', `${item.id} · ${decisions[item.decision] || '미확인'}`), node('p', item.reason), node('p', `검토 버전: ${item.source_ref || '미확인'}`, 'muted'));
+          target.append(entry);
+        }
+        target.append(node('p', '검토 판단이며 실제 설치·변경 여부는 아래 등록 상태와 변경 이력에서 확인합니다.', 'muted'));
+      } else target.append(node('p', '정기 검토 요약 미연결 · 점검이 수행되지 않았다는 뜻은 아닙니다.', 'muted'));
+      target.append(node('h3', '등록된 스킬'));
+      const states = { pilot: '시범 사용', active: '활성', disabled: '비활성', retired: '보관', not_installed: '미설치' };
+      for (const skill of snapshot.skills || []) {
+        const entry = node('article', undefined, 'skill-entry');
+        entry.append(node('h4', skill.id), node('p', `${states[skill.status] || '미확인'} · ${skill.mode === 'reference-only' ? '참고 문서 전용' : '스킬 지침'}`),
+          node('p', skill.roles.map(role => roleCatalog[role]?.label || role).join(' · '), 'muted'),
+          node('p', `버전: ${skill.source_ref}`, 'muted'), node('p', `설치 무결성: ${skill.integrity === 'verified' ? '파일 일치' : skill.integrity === 'failed' ? '불일치·확인 필요' : '미설치'}`, skill.integrity === 'failed' ? 'warning' : 'muted'));
+        target.append(entry);
+      }
+      target.append(lazyDisclosure('등록 변경 이력', body => {
+        if (!snapshot.history?.length) body.append(node('p', '연결된 변경 이력이 없습니다.', 'muted'));
+        for (const item of [...snapshot.history].reverse()) body.append(node('p', `${displayTime(item.at)} · ${item.id} · ${item.action} · ${typeof item.reason === 'string' ? item.reason : show(item.reason)}`));
+      }));
+    } catch (error) {
+      if (version !== skillVersion) return;
+      status.setAttribute('role', 'alert'); status.textContent = '스킬 점검 정보를 읽지 못했습니다. 연결을 확인한 뒤 다시 조회해 주세요.';
+      target.replaceChildren(button('스킬 점검 다시 조회', () => loadSkills(true)));
+    } finally {
+      if (restoreFocus && version === skillVersion && (document.activeElement === active || document.activeElement === document.body)) panel.querySelector('summary').focus();
+    }
+  }
+  $('skill-library').addEventListener('toggle', () => { if ($('skill-library').open) loadSkills(); });
+  $('refresh').onclick = () => { list(true); if ($('skill-library').open) loadSkills(); };
   mobile.addEventListener('change', syncNavigation);
   list();
 }

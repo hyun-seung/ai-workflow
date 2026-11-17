@@ -82,8 +82,8 @@ class StopTests(unittest.TestCase):
         # A failed checkpoint can leave a failed Dispatch and a physically stopped
         # worker. Preserve that outcome while recognizing exact exit evidence.
         value = self.snapshot()
-        value['result']['dispatch']['status'] = 'failed'
-        value['result']['worker']['state'] = 'stopped'
+        value['result']['dispatch'].update(status='failed', lastFailure='stopped')
+        value['result']['worker'].update(state='stopped', stage='process_stopped')
         with patch.object(guard, 'orca', return_value=value) as query, \
                 patch.object(guard, 'invoke_stop', return_value=({'ok': True, 'result': {'state': 'stopped'}}, 0)) as stop:
             result = self.ledger.stop('operation_example', 'example')
@@ -100,10 +100,12 @@ class StopTests(unittest.TestCase):
             self.ledger.reserve('request_example', 'successor', successor, self.limits)
 
     def test_stopped_state_does_not_replace_exit_identity_or_terminal_dispatch_checks(self):
-        for change in ('live', 'unverifiable', 'task', 'dispatch', 'worker', 'remote', 'pending', 'failed_response'):
+        for change in ('live', 'unverifiable', 'task', 'dispatch', 'worker', 'remote', 'pending',
+                       'failed_response', 'stop_stage', 'stop_failure', 'completed_dispatch'):
             value = self.snapshot()
             result = value['result']
-            result['worker']['state'] = 'stopped'
+            result['dispatch'].update(status='failed', lastFailure='stopped')
+            result['worker'].update(state='stopped', stage='process_stopped')
             if change == 'live': result['observation']['status'] = 'running'
             elif change == 'unverifiable': result['observation']['exactWorker'] = False
             elif change == 'task': result['dispatch']['taskId'] = 'task_other'
@@ -112,6 +114,9 @@ class StopTests(unittest.TestCase):
             elif change == 'remote': result['dispatch']['hostScope']['kind'] = 'remote'
             elif change == 'pending': result['dispatch']['status'] = 'pending'
             elif change == 'failed_response': value['ok'] = False
+            elif change == 'stop_stage': result['worker']['stage'] = 'running'
+            elif change == 'stop_failure': result['dispatch']['lastFailure'] = None
+            elif change == 'completed_dispatch': result['dispatch']['status'] = 'completed'
             with self.subTest(change=change), self.assertRaises(ValueError):
                 guard.exited(value, 'task_1', 'ctx_1')
 

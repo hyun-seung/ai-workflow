@@ -55,3 +55,9 @@
 | native 결과 보존 | dispatch의 failed·worker의 stopped·관리 outcome stopped를 보존. 관측 시험의 결과를 업무 성공으로 덮어쓰지 않음 |
 
 이 범위에서는 **준비 신호→취소→정확한 종료→재전달의 실제 경로를 확인**했다. 공급자 실제 모델·effort·토큰, 세부 승인 과정, 상시 무인 운영 준비는 여전히 미확인이다. 이를 위해 추가 worker나 승인 시험을 자동 반복하지 않는다. 기존 59개 관련 검사 이후 코드는 변경하지 않았고 이번에는 실제 결과와 문서만 갱신했다.
+
+## main 통합 시 종료 조건 보존
+
+2026-11-17 통합에서는 main의 엄격한 native 중지 조건과 이 브랜치의 응답 형식 검사를 함께 유지했다. `stopped`를 인정하려면 worker의 `stage: process_stopped`, dispatch의 `status: failed`·`lastFailure: stopped`가 모두 필요하다. 로컬 host·정확한 신원·`exactWorker: true`·`status: exited`도 계속 요구한다. 객체가 아닌 응답·host·관측값은 해제 근거로 사용하지 않는다.
+
+두 시험에서 보관한 종료 snapshot을 읽기 전용으로 재확인해 이 조건을 만족함을 확인했다. 회귀 자료도 같은 조건으로 수정하고 단계·실패 원인·dispatch 상태가 맞지 않을 때 거부하는 경우를 추가했다. 새 worker 생성·native 중지·기존 시험 한도 재사용은 하지 않았다. 과거의 부분 확인과 후속 시험 결과는 그대로 보존한다.

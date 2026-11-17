@@ -90,9 +90,11 @@ def exited(snapshot, task_id, dispatch_id):
             snapshot.get('ok') is not True or dispatch.get('id') != dispatch_id or
             dispatch.get('taskId') != task_id or worker.get('dispatchId') != dispatch_id):
         raise ValueError('worker_identity_mismatch')
+    stopped = (worker.get('state') == 'stopped' and worker.get('stage') == 'process_stopped' and
+               dispatch.get('status') == 'failed' and dispatch.get('lastFailure') == 'stopped')
     host = dispatch.get('hostScope')
     if (not isinstance(host, dict) or not isinstance(observation, dict) or host.get('kind') != 'local' or
             dispatch.get('status') not in ('completed', 'failed', 'cancelled') or
-            worker.get('state') not in ('succeeded', 'failed', 'cancelled', 'stopped') or
+            (worker.get('state') not in ('succeeded', 'failed', 'cancelled') and not stopped) or
             observation.get('exactWorker') is not True or observation.get('status') != 'exited'):
         raise ValueError('worker_exit_unconfirmed')

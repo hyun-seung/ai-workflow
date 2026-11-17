@@ -123,6 +123,24 @@ def pin_operation(old, binding, operation_id, operation, receipt_path, project):
     return intent
 
 
+def verify_saved_measurement(config, event, operation, saved, current=None):
+    collection = operation['plan']['usage_collection']
+    if current is None:
+        current = inspect_session(config['project'], event['transcript_path'], event['session_id'],
+                                  operation['task_id'], operation['dispatch_id'],
+                                  request_id=operation['request_id'], role=collection['role'])
+    if current['dispatch_usage'] != saved['dispatch_usage']:
+        raise ValueError('hook_measurement_changed')
+    interval = saved['dispatch_usage']['interval']
+    def contexts(record):
+        return [c for c in record['observed_contexts'] if interval['start_line'] < c['line'] < interval['end_line']]
+    if (current['binding'] != saved['binding'] or current['session'] != saved['session'] or
+            current['source']['path'] != saved['source']['path'] or contexts(current) != contexts(saved)):
+        raise ValueError('hook_source_context_or_binding_changed')
+    # A later turn may be appended legitimately. Compare the measured interval,
+    # baseline/increments and its contexts, not the whole growing file's hash.
+
+
 def collect(config, payload, attempts=5, delay=0.5):
     event = event_input(payload)
     if Path(event['cwd']).resolve() != Path(config['project']):
@@ -152,11 +170,13 @@ def collect(config, payload, attempts=5, delay=0.5):
             if old['binding'] != binding: raise ValueError('hook_event_binding_conflict')
             if old['status'] == 'collected':
                 record_path = private_file(old['record_path'], project)
-                if digest(read_json(record_path)) != old['record_sha256']:
+                saved = read_json(record_path)
+                if digest(saved) != old['record_sha256']:
                     raise ValueError('hook_record_changed')
                 operation = next((o for oid, o in select_operation(config, source) if oid == old['operation_id']), None)
                 if operation is None or operation_binding(operation) != old['operation_binding']:
                     raise ValueError('hook_operation_binding_changed')
+                verify_saved_measurement(config, event, operation, saved)
                 append_usage(config, record_path, operation['plan']['usage_collection'])
                 return dict(old, replay=True)
         issue = 'unregistered_or_unclosed_turn'
@@ -186,8 +206,7 @@ def collect(config, payload, attempts=5, delay=0.5):
                     if 'snapshot' in old:
                         if digest(old['snapshot']) != old['record_sha256']:
                             raise ValueError('hook_record_changed')
-                        if old['snapshot']['dispatch_usage'] != record['dispatch_usage']:
-                            raise ValueError('hook_measurement_changed')
+                        verify_saved_measurement(config, event, operation, old['snapshot'], record)
                     else:
                         if record_path.exists(): raise ValueError('hook_orphan_record_requires_review')
                         # Durable intent precedes both the snapshot file and DB

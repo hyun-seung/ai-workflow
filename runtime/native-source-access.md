@@ -27,9 +27,11 @@ OpenAI의 [`thread/read` 및 이벤트 계약](https://learn.chatgpt.com/docs/ap
 
 기존 hook 경로는 [프로젝트 정의의 공식 검토·로딩·수신](orca-routing-input.md)이 확보되면 재개할 수 있다. 이번 조사는 같은 probe/worker를 다시 실행한 것이 아니다. 직접 제공받은 정확한 공식 원본 경로가 있다면 기존 `finish` 입력은 그대로 사용할 수 있다.
 
-2026-11-16 확인한 [main의 명시 원본 수집기](https://github.com/hyun-seung/ai-workflow/blob/5badece/runtime/request-usage-collection.md)도 호출자가 정확한 `session_file`·세션·닫힌 턴 연결을 제공하는 경로다. 이 수집기의 추가를 현재 Orca에서 경로를 자동 제공하는 export/bridge의 확보로 해석하지 않는다. 현재 작업 브랜치에 main의 수집기·관련 lifecycle 변경을 병합하거나 실행한 것은 아니다.
+2026-11-16 확인한 [main의 명시 원본 수집기](https://github.com/hyun-seung/ai-workflow/blob/5badece/runtime/request-usage-collection.md)도 호출자가 정확한 `session_file`·세션·닫힌 턴 연결을 제공하는 경로다. 이 수집기의 추가를 현재 Orca에서 경로를 자동 제공하는 export/bridge의 확보로 해석하지 않는다. 당시 작업 브랜치에는 main의 수집기·관련 lifecycle 변경을 병합하거나 실행하지 않은 상태였다.
 
-수집기와 현재 브랜치의 import를 정적으로 대조하면 `completion_hook.verify_saved_measurement`가 없어 수집기 한 파일만 복사해서 실행할 수 없다. main의 동반 검증·원자적 수입 변경과 함께 통합해야 하며, import 대조는 전체 호환성 검증이 아니다. 정확한 원본이 먼저 제공되면 현재 브랜치의 기존 완료 수집기로 신원·형식·프로필·측정 범위를 검증하는 경로도 유지한다.
+당시 브랜치의 import를 정적으로 대조하면 `completion_hook.verify_saved_measurement`가 없어 수집기 한 파일만 복사해서 실행할 수 없었다. main의 동반 검증·원자적 수입 변경과 함께 통합해야 한다는 결과였으며, import 대조를 전체 호환성 검증으로 보지 않았다.
+
+2026-11-17 main 통합에서는 [명시 원본 수집기](request-usage-collection.md)와 동반 검증·마감 도구를 함께 반영했다. 위 보조 함수 누락은 통합으로 해소했지만 정확한 원본 경로·사용량 근거가 자동 제공되는 연결은 여전히 확보하지 못했다. 통합 회귀 검사는 실제 원본 수집·공급자 관측·비용 비교를 대신하지 않는다.
 
 현재 전달받은 정확한 원본 경로는 없다. 따라서 실제 원본 수집·비용 비교는 연결 지원 대기다. 경로 추정·세션 폴더 탐색·추가 시험 worker로 이를 대신하지 않으며, 조건이 바뀌지 않은 조회를 반복하지 않는다. 이 대기는 튜터 설명·추천의 사용성 평가까지 막는 조건이 아니다.
 
