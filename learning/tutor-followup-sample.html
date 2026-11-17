@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>튜터 도식 예시 · 확장과 권한</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:var(--background,#fff);color:var(--foreground,#172033);font-family:var(--font-sans,system-ui,sans-serif);font-size:15px;line-height:1.6}
+main{max-width:1000px;margin:auto;padding:24px}h1{font-size:24px;line-height:1.3;margin:4px 0 8px}h2{font-size:18px;margin:0 0 6px}p{margin:6px 0}.eyebrow,.hint{color:var(--muted-foreground,#526174);font-size:13px}.eyebrow{letter-spacing:.06em}
+.tabs,.modes{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.tabs button,.modes button{font:inherit;padding:8px 14px;border:1px solid var(--border,#cbd5e1);border-radius:10px;background:var(--card,#fff);color:var(--card-foreground,#172033);cursor:pointer}
+button:hover{background:var(--accent,#e2e8f0);color:var(--accent-foreground,#172033)}button:focus-visible,a:focus-visible{outline:3px solid var(--ring,#2563eb);outline-offset:3px}button[aria-pressed="true"]{background:var(--primary,#1d4ed8);color:var(--primary-foreground,#fff);border-color:var(--primary,#1d4ed8)}
+[hidden]{display:none!important}.flow{display:grid;grid-template-columns:1fr 90px 1fr 90px 1fr;align-items:center;margin-top:20px}.box{padding:16px;border:1px solid var(--border,#cbd5e1);border-radius:14px;background:var(--card,#fff);color:var(--card-foreground,#172033);min-width:0}.box strong{display:block;font-size:18px}.box .detail{font-size:14px;color:var(--muted-foreground,#526174)}.arrow{text-align:center;font-size:25px;color:var(--muted-foreground,#526174)}.arrow small{display:block;font-size:11px;line-height:1.4}.optional{display:block;margin-top:12px;padding:8px;border:1px dashed var(--border,#94a3b8);border-radius:8px;font-size:13px}.stage{display:block;font-size:12px;color:var(--muted-foreground,#526174);margin-bottom:6px}
+.outcome{border-left:4px solid var(--chart-1,#2563eb);padding:12px 16px;margin-top:20px;background:var(--muted,#f1f5f9);color:var(--foreground,#172033);border-radius:0 10px 10px 0}.outcome strong{display:block}.legend{font-size:13px;margin-top:14px}.node{padding:18px;border:2px solid var(--chart-1,#2563eb);border-radius:16px;margin-top:18px;background:var(--card,#fff);color:var(--card-foreground,#172033)}.node-head{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}.badge{font-size:13px;border:1px solid var(--border,#cbd5e1);padding:5px 10px;border-radius:20px}.pods{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.pod{border:1px solid var(--border,#cbd5e1);padding:14px;border-radius:12px}.access{margin-top:12px;border-top:1px dashed var(--border,#cbd5e1);padding-top:10px;font-size:14px}.sources{border-top:1px solid var(--border,#cbd5e1);margin-top:20px;padding-top:12px;font-size:13px}a{color:var(--primary,#1d4ed8);text-underline-offset:3px}.sources a{display:inline-block;margin:4px 12px 0 0}footer{margin-top:16px;color:var(--muted-foreground,#526174);font-size:12px}
+@media(max-width:650px){main{padding:16px}h1{font-size:21px}.flow{grid-template-columns:1fr;gap:8px;margin-top:12px}.arrow{font-size:0}.arrow:before{content:'↓';font-size:24px}.arrow small{font-size:12px}.box{padding:14px}.pods{grid-template-columns:1fr}.tabs button,.modes button{padding:8px 11px}.node{padding:14px}}
+</style>
+</head>
+<body>
+<main>
+<div class="eyebrow">가상 학습 예시 · EC2 기반 EKS</div>
+<h1>Pod 개수와 서버 용량은 따로 조절해요</h1>
+<p class="hint">공식 문서 내용을 재구성한 도식입니다. 특정 프로젝트의 실제 구성은 아닙니다.</p>
+<div class="tabs" role="group" aria-label="설명 주제">
+<button type="button" id="scaling-button" aria-pressed="true" aria-controls="scaling">확장 관계</button>
+<button type="button" id="identity-button" aria-pressed="false" aria-controls="identity">권한 경계</button>
+</div>
+<section id="scaling" aria-labelledby="scaling-button">
+<h2>Pod를 늘려도, 실행할 서버 공간이 필요합니다</h2>
+<div class="modes" role="group" aria-label="노드 용량 공급 방식">
+<button type="button" id="fixed-button" aria-pressed="true">노드 수 고정</button>
+<button type="button" id="dynamic-button" aria-pressed="false">노드 자동 추가</button>
+</div>
+<div class="flow" role="group" aria-label="부하에서 Pod 개수 조절, 노드 배치로 이어지는 흐름">
+<div class="box"><span class="stage">1 · 일의 양</span><strong>요청·작업 증가</strong><span class="detail">CPU 사용량이나 대기 작업 수 같은 지표</span></div>
+<div class="arrow" aria-label="지표 전달">→<small>지표 전달</small></div>
+<div class="box"><span class="stage">2 · Pod 수 조절</span><strong>HPA</strong><span class="detail">Deployment 등의 복제본 수 조절</span><span class="optional">선택적 연동<br>KEDA → 이벤트 지표 → HPA<br>KEDA가 HPA 생성·관리</span></div>
+<div class="arrow" aria-label="추가 Pod 배치 요청">→<small>추가 Pod<br>배치 요청</small></div>
+<div class="box"><span class="stage">3 · 서버 공간</span><strong>기존 노드에 배치</strong><span class="detail">자원과 배치 조건이 맞는 노드에 스케줄러가 배치</span></div>
+</div>
+<div class="outcome" id="outcome" role="status" aria-live="polite"><strong>공간이 없으면? → 추가 Pod는 대기</strong><span>노드 증설을 하지 않는 가정입니다. HPA·KEDA가 노드를 만들어 주지는 않습니다.</span></div>
+<p class="legend">실선 화살표: 지표·배치 요청 / 점선 상자: 선택적 연동이며 HPA 내부 부품을 뜻하지 않음. 노드가 늘어도 조건이 맞아야 Pod를 배치할 수 있습니다.</p>
+<div class="sources">근거
+<a href="https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/" target="_blank" rel="noopener noreferrer">Kubernetes · HPA</a>
+<a href="https://keda.sh/docs/2.21/concepts/scaling-deployments/" target="_blank" rel="noopener noreferrer">KEDA · Deployment 확장</a>
+<a href="https://docs.aws.amazon.com/eks/latest/userguide/autoscaling.html" target="_blank" rel="noopener noreferrer">AWS · 노드 자동 확장</a></div>
+</section>
+<section id="identity" hidden aria-labelledby="identity-button">
+<h2>같은 서버에서도 앱마다 AWS 권한을 나눌 수 있어요</h2>
+<div class="node" role="group" aria-label="하나의 노드와 서로 다른 앱 권한을 사용하는 두 Pod">
+<div class="node-head"><strong>하나의 EC2 노드</strong><span class="badge">Node IAM Role · 노드 운영 권한</span></div>
+<div class="pods">
+<div class="pod"><strong>파일 처리 Pod</strong><p>파일 처리용 ServiceAccount</p><div class="access">↓ Pod Identity 또는 IRSA 연결<br><strong>파일 버킷 읽기용 IAM Role</strong></div></div>
+<div class="pod"><strong>메시지 처리 Pod</strong><p>메시지 처리용 ServiceAccount</p><div class="access">↓ Pod Identity 또는 IRSA 연결<br><strong>작업 큐 처리용 IAM Role</strong></div></div>
+</div>
+</div>
+<div class="outcome"><strong>앱 권한 차이만으로 Node Group을 나눌 필요는 없습니다</strong><span>Node Role은 노드 운영용, 앱 Role은 각 앱의 AWS 접근용입니다. Pod Identity·IRSA 설정과 함께 노드 IMDS 접근 제한도 검토해야 합니다.</span></div>
+<p class="legend">바깥 상자: 실행 위치 / 안쪽 화살표: ServiceAccount와 IAM Role의 연결. 이 도식이 완전한 보안 격리를 보장한다는 뜻은 아닙니다.</p>
+<div class="sources">근거
+<a href="https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html" target="_blank" rel="noopener noreferrer">AWS · Node IAM Role</a>
+<a href="https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html" target="_blank" rel="noopener noreferrer">AWS · Pod Identity</a>
+<a href="https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html" target="_blank" rel="noopener noreferrer">AWS · IRSA</a></div>
+</section>
+<footer>단순화한 학습 도식입니다. KEDA는 여기서 Deployment의 ScaledObject 기반 확장을 뜻하며, 노드 공급 시간·상한·권한·배치 제약은 별도로 확인해야 합니다.</footer>
+</main>
+<script>
+const topics=['scaling','identity'];
+for(const id of topics){document.getElementById(id+'-button').addEventListener('click',()=>{for(const name of topics){document.getElementById(name).hidden=name!==id;document.getElementById(name+'-button').setAttribute('aria-pressed',String(name===id));}document.querySelector('h1').textContent=id==='scaling'?'Pod 개수와 서버 용량은 따로 조절해요':'실행 위치와 AWS 권한은 구분해요';});}
+for(const mode of ['fixed','dynamic']){document.getElementById(mode+'-button').addEventListener('click',()=>{for(const name of ['fixed','dynamic'])document.getElementById(name+'-button').setAttribute('aria-pressed',String(name===mode));const result=document.getElementById('outcome');result.replaceChildren();const title=document.createElement('strong');title.textContent=mode==='fixed'?'공간이 없으면? → 추가 Pod는 대기':'공간이 없으면? → 노드 확장 방식이 용량 추가';const detail=document.createElement('span');detail.textContent=mode==='fixed'?'노드 증설을 하지 않는 가정입니다. HPA·KEDA가 노드를 만들어 주지는 않습니다.':'CA / Karpenter / EKS Auto Mode 중 채택한 방식으로 노드를 추가합니다. 준비에는 시간이 걸리며, 권한·상한·가용 용량·배치 조건을 충족해야 합니다.';result.append(title,detail);});}
+</script>
+</body>
+</html>

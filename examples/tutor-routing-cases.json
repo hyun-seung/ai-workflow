@@ -138,6 +138,40 @@
       "input": {"controls": {"model_locked": true, "effort_locked": true, "delegation": "forbid"}, "analysis": {"needs_input": true}},
       "expected_action": "needs_input",
       "response_check": "필수 자료를 먼저 확인하며 역할 승인·모델 상향·worker 제안을 만들지 않음. 자료 부족 판단은 현재 AI가 제공한 값이며 라우터의 자동 분류 결과가 아님."
+    },
+    {
+      "id": "TR-18",
+      "context": "가상 선행 설명에서 대입과 얕은 복사, 바깥 리스트와 안쪽 객체를 다뤘다. 역할 선택 기록 없이 현재 AI가 직접 설명 중이다.",
+      "request": "바깥 리스트와 안쪽 객체가 어떻게 연결되는지 아직 헷갈려.",
+      "input": {"followup": true, "analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "direct를 튜터 중단으로 해석하지 않음. 명시 그림 요청 없이 작은 참조 관계 도식과 새 예시로 연결을 설명. 렌더 지원/제한을 구분하고 지침 전체 재로딩·역할 승인·모델 전환·worker 없이 처리."
+    },
+    {
+      "id": "TR-19",
+      "context": "가상 선행 설명에서 원본과 얕은 복사본의 바깥/안쪽 참조 도식을 제공했다. 사용자는 같은 연결에서 다시 막혔다.",
+      "request": "여전히 어려워. 안쪽에 값을 추가했을 때 두 쪽에서 어떻게 보이는지 보여 줘.",
+      "input": {
+        "followup": true,
+        "previous": {"session_id": "session_example", "request_id": "request_example", "revision": 1, "controls": {}, "selection": {"role": "tutor", "model": "gpt-6.1-sol", "effort": "medium", "execution": "current"}}
+      },
+      "expected_action": "reuse",
+      "response_check": "같은 선택을 유지하며 값 변경 전후의 작은 도식으로 표현을 바꿈. 정의·장문·기존 Q&A를 복제하지 않음. reuse만으로 사용자가 이해했거나 앱 자동 연결이 성공했다고 보고하지 않음."
+    },
+    {
+      "id": "TR-20",
+      "context": "가상 선행 설명에서 HTTP 캐시 흐름을 다뤘다.",
+      "request": "HTTP 약어만 한 줄로 알려 줘.",
+      "input": {"followup": true, "analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "Hypertext Transfer Protocol의 약어라고 짧게 답함. 불필요한 그림 제작·Q&A·반복 검색·역할 안내를 추가하지 않음."
+    },
+    {
+      "id": "TR-21",
+      "request": "가상의 파일 처리 서비스에서 여러 워커를 같은 서버에 배치할 기준을 쉽게 설명해 줘.",
+      "input": {"analysis": {"recommendation": null}},
+      "expected_action": "direct",
+      "response_check": "자원·권한·네트워크·장애·비용·운영 중 관련 축을 검토. 서버와 앱의 권한 주체를 구별하고 앱 권한 차이만으로 서버 분리를 단정하지 않음. 쉬운 예시·필요한 경계 도식·근거를 연결하고 실제 구성은 가정으로 표시."
     }
   ]
 }
