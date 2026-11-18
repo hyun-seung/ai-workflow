@@ -85,6 +85,41 @@ class DevelopmentWorkflowTests(unittest.TestCase):
             operation()
         self.assertEqual(before, self.state.read_bytes())
 
+    def test_unknown_native_is_pending_not_unavailable(self):
+        self.assertEqual(dw.decision(self.project, 'development')['decision'], 'native_check_required')
+        self.assertEqual(self.c.begin(**dict(self.args, native_available=None))['decision'], 'native_check_required')
+        self.assertFalse(self.state.exists())
+        v = self.begin(); before = self.state.read_bytes()
+        unknown = self.c.next(native_available=None)
+        self.assertEqual(unknown['phase'], 'native_check_required')
+        self.assertEqual(unknown['stage_id'], v['stage_id'])
+        self.assertEqual(before, self.state.read_bytes())
+        for invalid in (0, 1, 'unknown'):
+            with self.assertRaises(ValueError): dw.decision(self.project, 'development', native_available=invalid)
+
+    def test_expected_policy_optional_strict_and_resume_matches_frozen_scope(self):
+        expected = dict(sha256=dw.policy_snapshot(self.project)['sha256'], limits=self.p.copy())
+        v = self.c.begin(**self.args, expected_policy=expected)
+        before = self.state.read_bytes()
+        self.assertEqual(self.c.begin(**self.args, expected_policy=expected)['stage_id'], v['stage_id'])
+        self.assertEqual(before, self.state.read_bytes())
+        self.unchanged_failure(lambda: self.c.begin(**self.args, expected_policy=dict(expected, sha256='0'*64)))
+        self.unchanged_failure(lambda: self.c.begin(**self.args, expected_policy=dict(expected, extra=True)))
+        # Existing low-level explicit bool/None and frozen-policy resume remain compatible.
+        self.p['max_dispatches'] = 8; self.write_policy()
+        self.assertEqual(self.c.begin(**self.args, expected_policy=expected)['stage_id'], v['stage_id'])
+        self.assertEqual(self.begin()['stage_id'], v['stage_id'])
+
+    def test_unsupported_actual_execution_and_stored_intent_are_rejected(self):
+        v = self.begin(); before = self.state.read_bytes()
+        intent = dict(client='paseo', guard_directory=None, guard_operation_id=None, usage_actor_id=None)
+        self.assertEqual(self.c.reserve(v['stage_id'], intent)['phase'], 'unavailable')
+        self.assertEqual(before, self.state.read_bytes())
+        with self.assertRaisesRegex(ValueError, 'unsupported_actual_execution_client'):
+            self.c._guard(execution(client='paseo'), 'developer')
+        s = self.c._read(); s['stages'][0]['intent'] = intent; self.c._save(s)
+        self.unchanged_failure(self.c.next)
+
     def test_direct_no_policy_role_read_or_state_side_effects(self):
         (self.project / dw.POLICY).write_text('invalid json')
         for kind, direct in [('conversation', False), ('small_change', False), ('development', True)]:

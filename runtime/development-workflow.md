@@ -2,6 +2,72 @@
 
 `scripts/development_workflow.py`는 **현재 AI가** 다음에 실행할 역할과 native 동작을 확인하는 작은 로컬 컨트롤러다. 스크립트 자체는 모델·worker·프로세스를 생성하지 않으며 모델 API, 셸 실행, daemon, 자동 공개 기능이 없다. 별도 Codex 실행기로 fallback하지 않는다. 현재 AI가 의미를 판단하고 공식 native 도구로 실행·상태·종료를 확인한 뒤 아래 API에 관측값을 전달한다. 지침 연결만으로 모든 앱에 자동 적용되는 기능은 아니다.
 
+## 명시적 개발 진입과 보고
+
+복합 개발의 현재 진입은 `scripts/development_entry.py`의 `Entry` API와 기존 `development_workflow.py entry/report` CLI다. 정책 없는 복합 요청에서 절차를 생략해 단독 구현하는 것은 누락이다. 도구 미지원과 진입·선택 누락은 별개다. 이 API가 생기기 전 작업을 사후 기록해 사전 실행으로 바꾸지 않는다.
+
+| 연결 | 담당 / 현재 강제 범위 |
+| --- | --- |
+| Orca 입력 → 의미 판단 | 현재 AI 수동 판단, 별도 분류 모델 없음; 앱 자동 interceptor 없음 |
+| 판단 → entry | AGENTS 지침에 따른 현재 AI의 명시 호출; 모든 대화를 강제로 통과시키지는 못함 |
+| entry → 정책·수용·native | 프로그램 검사: 서로 별도 기록, unknown은 확인 대기, 파일만으로 수용 추정 금지 |
+| 수용 → begin/next → reserve | 프로그램 검사와 기존 v2 컨트롤러; entry는 실제 begin/next를 호출 |
+| reserve → 공식 guard dispatch | 현재 AI가 최초 submit_once에서 기존 공식 경로 호출; 새 launcher 없음 |
+| 결과 → attach/complete → 독립 검토 | 컨트롤러의 실제 실행·actor·영수증·snapshot 검사 |
+| report → 최종 전달 | 프로그램이 완료 가능 여부·검토 수행 상태·누락을 계산, 현재 AI가 결과 전달; 앱 발화 강제 없음 |
+
+Python 예제(가상 값은 실제 확인한 참조로 바꾼다):
+
+```python
+from development_workflow import Controller, policy_snapshot
+from development_entry import Entry
+c = Controller('/path/to/product', 'request_example', 'native_coordinator_example',
+               '/private/development/controller.json', 'example-provider/coordinator_session_example')
+e = Entry(c, '/private/development/entry.json')
+p = policy_snapshot(c.project)  # 파일 확인만으로 사용자 수용을 추정하지 않는다.
+# 다음 객체는 사용자가 실제로 이 프로젝트/정책/한도를 수용한 뒤에만 작성한다.
+accepted = {'ref': 'explicit-user-choice-reference', 'project': str(c.project),
+            'sha256': p['sha256'], 'limits': p['value']}
+args = dict(kind='development',
+            choice={'mode': 'workflow', 'reason': 'independent implementation/review required',
+                    'instruction_ref': 'bounded-user-instruction-reference'},
+            native={'status': 'unknown', 'source_ref': None, 'observer': None},
+            acceptance={'AC1': 'original completion criterion'}, files=['src/app.py'],
+            review_required=True, policy_acceptance=accepted)
+v = e.enter(**args)  # native_check_required; no controller launch
+# 현재 AI가 공식 도구에서 해당 기능·대상 접근을 확인한 후:
+args['native'] = {'status': 'available', 'source_ref': 'official-tool-observation-reference',
+                  'observer': c.binding['coordinator']}
+v = e.enter(**args)  # 실제 begin 또는 기존 next; launch_permission=none
+# 기존 reserve/guard/attach/complete 계약을 아래 절대로 생략하지 않는다.
+r = e.report(self_tests='unverified', skills=['actually-applied-skill'], perspectives=[])
+assert r['workflow_complete'] is False  # 아직 독립 검토 전
+```
+
+수용 전에는 `policy_acceptance=None`을 전달해 opt_in_required를 받고 프로젝트 범위·한도를 선택한다. 파일을 자동 생성하지 않는다. native.status는 unknown/available/unavailable이며 available/unavailable은 실제 공식 관측의 source_ref와 현재 coordinator observer가 필수다. 앱 설치를 확인한 것만으로 available이라고 쓰지 않는다. 현재 AI가 확인한 근거의 기록이지 암호학적 인증이나 보안 승인 대체물이 아니다. 정책 수용 객체는 정확히 ref/project/sha256/limits이며 limits는 정책 객체 전체(version/enabled/max_dispatches/max_fix_rounds)다. active concurrency는 1이다.
+
+CLI는 API args를 비공개 `/private/development/entry-input.json`에 저장한 뒤 호출한다:
+
+```sh
+python3 scripts/development_workflow.py entry --project /path/to/product \
+  --request-id request_example --coordinator native_coordinator_example \
+  --coordinator-actor example-provider/coordinator_session_example \
+  --state /private/development/controller.json --entry-state /private/development/entry.json \
+  --input /private/development/entry-input.json
+python3 scripts/development_workflow.py report --project /path/to/product \
+  --request-id request_example --coordinator native_coordinator_example \
+  --coordinator-actor example-provider/coordinator_session_example \
+  --state /private/development/controller.json --entry-state /private/development/entry.json
+```
+
+`development_entry.py`도 같은 CLI를 제공한다. entry 입력은 위 args 전체다(기본 review_required=true, policy_acceptance=null). report 입력은 선택적으로 `{self_tests, skills, perspectives}`이며 실행 참조를 입력받지 않는다. solo self_tests는 pass/fail/unverified/not_performed, skills/perspectives는 각 최대 32개·512자 라벨이다. 참조·이유는 512자로 제한하며 전체 원문 대화를 넣지 않는다. 보고는 같은 private 경로의 `entry.report.json`에 0600으로 원자 저장한다. entry와 controller 및 파생 report 경로는 달라야 한다. CLI 성공은 작업 완료가 아니라 호출 성공이며 workflow_complete를 별도로 확인한다.
+
+Entry journal version 1은 v2 controller와 별도다. 정확한 최상위 필드는 version/binding/controller/request/choice/policy_acceptance/native/policy_observation/observation/created/updated/integrity다. request는 kind/acceptance/files/review_required, choice는 mode/reason/instruction_ref다. mode=direct는 명시 직접 처리 지시이며 정책을 읽거나 위임 수용을 기록하지 않는다. 원래 review_required=true이면 충돌을 보고한다. policy_observation은 null 또는 sha256/value, observation은 before_controller/late_observation이다. 요청·선택·controller 경로·binding은 고정한다. 같은 요청의 `policy_acceptance=None`은 저장된 수용을 재사용하므로 재질문하지 않는다. pending에서 최초 수용·native 확인을 추가할 수 있지만 기존 수용이나 범위·정책 hash·한도 변경은 거부한다. 복구는 원래 요청/operation을 보존·조정하고 변경 범위에 대한 명시 선택을 새 request/별도 상태로 기록한다. 새 요청은 이전 active 실행·상한을 초기화하는 수단이 아니다.
+
+프로젝트 밖 owner 전용 경로에 기존 lifecycle private/locked/atomic IO를 사용한다. 무결성 hash는 손상 검사이며 서명이 아니다. Entry는 수용한 sha256/limits의 복사본을 `begin(expected_policy={sha256, limits})`에 전달한다. 기존 begin의 admission 잠금 안에서 실제 정책 재읽기와 이 수용값을 대조하고 일치하기 전에는 새 controller 상태나 ready/예약 권한을 만들지 않는다. 정책 내용 또는 한도 변경은 accepted_policy_changed_before_admission으로 거부하며 파일 변경을 새 동의로 추정하지 않는다. expected_policy는 저수준 호환 API에서 선택 인자이고, 기존 상태 재사용 때에는 고정된 policy/source와 대조한다. Entry가 먼저 choice를 내구 저장하고 begin을 호출하므로 crash 재시작은 기존 controller next/같은 stage로 복구하며 재배정하지 않는다. 기존 v2 파일은 migration·역사 수정하지 않는다. 저수준 decision/begin은 호환 API로 유지되며 자체적으로 사용자 수용 journal을 요구하지 않는다. 따라서 **복합 개발의 권장 진입은 entry이며 저수준 API 우회는 report에서 missing/late로 발견**된다. native_available은 True/False/None이고 None은 native_check_required다. 기존 next()의 기본 True는 호환용이며 entry는 항상 실제 tri-state를 명시한다.
+
+저장된 intent/native/receipt의 비지원 client는 무결성 hash가 다시 계산됐어도 거부한다. 실제로 집계하는 실행은 모두 지원되는 Orca guard 대조를 통과해야 한다. 비지원 reserve의 unavailable/무변경 응답은 실행 기록이 아니다. 보고는 controller binding·원래 AC·파일·정책과 실제 guard 참조, terminal receipt, 물리 provider/session 독립성, 현재 snapshot을 확인한다. 자체 테스트와 독립 검토를 분리하며 스킬/관점은 별도 actor가 아니다. 필수 검토 없음·미통과·동일 actor·stale snapshot·직접 처리 충돌·missing/late entry는 workflow_complete=false다. 다른 request/project/coordinator/actor의 completed 상태는 수용하지 않는다. entry 없는 report는 read-only 감사로 controller를 바꾸거나 entry를 만들지 않으며 별도 감사 보고만 저장한다. 사후 entry도 late_observation으로 남아 역사적 사전 실행을 주장할 수 없다. independent_review는 실제 reviewer native/result에 따라 not_performed(실제 검토자 없음, 예약·ready만으로 수행 아님), pending(연결된 검토자 결과 대기), changes_requested(수정 요청), failed(실패·비성공 종료), unverified(영수증·독립성 등 통과 근거 미확인), pass(유효한 독립 통과), stale_snapshot(통과 후 파일 변경)으로 구분한다. 자체 테스트·스킬만 있는 보고는 not_performed다. workflow_complete는 유효한 pass와 누락 없는 사전 entry를 모두 요구한다. 실제 Stop/정확한 exit·사용량 마감은 기존 공식 도구와 조율자의 별도 책임이다.
+
 ## 프로젝트별 명시 선택
 
 대상 프로젝트 루트의 `.ai-development-policy.json`만 읽는다. `workflow.json`, `.ai-workflow.json`, provider/model/effort 설정과 별개다. 다음은 필수 필드 전체이며 추가 필드·중복 JSON 키·비유한 숫자를 거부한다.
@@ -10,7 +76,7 @@
 {"version": 1, "enabled": true, "max_dispatches": 4, "max_fix_rounds": 1}
 ```
 
-version은 정수 1, enabled는 boolean, max_dispatches는 정수 2..8, max_fix_rounds는 정수 0..3이다. boolean을 정수 대신 사용할 수 없다. active concurrency는 요청당 1로 고정하며 변경 필드가 없다. 정책 파일은 **사용자가 명시적으로 선택한 프로젝트 범위의 동의를 기록**한다. 파일의 존재나 enabled 자체는 보안 권한, native 접근 가능성, 전역 위임 승인, 자동 공개 승인이 아니다. 조율자는 최초 연결 때 필요한 선택과 실제 권한을 확인하고 기록하며 요청마다 같은 선택을 재확인하지 않는다. 기존 요청의 정책·AC·파일 목록은 begin에서 고정한다. 새 admission은 no-follow descriptor로 읽은 enabled 정책 snapshot의 원문 SHA256·version·inode/mtime/ctime/size를 확보하고 상태 잠금 안에서 실제 파일을 다시 열어 대조한다. true→false나 삭제는 opt_in_required, 내용/상한/파일 정체성 변경과 symlink 교체는 오류로 거부하며 상태를 생성하지 않는다. 이미 시작한 요청은 저장된 승인 snapshot과 상한을 유지하며 begin 재호출도 새 정책을 채택하지 않는다. 정책 파일 편집은 실행 중 worker를 중단하는 명령이 아니므로 취소는 cancel과 공식 native stop으로 처리한다.
+version은 정수 1, enabled는 boolean, max_dispatches는 정수 2..8, max_fix_rounds는 정수 0..3이다. boolean을 정수 대신 사용할 수 없다. active concurrency는 요청당 1로 고정하며 변경 필드가 없다. 정책 파일은 실행 상한 설정이며, 명시 수용은 아래 entry journal의 별도 기록으로 연결한다. 파일의 존재나 enabled 자체는 보안 권한, native 접근 가능성, 전역 위임 승인, 자동 공개 승인이 아니다. 조율자는 최초 연결 때 필요한 선택과 실제 권한을 확인하고 기록하며 요청마다 같은 선택을 재확인하지 않는다. 기존 요청의 정책·AC·파일 목록은 begin에서 고정한다. 새 admission은 no-follow descriptor로 읽은 enabled 정책 snapshot의 원문 SHA256·version·inode/mtime/ctime/size를 확보하고 상태 잠금 안에서 실제 파일을 다시 열어 대조한다. true→false나 삭제는 opt_in_required, 내용/상한/파일 정체성 변경과 symlink 교체는 오류로 거부하며 상태를 생성하지 않는다. 이미 시작한 요청은 저장된 승인 snapshot과 상한을 유지하며 begin 재호출도 새 정책을 채택하지 않는다. 정책 파일 편집은 실행 중 worker를 중단하는 명령이 아니므로 취소는 cancel과 공식 native stop으로 처리한다.
 
 현재 AI는 `conversation`, `small_change`, `development` 중 의미를 직접 공급한다. 키워드 분류기나 분류 모델을 호출하지 않는다. `direct=true`는 직접 처리/위임 금지 사용자 선택을 뜻하며 가장 우선한다. conversation, small_change, direct 경로는 정책·역할 본문을 읽거나 상태 디렉터리를 생성하지 않고 direct를 반환한다. development에 정책이 없거나 enabled=false이면 opt_in_required, native 도구가 없으면 unavailable이다. 이 둘 모두 상태를 만들지 않는다.
 
@@ -45,7 +111,7 @@ python3 scripts/development_workflow.py begin --project /path/to/product \
   --state /private/development/request_example.json --input /private/begin.json
 ```
 
-begin 이후 명령도 같은 project/request-id/coordinator/coordinator-actor/state를 지정한다. `--input`은 API 키워드 인자 객체다. decision 입력은 정확히 `{kind, direct, native_available}`, begin은 `{kind, direct, native_available, acceptance, files}`, reserve는 `{stage_id, intent}`, attach는 `{stage_id, execution}`, next는 `{}` 또는 `{native_available: false}`, cancel은 `{}`다. complete의 입력은 키워드 wrapper 없이 receipt 객체 자체다. import와 `--help`는 실행 부작용이 없다.
+begin 이후 명령도 같은 project/request-id/coordinator/coordinator-actor/state를 지정한다. `--input`은 API 키워드 인자 객체다. decision 입력은 정확히 `{kind, direct, native_available}`, begin은 `{kind, direct, native_available, acceptance, files}`와 선택적 `expected_policy: {sha256, limits}`, reserve는 `{stage_id, intent}`, attach는 `{stage_id, execution}`, next는 `{}` 또는 `{native_available: false}`, cancel은 `{}`다. complete의 입력은 키워드 wrapper 없이 receipt 객체 자체다. import와 `--help`는 실행 부작용이 없다.
 
 ## 실행 전 intent와 불확실한 결과의 복구
 
@@ -127,7 +193,9 @@ next/status 출력은 phase/role/stage_id/attempt, launch_intent/launch_permissi
 
 `python3 -m unittest discover -s tests -p test_development_workflow.py -v`
 
-34개 집중 테스트에서 합성 normalized 영수증으로 직접 경로/미동의/도구 부재, 정상 독립 검토, 수정 재검토와 상한, 동일 물리 세션, 잘못된/오래된 콜백과 replay, 파일 변경, 취소 종료 대기, private/symlink/상한, lock과 CLI import를 확인한다. 기존 guard 실행 함수를 mock한 unknown-receipt → 재시작 → 동일 operation replay의 실제 호출 수 1, 예약 재호출 허가 재발급 금지, 잘못된 attach/예약 충돌, 실제 두 정책 snapshot 읽기 사이 비활성화·상한 변경·동일 내용 파일 교체·symlink 교체, 재시작한 수정/완료 맥락, v1 상태의 무변경 거부도 확인한다. 실제 native worker launch/exit 통합 검증이나 영수증 진위 검증을 수행한 결과는 아니다.
+37개 컨트롤러 집중 테스트에서 합성 normalized 영수증으로 직접 경로/미동의/도구 부재, 정상 독립 검토, 수정 재검토와 상한, 동일 물리 세션, 잘못된/오래된 콜백과 replay, 파일 변경, 취소 종료 대기, private/symlink/상한, lock과 CLI import를 확인한다. 기존 guard 실행 함수를 mock한 unknown-receipt → 재시작 → 동일 operation replay의 실제 호출 수 1, 예약 재호출 허가 재발급 금지, 잘못된 attach/예약 충돌, 실제 두 정책 snapshot 읽기 사이 비활성화·상한 변경·동일 내용 파일 교체·symlink 교체, 재시작한 수정/완료 맥락, v1 상태의 무변경 거부도 확인한다. 실제 native worker launch/exit 통합 검증이나 영수증 진위 검증을 수행한 결과는 아니다.
+
+신규 진입 검사는 `python3 -m unittest discover -s tests -p test_development_entry.py -v`로 실행한다. 진입 24개와 상속한 컨트롤러 37개, 총 61개가 정책 수용/unknown/직접 지시/선택 고정/누락 감사/실제 controller 호출/현재 snapshot/보고 게이트/private IO를 검사한다. guard 회귀는 `python3 -m unittest discover -s tests -p test_dispatch_guard.py -v`다. 합성 단위 검사와 실제 입력·native 통합 검증은 별도로 보고한다.
 
 ## 실제 Orca 검증 범위
 

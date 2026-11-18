@@ -44,7 +44,7 @@ def policy(value):
 def direct_request(kind, direct, native_available):
     if kind not in ('conversation', 'small_change', 'development'):
         raise ValueError('semantic_kind_required')
-    if type(direct) is not bool or type(native_available) is not bool:
+    if type(direct) is not bool or (native_available is not None and type(native_available) is not bool):
         raise ValueError('boolean_required')
     return direct or kind != 'development'
 
@@ -78,13 +78,14 @@ def policy_snapshot(project):
         os.close(directory)
 
 
-def decision(project, kind, direct=False, native_available=False):
+def decision(project, kind, direct=False, native_available=None):
     if direct_request(kind, direct, native_available):
         return {'decision': 'direct'}
     candidate = policy_snapshot(project)
     if candidate is None or not candidate['value']['enabled']:
         return {'decision': 'opt_in_required'}
-    return {'decision': 'workflow' if native_available else 'unavailable',
+    return {'decision': ('native_check_required' if native_available is None else
+                         'workflow' if native_available else 'unavailable'),
             'native_action': 'confirm official tools and reserve pre-launch intent; preserve native defaults'}
 
 
@@ -219,8 +220,12 @@ class Controller:
             ids.add(stage['id'])
             if stage['intent'] is not None:
                 validate_intent(stage['intent'])
+                if stage['intent']['client'] != 'orca':
+                    raise ValueError('unsupported_stored_execution_client')
             if stage['native'] is not None:
                 native(stage['native'])
+                if stage['native']['client'] != 'orca':
+                    raise ValueError('unsupported_stored_execution_client')
                 if stage['intent'] != intent_for(stage['native']):
                     raise ValueError('execution_intent_mismatch')
             if stage['snapshot'] is not None and not re.fullmatch('[a-f0-9]{64}', stage['snapshot']):
@@ -230,6 +235,8 @@ class Controller:
         for key, receipt in s['receipts'].items():
             exact(receipt, 'id binding stage_id native observer source_tool terminal result')
             native(receipt['native'])
+            if receipt['native']['client'] != 'orca':
+                raise ValueError('unsupported_stored_execution_client')
             if receipt['id'] != key or receipt['binding'] != self.binding or receipt['stage_id'] not in ids:
                 raise ValueError('invalid_receipt_schema')
         return s
@@ -252,7 +259,7 @@ class Controller:
                                 intent=None, native=None, snapshot=reviewed, result=None))
         s['phase'] = 'ready'
 
-    def begin(self, *, kind, direct, native_available, acceptance, files):
+    def begin(self, *, kind, direct, native_available, acceptance, files, expected_policy=None):
         if direct_request(kind, direct, native_available):
             return {'decision': 'direct'}
         if (not isinstance(acceptance, dict) or not 1 <= len(acceptance) <= 64):
@@ -260,12 +267,20 @@ class Controller:
         for k, v in acceptance.items():
             text(k); text(v)
         files = paths(self.project, files)
+        if expected_policy is not None:
+            expected_policy = copy.deepcopy(exact(expected_policy, 'sha256 limits'))
+            policy(expected_policy['limits'])
+            if (not isinstance(expected_policy['sha256'], str) or
+                    not re.fullmatch('[a-f0-9]{64}', expected_policy['sha256'])):
+                raise ValueError('invalid_expected_policy')
         # Existing request resumes its frozen admitted policy, including after revocation.
         # This does not grant a new launch; pending operations still need reconciliation.
         candidate = None if self.path.exists() else policy_snapshot(self.project)
         if not self.path.exists():
             if candidate is None or not candidate['value']['enabled']:
                 return {'decision': 'opt_in_required'}
+            if native_available is None:
+                return {'decision': 'native_check_required'}
             if not native_available:
                 return {'decision': 'unavailable'}
         with locked(self.path.with_suffix('.lock'), self.project):
@@ -273,12 +288,18 @@ class Controller:
                 s = self._read()
                 if (s['acceptance'], s['files']) != (acceptance, files):
                     raise ValueError('begin_conflict')
+                if expected_policy is not None and (s['policy'] != expected_policy['limits'] or
+                        s['policy_source']['sha256'] != expected_policy['sha256']):
+                    raise ValueError('accepted_policy_changed_before_admission')
             else:
                 # Re-open the actual project policy under admission lock: content,
                 # version, inode and symlink safety must still match the admitted snapshot.
                 actual = policy_snapshot(self.project)
                 if actual is None or not actual['value']['enabled']:
                     return {'decision': 'opt_in_required'}
+                if expected_policy is not None and (actual['value'] != expected_policy['limits'] or
+                        actual['sha256'] != expected_policy['sha256']):
+                    raise ValueError('accepted_policy_changed_before_admission')
                 if candidate != actual:
                     raise ValueError('policy_changed_during_admission')
                 s = dict(version=VERSION, binding=self.binding, policy=actual['value'],
@@ -323,7 +344,7 @@ class Controller:
 
     def _guard(self, n, role):
         if n['client'] != 'orca':
-            return
+            raise ValueError('unsupported_actual_execution_client')
         from dispatch_guard import Ledger
         ledger = Ledger(n['guard_directory'], self.project, self.binding['coordinator'])
         with ledger.lock():
@@ -449,14 +470,14 @@ class Controller:
             return self._view(s)
 
     def next(self, native_available=True):
-        if type(native_available) is not bool:
+        if native_available is not None and type(native_available) is not bool:
             raise ValueError('boolean_required')
         with locked(self.path.with_suffix('.lock'), self.project):
             view = self._view(self._read())
-            if not native_available and view['phase'] in ('ready', 'running', 'cancel_pending'):
+            if native_available is not True and view['phase'] in ('ready', 'running', 'cancel_pending'):
                 view['pending_phase'] = view['phase']
-                view['phase'] = 'unavailable'
-                view['native_action'] = 'pending: official native tools unavailable; obtain access, preserve exact handle'
+                view['phase'] = 'native_check_required' if native_available is None else 'unavailable'
+                view['native_action'] = 'pending: check official native tools; preserve exact handle'
             return view
 
     def _view(self, s):
@@ -495,12 +516,13 @@ def actor_from_coordinator(coordinator):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['decision', 'begin', 'next', 'reserve', 'attach', 'complete', 'cancel'])
+    parser.add_argument('command', choices=['entry', 'report', 'decision', 'begin', 'next', 'reserve', 'attach', 'complete', 'cancel'])
     parser.add_argument('--project', required=True)
     parser.add_argument('--request-id')
     parser.add_argument('--coordinator')
     parser.add_argument('--coordinator-actor', help='canonical provider/session identity')
     parser.add_argument('--state')
+    parser.add_argument('--entry-state', help='private development entry journal')
     parser.add_argument('--input', help='JSON object with API keyword arguments (receipt itself for complete)')
     args = parser.parse_args(argv)
     try:
@@ -511,7 +533,11 @@ def main(argv=None):
         else:
             actor_from_coordinator(args.coordinator_actor or '')
             controller = Controller(args.project, args.request_id, args.coordinator, args.state, args.coordinator_actor)
-            if args.command == 'complete':
+            if args.command in ('entry', 'report'):
+                from development_entry import Entry
+                entry = Entry(controller, args.entry_state)
+                output = entry.enter(**payload) if args.command == 'entry' else entry.report(**payload)
+            elif args.command == 'complete':
                 output = controller.complete(payload)
             else:
                 output = getattr(controller, args.command)(**payload)
