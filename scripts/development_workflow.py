@@ -172,7 +172,7 @@ def actor(value):
     return value['provider'], value['provider_session_id']
 
 
-class Controller:
+class LegacyController:
     def __init__(self, project, request_id, coordinator, state_path, coordinator_actor):
         supplied = Path(project).absolute()
         if any(p.is_symlink() for p in (supplied, *supplied.parents)):
@@ -322,6 +322,8 @@ class Controller:
                 return self._view(s)  # Never reissue submit-once, including after restart.
             if s['phase'] != 'ready':
                 raise ValueError('cannot_reserve_cancelled_stage')
+            if hasattr(self, '_pre_reserve'):
+                self._pre_reserve(s, stage)
             if intent['client'] != 'orca':
                 view = self._view(s)
                 view.update(phase='unavailable', native_action='no supported official idempotency/reconciliation adapter for this client')
@@ -357,7 +359,7 @@ class Controller:
                     op.get('dispatch_id') != n['dispatch_id'] or op.get('task_id') != n['task_id'] or
                     plan.get('project') != str(self.project) or plan.get('model') is not None or
                     plan.get('effort') is not None or usage.get('actor_id') != n['usage_actor_id'] or
-                    usage.get('role') != ('backend' if role == 'developer' else 'verifier') or
+                    usage.get('role') != ({'developer': 'backend', 'reviewer': 'verifier', 'frontend': 'frontend', 'backend': 'backend', 'pre_design': 'designer', 'visual_review': 'designer'}[role]) or
                     not usage.get('task_title') or limits.get('max_active_workers') != 1 or
                     limits.get('max_dispatches_per_request') != self._read()['policy']['max_dispatches']):
                 raise ValueError('orca_registered_guard_usage_binding_required')
@@ -506,6 +508,13 @@ class Controller:
                     usage_status='unmeasured', usage_complete=False, active_concurrency=1)
 
 
+from development_plan import PlanMixin
+
+
+class Controller(PlanMixin, LegacyController):
+    pass
+
+
 def actor_from_coordinator(coordinator):
     # Coordinator identity is a canonical provider/session pair, not an app handle.
     parts = coordinator.split('/', 1)
@@ -516,7 +525,7 @@ def actor_from_coordinator(coordinator):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['entry', 'report', 'decision', 'begin', 'next', 'reserve', 'attach', 'complete', 'cancel'])
+    parser.add_argument('command', choices=['entry', 'report', 'decision', 'begin', 'next', 'reserve', 'attach', 'complete', 'cancel', 'select_design'])
     parser.add_argument('--project', required=True)
     parser.add_argument('--request-id')
     parser.add_argument('--coordinator')

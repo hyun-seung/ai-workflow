@@ -202,3 +202,35 @@ next/status 출력은 phase/role/stage_id/attempt, launch_intent/launch_permissi
 2026-11-18, 같은 프로젝트에서 동시 1명·누적 2배정·수정 배정 0회의 읽기 전용 실증을 마쳤다. 각 역할의 실행 전에 v2 예약을 저장하고 공식 guard로 실행했으며, 개발자의 집중 검사 34개 통과와 서로 다른 실제 provider 세션의 독립 검토를 확인했다. 검증자는 추가 replay 검사 3개를 통과했다. 두 배정의 실제 종료·Stop 수신·SQLite 수입과 settlement 재처리, 최종 컨트롤러 완료 영수증의 재처리 불변성을 확인했다.
 
 이 실증에서 제품 파일은 바꾸지 않았다. 수정·재검증 분기의 실제 실행, 앱 입력 이벤트 자동 연결, Codex·Paseo 실행 adapter와 전체 요청 사용량 수집은 검증한 범위에 포함하지 않는다. 검증 전용 정책은 보관 후 제거했으며 사용자 프로젝트의 지속 opt-in으로 확대하지 않는다. 전체 Python 회귀 816개 통과와 별도 코드 재검토 근거는 같은 제품 버전에 대해 보존했다. 실제 세션·경로·로그·DB는 공개 문서에 포함하지 않는다.
+
+## 명시 역할 계획 (선택적 v3)
+
+기본 plan 생략 API와 기존 v2 controller/Entry 기록은 backend developer → verifier 계약을 그대로 유지한다. 기존 이력에 plan을 덧붙이거나 v3로 migration하지 않는다. 아래 계약은 새 요청에서 `entry(..., plan=...)` 또는 저수준 `begin(..., plan=...)`을 명시한 경우에만 적용한다. 저수준 begin은 기존처럼 정책 명시 수용을 증명하지 않으므로 실제 사용자는 Entry로 진입한다. Entry journal version 1의 request에 선택적 plan을 보존하며, 보고서는 계획 경로에서 version 2를 사용한다. 새 컨트롤러 상태 version 3은 v2 필드에 plan/plan_hash/design_decisions를 추가한다. 모델 분류기·앱 입력 가로채기·자동 opt-in은 없다.
+
+```json
+{"version":1,"implementation":["frontend","backend"],"pre_design":"fresh","human_selection":true,"visual_review":true,"artifact":"design.txt","reuse":null,"selection_ref":"explicit-user-role-choice"}
+```
+
+implementation은 backend 또는 frontend 하나, 혹은 두 역할의 명시 순서다. mixed는 각각 실제 구현 stage를 실행하며 같은 backend 작업에 이름만 붙이지 않는다. pre_design은 none/fresh/reuse다. none이면 artifact/reuse=null, human_selection=false다. fresh는 designer의 별도 실행이고 artifact는 명시한 프로젝트 상대 경로다. reuse는 실행하지 않으며 기존 artifact의 정확한 `{path,version,sha256,selection_ref}`를 reuse에 전달한다. sha256은 파일 원문 해시다. 빈 선택 근거나 달라진 파일은 거부한다. 모든 실제 역할은 native-default를 유지하고 guard usage_role을 frontend/backend/designer/verifier로 검사한다. 역할 문서와 적용 스킬을 각 stage에 연결한다. 현재 AI의 디자이너 관점은 report perspectives이며 native stage나 재사용 승인을 대신하지 않는다.
+
+fresh designer → (필요 시 사람 선택) → 명시한 구현 순서 → (선택적 designer visual_review) → 독립 verifier가 기본 순서다. 모든 단계는 같은 request/정책의 예약·dispatch/fix 한도를 소비한다. 최소 필수 실제 단계 수가 max_dispatches를 초과하면 admission을 거부한다. 실패 수정은 전체 순서를 다시 수행하는 보수적 정책이다. design/visual/functional 실패와 unverified는 같은 max_fix_rounds를 사용하며 남은 필수 재실행 전체가 한도에 들어오지 않으면 exhausted다. 이전 pass로 현재 재검토를 대체하지 않는다. terminal 실패/취소는 failed/cancelled로 남긴다.
+
+v3 result는 기존 outcome/self_test/snapshot/acceptance/findings에 artifact/visual_evidence를 더한다. 모든 stage가 원래 AC 전체 결과와 관련 source snapshot을 제출한다. pre_design만 artifact 객체를 제출하며 나머지는 null이다. visual_evidence는 최대 32개의 strict `{kind,subject,provenance,implementation_stage_id,source_ref,snapshot,observer}` 객체 목록이다. source_ref는 비어 있지 않은 최대 4096자 참조이며 snapshot/observer는 결과 snapshot/coordinator와 일치해야 한다. `subject=implementation`은 `kind=image, provenance=implementation_capture` 또는 `kind=real_ui, provenance=real_ui_observation`만 허용하고, implementation_stage_id는 검토 직전 마지막 필수 구현 단계의 ID여야 한다. 그 단계의 자체 검사/pass와 snapshot도 검토 결과에 일치해야 한다. 혼합 구현이면 두 구현 의무가 끝난 최종 구현 단계에 연결한다. 생성 시안·설계 참고는 `subject=design_reference, provenance=generated_mockup|design_reference, implementation_stage_id=null`로 구분한다. image라는 kind만으로 구현 캡처라고 추정하지 않는다. 실제 현재 구현 관측이 하나도 없으면 design 참고가 있더라도 visual pass로 승격하지 않고 unverified로 남긴다. 로컬 테스트는 화면 품질을 증명하지 않는다. 자료를 직접 진위 인증하는 도구가 아니므로 coordinator는 실제 관측만 기록해야 한다.
+
+human_selection은 design 결과 이후, 구현 reserve 이전의 독립 gate다. `select_design(decision=...)`은 정확히 `{plan_hash,artifact,proposal_stage_id,decision:"approved",instruction_ref,observer}`를 받는다. artifact는 보고된 proposal 객체 그대로, proposal_stage_id는 fresh pre_design stage ID 또는 reuse의 경우 `reuse`, observer는 coordinator다. instruction_ref는 해당 시안/버전을 사람이 명시 선택한 원래 지시의 참조다. 파일 존재·에이전트 pass·보안 승인·일반적인 진행 지시로 만들지 않는다. 이는 조율자의 관측 주장이지 사용자 인증이나 보안 권한이 아니다. 시안 변경은 예약/연결을 막고 보고에 stale을 남긴다. 변경된 제안은 새 명시 계획 요청 또는 실패에 따른 fresh design 재실행과 새 선택이 필요하다. 기존 승인에서 해시만 바꾸지 않는다.
+
+Entry는 선택된 plan과 native tri-state를 저장한다. 같은 요청에서 plan/범위/choice를 바꾸지 못한다. 미수용은 opt_in_required, unknown은 native_check_required, 확인된 부재는 unavailable이다. 재시작은 같은 예약 operation만 reconcile하며 새 launch_permission을 발급하지 않는다. direct/위임 금지는 우선하며 required review와의 충돌은 omissions로 보고한다. 계획은 승인 범위를 자동 확장하지 않는다.
+
+보고서는 plan, 실제 guard에서 확인한 executions, reused_design, design_decisions, self_tests_by_stage, design_outcome, human_selection, visual_review, independent_review와 gates를 구분한다. required gate가 모두 현재 관측 snapshot에서 pass일 때만 workflow_complete다. source 변경은 완료 후에도 visual/functional을 stale로 만든다. pre-design source snapshot은 설계 당시의 근거이며 구현 후 동일할 수 없으므로 현재 시안 artifact/선택을 별도로 검사한다. 명시 files/artifact 밖의 변경이나 관측 직후의 외부 파일 변경은 잠그지 못한다. 새 전체 frontend native pipeline의 실제 실행은 합성 테스트와 별도로 검증해야 한다.
+
+fresh/reuse 기준 시안 artifact가 변경되면 report와 controller view 모두 design_selection을 stale로 표시하고, 그 시안에 대한 기존 visual_review pass도 stale로 표시한다. 사람 선택을 요구했다면 human_selection도 stale이며 전체 완료는 false다. source가 그대로인 독립 기능 검토는 이 변경만으로 무효화하지 않는다. 화면 검토가 없거나 미수행·대기·실패·unverified이면 그 상태를 유지하며 independence_collision의 unverified가 stale보다 우선한다. 저장된 승인·receipt·과거 pass와 상태 파일은 관측으로 수정하지 않으며 변경된 시안을 자동 승인하지 않는다.
+
+화면 근거의 subject/provenance를 생략한 초기 v3 result는 strict schema 오류로 거부한다. 기존 기록에 구현 관측을 추정해 넣거나 소급 변경하지 않는다. v2의 API·이력·결과 schema는 그대로다. 이 명시 provenance도 조율자의 관측 주장이며 OCR·이미지 진위 인증·새 캡처 엔진이나 보안 승인을 요구하지 않는다.
+
+독립성은 attach뿐 아니라 report/view의 공통 gate 판정에서도 확인한다. functional reviewer 또는 visual reviewer의 canonical provider/session이 구현자·pre_design 작성자·coordinator와 충돌하면 해당 공개 상태와 gate는 unverified이며 `independence_collision:<role>:<stage_id>` omission을 남긴다. 결과와 receipt의 identity를 일치시켜 integrity를 재계산해도 pass로 표시하지 않는다. source 변경 여부와 무관하게 충돌을 표시하며 실제 저장된 guard 실행 참조는 그대로 보고한다. 현재 source가 달라진 정상 독립 검토는 기존대로 stale이다.
+
+### v3 검증 범위
+
+최종 코드에서 집중 Python 검사 137개와 전체 919개가 통과했고, 별도 검증자가 독립적으로 선택한 합성 경계 사례 43개를 통과했다. 생성 시안만으로 화면 검토를 통과시키는 문제, 동일 작성자의 검토를 독립 통과로 표시하는 문제, 기준 시안 변경 후 화면 검토가 pass로 남는 문제를 수정하고 재검토했다. 과거 실패 기록은 보존했다.
+
+이 수정 작업의 실제 개발자·검증자는 기존 v2 경로로 실행했고, 두 배정의 Stop 수신·정확한 종료·SQLite 수입 및 재처리 불변성을 확인했다. 이는 새 v3의 프론트엔드 → 화면 검토 → 독립 기능 검토 전체 실환경 실행을 증명하지 않는다. 다음 실증에서는 새 Entry에 역할 계획을 먼저 고정하고 실제 역할별 실행과 화면 근거를 연결해야 한다. 시험 정책은 보관 후 제거했으며 지속 위임 동의로 확대하지 않는다.

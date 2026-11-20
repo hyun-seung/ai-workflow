@@ -293,3 +293,9 @@ class DevelopmentEntryTests(fixtures.DevelopmentWorkflowTests):
         p = subprocess.run(base + ['report'], capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertFalse(json.loads(p.stdout)['workflow_complete'])
+
+
+    def test_legacy_entry_request_has_no_synthetic_plan(self):
+        self.enter()
+        self.assertNotIn('plan', self.e._read()['request'])
+        self.assertNotIn('plan', self.e.report())

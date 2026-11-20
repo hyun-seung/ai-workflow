@@ -31,3 +31,9 @@
 같은 대화의 후속에 한 문장 답변을 명시하자 실제로 한 문장만 반환했고 도식·Q&A·상태 줄을 추가하지 않았다. 긴 첫 설명과 짧은 후속의 예외를 각각 확인했으며 모든 짧은 질문에서 상태 표시를 생략하라는 뜻은 아니다.
 
 이는 해당 환경의 실제 응답 관측이며 작성자의 자체 확인이다. 모든 주제·계정·앱·기존 대화의 자동 적용, 독립 평가, 개발 컨트롤러·사용량 수집 연결까지 검증한 결과는 아니다. 표시 누락을 앱이 강제로 차단하는 기능도 추가하지 않았다. 실제 대화·개인 경로·설정 백업은 공개 문서에 포함하지 않는다.
+
+역할 계획 경로의 마감은 Entry report의 plan/executions/reused_design/perspectives를 대조한다. 자체 테스트, 시안 산출, 사람 선택, 화면 검토와 독립 기능 검토를 각각 보고하며 pending/unverified/changes_requested/failed/stale/not_performed를 pass로 바꾸지 않는다. `workflow_complete`가 false이면 전체 흐름 완료를 주장하지 않는다. 접두사는 정확히 `>> ai-workflow :`이며 합성 검증 통과를 실제 frontend 파이프라인 실행으로 표현하지 않는다.
+
+생성 시안·설계 참고는 구현 화면 관측과 구별하며 화면 검토 pass의 대체 근거로 쓰지 않는다. report/view에 independence_collision omission이 있으면 해당 visual/functional 상태와 gate는 unverified이고 전체 완료는 false다. workflow_complete=false만 확인하고 같은 검토를 별도로 pass라고 주장하지 않는다.
+
+fresh/reuse 기준 시안 artifact 변경 후에는 report/view의 기존 화면 검토 pass를 stale로 전달한다. 과거 receipt의 pass는 역사적 결과이며 현재 통과 근거로 쓰지 않는다. 시안만 변경됐다면 관련 없는 기능 검토는 유지하고, 미수행·대기·실패·unverified 화면 검토는 승격하지 않는다. independence_collision의 unverified는 시안 stale보다 우선하며 관측은 기존 승인·상태·receipt를 수정하지 않는다.

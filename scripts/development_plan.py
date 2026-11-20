@@ -1,0 +1,405 @@
+"""Opt-in v3 immutable role plans. V2 is delegated unchanged, never migrated.
+
+All decisions/evidence are coordinator assertions, not authentication or permissions.
+"""
+import copy
+import re
+import uuid
+from pathlib import Path
+from lifecycle_io import digest, locked, private_file, read_json
+
+
+def api():
+    import development_workflow
+    return development_workflow
+
+
+def validate_plan(value):
+    d = api()
+    d.exact(value, 'version implementation pre_design human_selection visual_review artifact reuse selection_ref')
+    if type(value['version']) is not int or value['version'] != 1:
+        raise ValueError('invalid_plan_version')
+    if value['implementation'] not in (['backend'], ['frontend'], ['frontend', 'backend'], ['backend', 'frontend']):
+        raise ValueError('explicit_implementation_sequence_required')
+    if value['pre_design'] not in ('none', 'fresh', 'reuse'):
+        raise ValueError('invalid_design_mode')
+    for k in ('human_selection', 'visual_review'):
+        if type(value[k]) is not bool:
+            raise ValueError('boolean_required')
+    d.text(value['selection_ref'])
+    if value['pre_design'] == 'none':
+        if value['artifact'] is not None or value['reuse'] is not None or value['human_selection']:
+            raise ValueError('design_required_for_selection')
+    else:
+        d.text(value['artifact'])
+        if value['pre_design'] == 'reuse':
+            validate_artifact(value['reuse'])
+            if value['reuse']['path'] != value['artifact']:
+                raise ValueError('reuse_artifact_mismatch')
+        elif value['reuse'] is not None:
+            raise ValueError('fresh_cannot_reuse')
+    return value
+
+
+def validate_artifact(a):
+    d = api()
+    d.exact(a, 'path version sha256 selection_ref')
+    for k in ('path', 'version', 'selection_ref'):
+        d.text(a[k])
+    if not isinstance(a['sha256'], str) or not re.fullmatch('[a-f0-9]{64}', a['sha256']):
+        raise ValueError('artifact_hash_required')
+    return a
+
+
+def sequence(plan):
+    return (['pre_design'] if plan['pre_design'] == 'fresh' else []) + plan['implementation'] + (
+        ['visual_review'] if plan['visual_review'] else []) + ['reviewer']
+
+
+def is_v3(s):
+    return s['version'] == 3
+
+
+class PlanMixin:
+    def _artifact(self, artifact):
+        validate_artifact(artifact)
+        d = api()
+        # Same bounded no-follow snapshot primitive as source evidence.
+        actual = d.snapshot(self.project, [artifact['path']])
+        expected = digest([dict(path=artifact['path'], bytes=(self.project / artifact['path']).stat().st_size,
+                                sha256=artifact['sha256'])])
+        if actual != expected:
+            raise ValueError('design_artifact_changed')
+        return copy.deepcopy(artifact)
+
+    def _read(self):
+        d = api()
+        private_file(self.path, self.project)
+        s = read_json(self.path)
+        if s.get('version') != 3:
+            return super()._read()
+        d.exact(s, 'version binding policy policy_source acceptance files phase round stages receipts integrity plan plan_hash design_decisions')
+        if (type(s['version']) is not int or s['binding'] != self.binding or s['integrity'] != digest({k: v for k, v in s.items() if k != 'integrity'}) or
+                s['plan_hash'] != digest(validate_plan(s['plan']))):
+            raise ValueError('plan_binding_integrity_mismatch')
+        d.policy(s['policy'])
+        d.exact(s['policy_source'], 'path version sha256')
+        if (s['policy_source']['path'] != str(self.project / d.POLICY) or s['policy_source']['version'] != 1 or
+                not re.fullmatch('[a-f0-9]{64}', s['policy_source']['sha256']) or not s['policy']['enabled']):
+            raise ValueError('invalid_policy_admission')
+        d.paths(self.project, s['files'], check_files=False)
+        if not isinstance(s['acceptance'], dict) or not 1 <= len(s['acceptance']) <= 64:
+            raise ValueError('original_acceptance_required')
+        for k, v in s['acceptance'].items():
+            d.text(k); d.text(v)
+        seq = sequence(s['plan'])
+        if len(seq) > s['policy']['max_dispatches']: raise ValueError('underbudget_plan')
+        if (not isinstance(s['stages'], list) or not 1 <= len(s['stages']) <= s['policy']['max_dispatches'] or
+                type(s['round']) is not int or not 0 <= s['round'] <= s['policy']['max_fix_rounds'] or
+                s['phase'] not in ('ready', 'running', 'completed', 'failed', 'exhausted', 'cancel_pending', 'cancelled') or
+                not isinstance(s['receipts'], dict) or not isinstance(s['design_decisions'], list)):
+            raise ValueError('invalid_plan_state')
+        cursor, rounds, ids = 0, 0, set()
+        for i, stage in enumerate(s['stages']):
+            d.exact(stage, 'id role attempt intent native snapshot result')
+            if (cursor >= len(seq) or stage['role'] != seq[cursor] or type(stage['attempt']) is not int or stage['attempt'] != i + 1 or stage['id'] in ids or
+                    not re.fullmatch('[a-f0-9]{32}', stage['id'])):
+                raise ValueError('invalid_plan_stage_sequence')
+            ids.add(stage['id'])
+            if not isinstance(stage['snapshot'], str) or not re.fullmatch('[a-f0-9]{64}', stage['snapshot']): raise ValueError('invalid_snapshot')
+            if stage['intent'] is not None:
+                d.validate_intent(stage['intent'])
+                if stage['intent']['client'] != 'orca': raise ValueError('unsupported_client')
+            if stage['native'] is not None:
+                d.native(stage['native'])
+                if stage['intent'] != d.intent_for(stage['native']): raise ValueError('intent_mismatch')
+            r = stage['result']
+            if r is not None:
+                self._result(s, stage, r)
+                if r['snapshot'] != stage['snapshot']: raise ValueError('result_snapshot_mismatch')
+                matches = [v for v in s['receipts'].values() if v['stage_id'] == stage['id'] and v['result'] == r and v['native'] == stage['native']]
+                if len(matches) != 1 or stage['native'] is None: raise ValueError('result_receipt_required')
+                if not self._passed(s, stage, r) or matches[0]['terminal'] != 'succeeded':
+                    cursor = 0
+                    if i < len(s['stages']) - 1: rounds += 1
+                else:
+                    cursor += 1
+                    if cursor == len(seq) and i < len(s['stages']) - 1: raise ValueError('stages_after_pass')
+            elif i != len(s['stages']) - 1:
+                raise ValueError('unfinished_historical_stage')
+        if rounds != s['round']: raise ValueError('fix_round_mismatch')
+        if len(s['receipts']) != sum(x['result'] is not None for x in s['stages']): raise ValueError('orphan_receipts')
+        for key, r in s['receipts'].items():
+            d.exact(r, 'id binding stage_id native observer source_tool terminal result')
+            if (key != r['id'] or r['binding'] != self.binding or r['stage_id'] not in ids or
+                    r['observer'] != self.binding['coordinator'] or r['terminal'] not in ('succeeded', 'failed', 'cancelled', 'stopped')):
+                raise ValueError('invalid_receipt')
+            d.text(r['source_tool']); d.native(r['native'])
+        for decision in s['design_decisions']:
+            self._decision(s, decision)
+        if s['phase'] == 'completed' and (cursor != len(seq) or (s['plan']['human_selection'] and not s['design_decisions'])):
+            raise ValueError('required_gates_bypassed')
+        return s
+
+    def begin(self, *, plan=None, **kwargs):
+        d = api()
+        if d.direct_request(kwargs['kind'], kwargs['direct'], kwargs['native_available']):
+            return {'decision': 'direct'}
+        if plan is None:
+            if self.path.exists() and read_json(self.path).get('version') == 3:
+                raise ValueError('accepted_plan_required_on_resume')
+            return super().begin(**kwargs)
+        plan = copy.deepcopy(validate_plan(plan))
+        files = d.paths(self.project, kwargs['files'])
+        acceptance = copy.deepcopy(kwargs['acceptance'])
+        if not isinstance(acceptance, dict) or not 1 <= len(acceptance) <= 64: raise ValueError('original_acceptance_required')
+        for k, v in acceptance.items(): d.text(k); d.text(v)
+        candidate = d.policy_snapshot(self.project)
+        if candidate is None or not candidate['value']['enabled']: return {'decision': 'opt_in_required'}
+        if kwargs['native_available'] is not True:
+            return {'decision': 'native_check_required' if kwargs['native_available'] is None else 'unavailable'}
+        if plan['pre_design'] != 'none': d.paths(self.project, [plan['artifact']])
+        if plan['pre_design'] == 'reuse': self._artifact(plan['reuse'])
+        with locked(self.path.with_suffix('.lock'), self.project):
+            actual = d.policy_snapshot(self.project)
+            expected = kwargs.get('expected_policy')
+            if candidate != actual: raise ValueError('policy_changed_during_admission')
+            if expected is not None and expected != dict(sha256=actual['sha256'], limits=actual['value']):
+                raise ValueError('accepted_policy_changed_before_admission')
+            if self.path.exists():
+                s = self._read()
+                if not is_v3(s) or (s['plan'], s['files'], s['acceptance']) != (plan, files, acceptance):
+                    raise ValueError('begin_plan_conflict_no_migration')
+            else:
+                if len(sequence(plan)) > actual['value']['max_dispatches']:
+                    raise ValueError('required_plan_exceeds_total_dispatch_cap')
+                if plan['pre_design'] == 'reuse': self._artifact(plan['reuse'])
+                s = dict(version=3, binding=self.binding, policy=actual['value'],
+                         policy_source=dict(path=str(self.project / d.POLICY), version=1, sha256=actual['sha256']),
+                         acceptance=acceptance, files=files, phase='ready', round=0, stages=[], receipts={},
+                         integrity=None, plan=plan, plan_hash=digest(plan), design_decisions=[])
+                self._stage(s, sequence(plan)[0]); self._save(s)
+            return self._view(s)
+
+    def _stage(self, s, role):
+        if not is_v3(s): return super()._stage(s, role)
+        if len(s['stages']) >= s['policy']['max_dispatches']:
+            s['phase'] = 'exhausted'; return
+        snap = api().snapshot(self.project, s['files'])
+        s['stages'].append(dict(id=uuid.uuid4().hex, role=role, attempt=len(s['stages'])+1,
+                                intent=None, native=None, snapshot=snap, result=None))
+        s['phase'] = 'ready'
+
+    def _proposal(self, s):
+        if s['plan']['pre_design'] == 'reuse': return s['plan']['reuse']
+        rows = [x for x in s['stages'] if x['role'] == 'pre_design' and x['result'] and self._passed(s, x, x['result'])]
+        return rows[-1]['result']['artifact'] if rows else None
+
+    def _decision(self, s, value):
+        d = api()
+        d.exact(value, 'plan_hash artifact proposal_stage_id decision instruction_ref observer')
+        validate_artifact(value['artifact'])
+        d.text(value['instruction_ref'])
+        if (value['plan_hash'] != s['plan_hash'] or value['decision'] != 'approved' or
+                value['observer'] != self.binding['coordinator']): raise ValueError('explicit_exact_human_decision_required')
+        if s['plan']['pre_design'] == 'reuse':
+            if value['proposal_stage_id'] != 'reuse' or value['artifact'] != s['plan']['reuse']: raise ValueError('proposal_mismatch')
+        else:
+            stages = [x for x in s['stages'] if x['id'] == value['proposal_stage_id'] and x['role'] == 'pre_design' and x['result']]
+            if len(stages) != 1 or stages[0]['result']['artifact'] != value['artifact']: raise ValueError('proposal_mismatch')
+
+    def select_design(self, decision):
+        with locked(self.path.with_suffix('.lock'), self.project):
+            s = self._read()
+            if not is_v3(s) or not s['plan']['human_selection']: raise ValueError('no_human_gate')
+            self._decision(s, decision)
+            proposal = self._proposal(s)
+            if proposal is None or proposal != decision['artifact']: raise ValueError('current_proposal_required')
+            self._artifact(proposal)
+            stage = s['stages'][-1]
+            if stage['role'] not in s['plan']['implementation'] or stage['intent'] is not None:
+                raise ValueError('decision_before_implementation_reservation_required')
+            if decision not in s['design_decisions']:
+                s['design_decisions'].append(copy.deepcopy(decision))
+                self._artifact(proposal)
+                self._save(s)
+            return self._view(s)
+
+    def _design_ready(self, s):
+        if s['plan']['pre_design'] == 'none': return True
+        proposal = self._proposal(s)
+        if proposal is None: return False
+        try: self._artifact(proposal)
+        except (ValueError, OSError): return False
+        if not s['plan']['human_selection']: return True
+        stage_id = ('reuse' if s['plan']['pre_design'] == 'reuse' else
+                    [x['id'] for x in s['stages'] if x['role'] == 'pre_design'][-1])
+        return any(x['artifact'] == proposal and x['proposal_stage_id'] == stage_id for x in s['design_decisions'])
+
+    def _pre_reserve(self, s, stage):
+        if not is_v3(s): return
+        if stage['role'] != 'pre_design' and not self._design_ready(s):
+            raise ValueError('design_selection_pending_or_stale')
+        if stage['role'] in ('visual_review', 'reviewer') and api().snapshot(self.project, s['files']) != stage['snapshot']:
+            raise ValueError('code_changed_before_review')
+
+    def attach(self, stage_id, execution):
+        s = self._read()
+        if not is_v3(s): return super().attach(stage_id, execution)
+        d = api(); execution = copy.deepcopy(d.native(execution))
+        with locked(self.path.with_suffix('.lock'), self.project):
+            s = self._read(); stage = s['stages'][-1]
+            if stage['id'] != stage_id or s['phase'] not in ('ready', 'running', 'cancel_pending'): raise ValueError('stale_stage')
+            if stage['intent'] != d.intent_for(execution): raise ValueError('matching_prelaunch_intent_required')
+            if stage['native'] is not None:
+                if stage['native'] != execution: raise ValueError('worker_binding_conflict')
+                return self._view(s)
+            if self._review_collision(s, stage['role'], execution):
+                raise ValueError('independent_provider_session_required')
+            self._guard(execution, stage['role'])
+            if stage['role'] != 'pre_design' and not self._design_ready(s): raise ValueError('design_selection_pending_or_stale')
+            if stage['role'] in ('visual_review', 'reviewer') and d.snapshot(self.project, s['files']) != stage['snapshot']: raise ValueError('code_changed_before_review')
+            stage['native'] = execution
+            if s['phase'] != 'cancel_pending': s['phase'] = 'running'
+            self._save(s); return self._view(s)
+
+    def _result(self, s, stage, r):
+        d = api()
+        d.exact(r, 'outcome self_test snapshot acceptance findings artifact visual_evidence')
+        if r['outcome'] not in ('pass', 'changes_requested', 'fail', 'unverified') or r['self_test'] not in ('pass', 'fail', 'not_applicable', 'unverified'):
+            raise ValueError('invalid_result')
+        if not isinstance(r['snapshot'], str) or not re.fullmatch('[a-f0-9]{64}', r['snapshot']): raise ValueError('snapshot_required')
+        if not isinstance(r['acceptance'], dict) or set(r['acceptance']) != set(s['acceptance']) or any(v not in ('pass', 'fail', 'unverified') for v in r['acceptance'].values()): raise ValueError('original_ac_results_required')
+        if not isinstance(r['findings'], list) or len(r['findings']) > 128: raise ValueError('findings_required')
+        for f in r['findings']:
+            d.exact(f, 'ac_id required resolved detail')
+            if f['ac_id'] not in s['acceptance'] or type(f['required']) is not bool or type(f['resolved']) is not bool: raise ValueError('invalid_finding')
+            d.text(f['detail'])
+        if stage['role'] == 'pre_design':
+            validate_artifact(r['artifact'])
+            if r['artifact']['path'] != s['plan']['artifact']: raise ValueError('wrong_design_artifact')
+        elif r['artifact'] is not None: raise ValueError('unexpected_artifact')
+        if not isinstance(r['visual_evidence'], list) or len(r['visual_evidence']) > 32: raise ValueError('visual_evidence_required')
+        for e in r['visual_evidence']:
+            d.exact(e, 'kind subject provenance implementation_stage_id source_ref snapshot observer')
+            if e['kind'] not in ('image', 'real_ui') or e['snapshot'] != r['snapshot'] or e['observer'] != self.binding['coordinator']: raise ValueError('invalid_visual_evidence')
+            d.text(e['source_ref'])
+            if e['subject'] == 'implementation':
+                if ((e['kind'], e['provenance']) not in (('image', 'implementation_capture'), ('real_ui', 'real_ui_observation')) or
+                        not isinstance(e['implementation_stage_id'], str) or not re.fullmatch('[a-f0-9]{32}', e['implementation_stage_id'])):
+                    raise ValueError('invalid_implementation_evidence_provenance')
+            elif e['subject'] == 'design_reference':
+                if e['provenance'] not in ('generated_mockup', 'design_reference') or e['implementation_stage_id'] is not None:
+                    raise ValueError('invalid_design_reference_provenance')
+            else:
+                raise ValueError('explicit_visual_evidence_subject_required')
+
+    def _implementation_observed(self, s, stage, result):
+        # Evidence describes an observation AFTER the last implementation duty.
+        # Provenance is an explicit coordinator assertion, never inferred from image kind.
+        implemented = [x for x in s['stages'] if x['attempt'] < stage['attempt'] and
+                       x['role'] in ('frontend', 'backend') and x['native'] and x['result']]
+        if not implemented:
+            return False
+        last = implemented[-1]
+        if (last['role'] != s['plan']['implementation'][-1] or
+                not self._passed(s, last, last['result']) or last['snapshot'] != result['snapshot']):
+            return False
+        return any(e['subject'] == 'implementation' and
+                   (e['kind'], e['provenance']) in (('image', 'implementation_capture'), ('real_ui', 'real_ui_observation')) and
+                   e['implementation_stage_id'] == last['id'] and e['snapshot'] == result['snapshot']
+                   for e in result['visual_evidence'])
+
+    def _review_collision(self, s, role, execution):
+        if role not in ('visual_review', 'reviewer') or execution is None:
+            return False
+        d = api()
+        return (d.actor(execution) == d.actor_from_coordinator(self.binding['coordinator_actor']) or
+                any(x['native'] and d.actor(x['native']) == d.actor(execution)
+                    for x in s['stages'] if x['role'] in ('frontend', 'backend', 'pre_design')))
+
+    def _passed(self, s, stage, r):
+        return (r['outcome'] == 'pass' and all(v == 'pass' for v in r['acceptance'].values()) and
+                not any(f['required'] and not f['resolved'] for f in r['findings']) and r['self_test'] != 'fail' and
+                (stage['role'] not in ('frontend', 'backend') or r['self_test'] == 'pass') and
+                (stage['role'] != 'visual_review' or self._implementation_observed(s, stage, r)))
+
+    def complete(self, receipt):
+        s = self._read()
+        if not is_v3(s): return super().complete(receipt)
+        d = api(); receipt = copy.deepcopy(receipt)
+        d.exact(receipt, 'id binding stage_id native observer source_tool terminal result')
+        d.text(receipt['id']); d.text(receipt['source_tool']); d.native(receipt['native'])
+        if receipt['binding'] != self.binding or receipt['observer'] != self.binding['coordinator'] or receipt['terminal'] not in ('succeeded', 'failed', 'cancelled', 'stopped'): raise ValueError('receipt_binding_mismatch')
+        with locked(self.path.with_suffix('.lock'), self.project):
+            s = self._read()
+            if receipt['id'] in s['receipts']:
+                if receipt != s['receipts'][receipt['id']]: raise ValueError('conflicting_receipt_replay')
+                return self._view(s)
+            stage = s['stages'][-1]; r = receipt['result']
+            if s['phase'] not in ('running', 'cancel_pending') or receipt['stage_id'] != stage['id'] or receipt['native'] != stage['native']: raise ValueError('stale_or_wrong_worker')
+            self._guard(stage['native'], stage['role']); self._result(s, stage, r)
+            current = d.snapshot(self.project, s['files'])
+            if r['snapshot'] != current or (stage['role'] in ('reviewer', 'visual_review') and stage['snapshot'] != current): raise ValueError('review_snapshot_changed')
+            if stage['role'] == 'pre_design': self._artifact(r['artifact'])
+            stage['snapshot'] = current; stage['result'] = r; s['receipts'][receipt['id']] = receipt
+            if s['phase'] == 'cancel_pending': s['phase'] = 'cancelled'
+            elif receipt['terminal'] != 'succeeded': s['phase'] = 'failed'
+            elif not self._passed(s, stage, r):
+                if s['round'] >= s['policy']['max_fix_rounds'] or len(s['stages']) + len(sequence(s['plan'])) > s['policy']['max_dispatches']:
+                    s['phase'] = 'exhausted'
+                else:
+                    s['round'] += 1; self._stage(s, sequence(s['plan'])[0])
+            else:
+                seq = sequence(s['plan']); index = seq.index(stage['role']) + 1
+                if index == len(seq): s['phase'] = 'completed'
+                else: self._stage(s, seq[index])
+            self._save(s); return self._view(s)
+
+    def _gates(self, s):
+        current = api().snapshot(self.project, s['files'])
+        seq = sequence(s['plan']); latest = {}; omissions = []
+        for stage in s['stages']:
+            r = stage['result']; status = 'pending' if stage['intent'] else 'not_performed'
+            if r:
+                receipt = [x for x in s['receipts'].values() if x['stage_id'] == stage['id']]
+                status = ('failed' if not receipt or receipt[0]['terminal'] != 'succeeded' or r['outcome'] == 'fail' else
+                          'pass' if self._passed(s, stage, r) else 'changes_requested' if r['outcome'] == 'changes_requested' else 'unverified')
+                if stage['role'] in ('reviewer', 'visual_review') and stage['snapshot'] != current: status = 'stale'
+            if self._review_collision(s, stage['role'], stage['native']):
+                status = 'unverified'
+                omissions.append('independence_collision:' + stage['role'] + ':' + stage['id'])
+            latest[stage['role']] = status
+        design = self._design_ready(s)
+        if s['plan']['pre_design'] != 'none' and not design: latest['design_selection'] = 'pending'
+        proposal = self._proposal(s)
+        if proposal is not None:
+            try: self._artifact(proposal)
+            except (ValueError, OSError): latest['design_selection'] = 'stale'
+        if design: latest['design_selection'] = 'pass' if s['plan']['pre_design'] != 'none' else 'not_performed'
+        # A visual pass depends on the exact design baseline as well as source.
+        # Derive freshness without changing receipts, failed/pending gates, or collision precedence.
+        if latest.get('design_selection') == 'stale' and latest.get('visual_review') == 'pass':
+            latest['visual_review'] = 'stale'
+        return dict(statuses=latest, omissions=omissions, complete=design and not omissions and all(latest.get(k) == 'pass' for k in seq))
+
+    def _view(self, s):
+        if not is_v3(s): return super()._view(s)
+        # Reuse common native instructions without claiming legacy backend responsibility.
+        stage = s['stages'][-1]; role = stage['role']
+        mapped = {'frontend': 'frontend', 'backend': 'backend', 'pre_design': 'designer', 'visual_review': 'designer', 'reviewer': 'verifier'}[role]
+        view = dict(version=3, binding=s['binding'], phase=s['phase'], role=role, usage_role=mapped,
+                    stage_id=stage['id'], attempt=stage['attempt'], launch_intent=copy.deepcopy(stage['intent']), launch_permission='none',
+                    native=stage['native'], acceptance=s['acceptance'], files=s['files'], reviewed_snapshot=stage['snapshot'],
+                    profile='native-default', usage_status='unmeasured', usage_complete=False, active_concurrency=1,
+                    verification='coordinator_observed_assertion_not_cryptographic_proof', plan=copy.deepcopy(s['plan']),
+                    plan_hash=s['plan_hash'], gates=self._gates(s), proposal=copy.deepcopy(self._proposal(s)),
+                    instructions=[str(api().ROOT / 'roles' / (mapped+'-developer.md' if mapped in ('frontend', 'backend') else mapped+'.md')),
+                                  str(api().ROOT / '.agents/skills' / ('ai-role-'+mapped) / 'SKILL.md')],
+                    native_action='reserve pre-launch intent' if stage['intent'] is None else 'reconcile exact reserved operation; never relaunch')
+        view['omissions'] = view['gates']['omissions']
+        reviews = [x for x in s['stages'] if x['role'] in ('pre_design', 'visual_review', 'reviewer') and x['result']]
+        view['last_review'] = copy.deepcopy(reviews[-1]) if reviews else None
+        view['unresolved_required_findings'] = ([copy.deepcopy(f) for f in reviews[-1]['result']['findings']
+                                                if f['required'] and not f['resolved']] if reviews else [])
+        return view

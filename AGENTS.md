@@ -56,3 +56,5 @@
 
 - 설정 확인은 `python3 scripts/workflow.py check --project .`, Python 검증은 `python3 -m unittest discover -s tests -v`다. 화면 로직 변경에는 `node --test tests/test_trace_frontend.cjs`도 사용한다. 변경 영향에 맞는 검사만 선택하며, 다른 대상 프로젝트에는 그 프로젝트의 명령을 적용한다.
 - 공식 모범 사례나 모델 지침을 갱신할 때만 [정기 점검 절차](runtime/guidance-maintenance.md)를 읽는다. 문서 권고와 실제 환경 지원·강제 수단을 구분한다.
+
+새 복합 개발의 프론트/백엔드/혼합 역할과 조건부 시안·사람 선택·화면 검토는 [명시 역할 계획](runtime/development-workflow.md#명시-역할-계획-선택적-v3)을 Entry에 전달해 고정한다. 기존 v2 이력은 이동하지 않는다. 실제 별도 실행·같은 AI의 관점·승인된 시안 재사용을 구별하며, 화면 검토와 독립 기능 검토를 각각 보고한다. 직접 처리 지시는 우선하고 필수 검토와의 충돌을 숨기지 않는다.

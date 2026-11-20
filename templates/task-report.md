@@ -66,3 +66,5 @@
 | 개선 후 |  |  |  |  |
 
 완료 기준과 검증 수준을 낮추어 토큰만 줄인 경우에는 개선 성공으로 판단하지 않는다. 민감한 실행 내용의 보관·공개는 [개인정보 관리 기준](../principles/privacy.md)을 따른다.
+
+명시 역할 계획을 사용한 경우 Entry report 참조와 plan_hash, 계획 순서 대비 실제 guard executions, 재사용 artifact/버전/선택 근거, coordinator perspectives를 적는다. 자체 검사·시안 결과·사람 선택·화면 근거·독립 기능 검토 상태를 각각 적고 stale/unverified/pending 및 미실행을 보존한다. 전체 필수 gate 통과 여부(workflow_complete)와 실제 live 검증/합성 테스트 범위를 구별한다. 마지막 상태 접두사는 정확히 `>> ai-workflow :`를 사용하며 보고서가 뒷받침하는 결과만 적는다.

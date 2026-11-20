@@ -64,7 +64,7 @@ class Entry:
         finally:
             os.close(directory)
 
-    def _request(self, kind, acceptance, files, review_required):
+    def _request(self, kind, acceptance, files, review_required, plan=None):
         dw.direct_request(kind, False, None)
         if type(review_required) is not bool:
             raise ValueError('boolean_required')
@@ -72,8 +72,12 @@ class Entry:
             raise ValueError('original_acceptance_required')
         for k, v in acceptance.items():
             dw.text(k); dw.text(v)
-        return dict(kind=kind, acceptance=acceptance, files=dw.paths(self.c.project, files),
-                    review_required=review_required)
+        request = dict(kind=kind, acceptance=acceptance, files=dw.paths(self.c.project, files),
+                       review_required=review_required)
+        if plan is not None:
+            from development_plan import validate_plan
+            request['plan'] = copy.deepcopy(validate_plan(plan))
+        return request
 
     def _choice(self, choice):
         dw.exact(choice, 'mode reason instruction_ref')
@@ -92,13 +96,13 @@ class Entry:
         return candidate['value']['enabled']
 
     def enter(self, *, kind, choice, native, acceptance, files, review_required=True,
-              policy_acceptance=None):
+              policy_acceptance=None, plan=None):
         self._choice(choice)
         available = native_check(native, self.c.binding['coordinator'])
         # Small/conversation requests can stay stateless and avoid policy/role reads.
         if kind in ('conversation', 'small_change') and not self.path.exists():
             return dw.decision(self.c.project, kind, direct=choice['mode'] == 'direct', native_available=available)
-        request = self._request(kind, acceptance, files, review_required)
+        request = self._request(kind, acceptance, files, review_required, plan)
         private_file(self.c.path, self.c.project)
         candidate = None if choice['mode'] == 'direct' else dw.policy_snapshot(self.c.project)
         if choice['mode'] == 'direct':
@@ -135,6 +139,8 @@ class Entry:
             if self.c.path.exists():
                 with locked(self.c.path.with_suffix('.lock'), self.c.project):
                     s = self.c._read()
+                    if s.get('plan') != request.get('plan'):
+                        raise ValueError('entry_controller_plan_mismatch')
                     if s['acceptance'] != acceptance or s['files'] != request['files']:
                         raise ValueError('entry_controller_scope_mismatch')
                     if s['policy'] != policy_acceptance['limits'] or s['policy_source']['sha256'] != policy_acceptance['sha256']:
@@ -144,7 +150,8 @@ class Entry:
                 return d
             return self.c.begin(kind=kind, direct=False, native_available=available,
                                 acceptance=acceptance, files=request['files'],
-                                expected_policy={k: copy.deepcopy(policy_acceptance[k]) for k in ('sha256', 'limits')})
+                                expected_policy={k: copy.deepcopy(policy_acceptance[k]) for k in ('sha256', 'limits')},
+                                **({'plan': plan} if plan is not None else {}))
 
     def _report_save(self, output):
         destination = self.path.with_suffix('.report.json')
@@ -192,6 +199,10 @@ class Entry:
                           s['policy'] != j['policy_acceptance']['limits'] or
                           s['policy_source']['sha256'] != j['policy_acceptance']['sha256']):
                     raise ValueError('entry_controller_policy_mismatch')
+                if s.get('plan') != (j['request'].get('plan') if j else s.get('plan')):
+                    raise ValueError('entry_controller_plan_mismatch')
+                if s['version'] == 3:
+                    return self._report_plan(output, s, j)
                 stages = s['stages']
                 developers = set()
                 valid = True
@@ -257,6 +268,35 @@ class Entry:
                 output['workflow_complete'] = bool(j and j['choice']['mode'] == 'workflow' and
                     not output['omissions'] and output['independent_review'] == 'pass')
                 return self._report_save(output)
+
+    def _report_plan(self, output, s, j):
+        gates = self.c._gates(s)
+        output.update(version=2, plan=copy.deepcopy(s['plan']), plan_hash=s['plan_hash'],
+                      gates=gates['statuses'], design_decisions=copy.deepcopy(s['design_decisions']),
+                      reused_design=copy.deepcopy(s['plan']['reuse']), self_tests_by_stage=[],
+                      design_outcome=gates['statuses'].get('pre_design', 'not_performed'),
+                      human_selection=gates['statuses']['design_selection'] if s['plan']['human_selection'] else 'not_performed',
+                      visual_review=gates['statuses'].get('visual_review', 'not_performed'),
+                      independent_review=gates['statuses'].get('reviewer', 'not_performed'))
+        output['omissions'].extend(gates['omissions'])
+        valid = not gates['omissions']
+        for stage in s['stages']:
+            n, r = stage['native'], stage['result']
+            if n is None:
+                valid = False
+                continue
+            self.c._guard(n, stage['role'])
+            output['executions'].append(dict(role=stage['role'], stage_id=stage['id'], native=n))
+            if stage['role'] in ('frontend', 'backend'):
+                output['self_tests_by_stage'].append(dict(stage_id=stage['id'], status=r['self_test'] if r else 'pending'))
+            if r is None: valid = False
+        tests = [x['status'] for x in output['self_tests_by_stage']]
+        output['self_tests'] = 'pass' if tests and all(x == 'pass' for x in tests) else 'unverified'
+        output['execution_mode'] = 'native' if output['executions'] else 'solo'
+        output['workflow_complete'] = bool(j and j['choice']['mode'] == 'workflow' and not output['omissions'] and
+            valid and s['phase'] == 'completed' and gates['complete'])
+        if output['workflow_complete']: output['reviewed_snapshot'] = s['stages'][-1]['snapshot']
+        return self._report_save(output)
 
 
 def main(argv=None):

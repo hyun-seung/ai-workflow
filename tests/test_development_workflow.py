@@ -491,6 +491,12 @@ class DevelopmentWorkflowTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout), {'decision': 'direct'})
         self.assertFalse(self.state.parent.exists())
 
+    def test_legacy_backend_instruction_contract_survives_plan_extension(self):
+        v = self.begin()
+        self.assertEqual(v['version'], 2)
+        self.assertIn('backend-developer.md', v['instructions'][0])
+        self.assertNotIn('plan', self.c._read())
+
 
 if __name__ == '__main__':
     unittest.main()
