@@ -7,6 +7,11 @@
     "$schema": {"type": "string"},
     "version": {"const": 1},
     "auto_cleanup": {"enum": ["Y", "N"]},
+    "delegation_decision_maker": {
+      "enum": ["coordinator", "user"],
+      "default": "coordinator",
+      "description": "Who selects delegation mode and request limits; not a security permission or launch authorization"
+    },
     "limits": {
       "type": "object",
       "additionalProperties": false,

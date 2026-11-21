@@ -2,6 +2,7 @@
   "$schema": "schema/harness.schema.json",
   "version": 1,
   "auto_cleanup": "Y",
+  "delegation_decision_maker": "coordinator",
   "limits": {
     "max_active_workers": null,
     "max_dispatches_per_request": null
