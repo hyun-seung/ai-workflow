@@ -24,6 +24,20 @@ python3 scripts/completion_recovery.py --config /private/path/completion-hook.js
 | not_ready | native 배정 등록이 확정되지 않음. 수집 성공으로 계산하지 않음 |
 | needs_attention | 변경된 binding·손상된 기록·DB 누락/불일치·소유권/경로 문제 등 확인 필요 |
 
+### 재개 조건 진단
+
+상태 출력의 `recovery_plan`은 배정별로 다음에 필요한 근거를 설명한다. 기존 상태·제안·CLI 종료 코드는 유지하며 자동 재시도나 원본 조회를 추가하지 않는다.
+
+| disposition | 재개 조건 |
+| --- | --- |
+| `blocked_missing_input` | 실제 Stop 또는 공식 원본 경로와 정확한 귀속 근거가 새로 확보돼야 함. 영수증이 없다는 사실만으로 재시작·신뢰 설정·실행 실패를 원인으로 확정하지 않음 |
+| `blocked_native_binding` | 정확한 native 실행 등록 확인이 먼저 필요 |
+| `explicit_retry_available` | 검증된 단일 pending 영수증의 key만 제시. 원래 고정한 원본이 닫혀 재검증 가능한 조건에서 명시 retry를 한 번 수행 |
+| `inspection_required` | binding·저장 상태·여러 영수증의 모호함부터 확인 |
+| `verified_received_receipts` | 받은 영수증의 저장 근거 확인. 전체 사용량 완전 수집·업무 완료를 뜻하지 않음 |
+
+`new_evidence_required=true`이면 관측만 반복해서 성공으로 바꾸지 않는다. 상태가 같아도 외부 원본이 바뀌었는지는 이 읽기 전용 진단만으로 알 수 없으므로, 실제 재처리는 기존 수집기의 출처·닫힌 턴·증가분 검사를 거쳐야 한다. `retry_saved_receipt_available`은 명령을 사용할 수 있다는 뜻이며 성공 보장이나 실행 허가가 아니다. 별도 명시 원본 수입은 missing Stop을 받은 것으로 바꾸지 않는다. 원인이 미확정이면 `root_cause=undetermined`를 유지하며 자동 재배정·가짜 Stop·원본 폴더 탐색을 하지 않는다.
+
 `expected_operations`는 opt-in 배정 수이고 `received_receipts`는 실제 받은 Stop 수다. 한 배정에 여러 영수증이 있으면 모두 확인하며 하나라도 미완료이면 숨기지 않는다. 등록되지 않은 이벤트, 모호한 연결, 형식이 잘못된 영수증은 별도 오류로 남긴다. 요청 필터는 알려진 다른 요청의 영수증을 제외하지만 출처를 확인할 수 없는 영수증을 임의로 무시하지 않는다.
 
 **collected는 받은 영수증의 확인이며 그 배정의 모든 턴이 수집됐다는 보증이 아니다.** Stop 자체가 전달되지 않은 추가 턴은 이 목록만으로 발견할 수 없다. `full_usage_complete`는 항상 false다. 조율자·다른 공급자·원격·자동 승인 검토의 토큰을 추가 추정하지 않는다. native 작업 성공·정확한 프로세스 종료·제품 수용도 이 도구의 판정 대상이 아니다.

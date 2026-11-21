@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "case_id": "WB-01",
+  "run_id": null,
+  "execution_scope": "not_run",
+  "environment": null,
+  "observed_at": null,
+  "source_snapshot": null,
+  "prompt_reference": null,
+  "effective_configuration_reference": null,
+  "authorization_reference": null,
+  "actual_execution_references": [],
+  "evidence": [],
+  "checks": [],
+  "verdict": "unverified",
+  "critical_failure_observed": null,
+  "judge": {
+    "kind": "unassigned",
+    "reference": null,
+    "independent_from_executor": null
+  },
+  "measurements": {
+    "elapsed_seconds": null,
+    "redundant_choice_questions": null,
+    "actual_dispatches": null,
+    "duplicate_dispatches": null,
+    "tokens": null,
+    "usage_complete": false
+  },
+  "limitations": ["Template only. Empty evidence and unknown measurements must not be converted into pass or measured zero."]
+}

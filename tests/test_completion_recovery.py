@@ -196,6 +196,72 @@ class RecoveryTests(unittest.TestCase):
         self.assertFalse(status['full_usage_complete']); self.assertEqual(before, self.data())
         self.assertEqual(self.receipts(), [])
 
+    def test_missing_diagnosis_requires_new_input_without_inventing_restart_cause(self):
+        self.source.unlink(); before = self.data()
+        with patch.object(hook, 'read_session', side_effect=AssertionError('no source reads')), \
+                patch.object(hook, 'collect', side_effect=AssertionError('no implicit recovery')):
+            first = self.status(); second = self.status()
+        plan = first['recovery_plan']; item = plan['operations'][0]
+        self.assertEqual(item['disposition'], 'blocked_missing_input')
+        self.assertEqual(item['root_cause'], 'undetermined')
+        self.assertTrue(item['new_evidence_required'])
+        self.assertTrue(item['explicit_source_does_not_replace_stop'])
+        self.assertFalse(item['retry_saved_receipt_available'])
+        self.assertNotIn('receipt_key', item)
+        self.assertFalse(plan['automatic_retry']); self.assertFalse(plan['source_reads'])
+        self.assertFalse(plan['reconstructs_missing_stop']); self.assertFalse(plan['full_usage_complete'])
+        self.assertEqual(plan, second['recovery_plan'])
+        self.assertEqual(before, self.data()); self.assertEqual(self.receipts(), [])
+
+    def test_pending_plan_exposes_only_exact_saved_retry_and_revalidation_condition(self):
+        final = self.rows.pop(); self.write_source(); self.run_hook()
+        saved = self.receipts()[0].read_bytes(); before = self.data()
+        item = self.status()['recovery_plan']['operations'][0]
+        self.assertEqual(item['disposition'], 'explicit_retry_available')
+        self.assertEqual(item['receipt_key'], self.key())
+        self.assertEqual(item['resume_when'], 'pinned_source_ready_for_revalidation')
+        self.assertTrue(item['retry_saved_receipt_available'])
+        self.assertTrue(item['new_evidence_required'])
+        self.assertEqual(saved, self.receipts()[0].read_bytes()); self.assertEqual(before, self.data())
+        self.rows.append(final); self.write_source(); self.retry()
+        item = self.status()['recovery_plan']['operations'][0]
+        self.assertEqual(item['disposition'], 'verified_received_receipts')
+        self.assertFalse(item['retry_saved_receipt_available'])
+        self.assertFalse(item['new_evidence_required'])
+
+    def test_ambiguous_pending_plan_and_unconfirmed_launch_do_not_offer_retry(self):
+        self.rows.pop(); self.write_source(); self.run_hook()
+        path = self.receipts()[0]; row = json.loads(path.read_text())
+        row['binding']['event']['turn_id'] = 'another_turn'
+        key = digest(dict(session=self.payload['session_id'], turn='another_turn'))
+        self.save(path.parent / (key + '.receipt.json'), row)
+        item = self.status()['recovery_plan']['operations'][0]
+        self.assertEqual(item['disposition'], 'inspection_required')
+        self.assertFalse(item['retry_saved_receipt_available']); self.assertNotIn('receipt_key', item)
+        # Exercise an unconfirmed launch without conflicting old fixture receipts.
+        for receipt_path in self.receipts():
+            receipt_path.unlink()
+        self.operation['state'] = 'launching'; self.write_ledger()
+        item = self.status()['recovery_plan']['operations'][0]
+        self.assertEqual(item['disposition'], 'blocked_native_binding')
+        self.assertFalse(item['retry_saved_receipt_available'])
+
+    def test_unassociated_issue_stays_separate_from_verified_operation_plan(self):
+        self.run_hook(); self.save(Path(self.config['directory']) / ('0' * 64 + '.receipt.json'), {})
+        status = self.status(request_id='sample-request')
+        self.assertEqual(status['status'], 'attention_required')
+        self.assertEqual(status['request_status'], 'observed_receipts_verified')
+        self.assertEqual(status['recovery_plan']['operations'][0]['disposition'], 'verified_received_receipts')
+        self.assertEqual(len(status['unassociated_receipts']), 1)
+
+    def test_cli_missing_plan_is_diagnostic_and_preserves_exit_code(self):
+        before = self.data(); result = self.cli('status', '--request-id', 'sample-request')
+        self.assertEqual(result.returncode, 1, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual(output['recovery_plan']['operations'][0]['disposition'], 'blocked_missing_input')
+        self.assertEqual(output['suggested_actions'][0]['action'], 'provide_explicit_source')
+        self.assertEqual(before, self.data()); self.assertEqual(self.receipts(), [])
+
     def test_collected_status_verifies_saved_record_and_database_without_source(self):
         self.run_hook(); self.source.unlink(); before = self.data()
         self.assertEqual(self.status()['counts']['collected'], 1)

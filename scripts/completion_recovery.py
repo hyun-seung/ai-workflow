@@ -191,6 +191,37 @@ def actions(operations, rows):
     return result
 
 
+def recovery_plan(operations, suggested_actions):
+    """Explain prerequisites from saved evidence only; never attempt recovery."""
+    result = []
+    for op in operations:
+        steps = [a for a in suggested_actions if a['operation_id'] == op['operation_id']]
+        retryable = (op['status'] == 'pending' and len(steps) == 1 and
+                     steps[0]['action'] == 'retry_saved_receipt')
+        if op['status'] == 'collected':
+            disposition, condition = 'verified_received_receipts', 'none'
+        elif op['status'] == 'missing':
+            disposition = 'blocked_missing_input'
+            condition = 'genuine_stop_or_official_source_with_exact_binding'
+        elif op['status'] == 'not_ready':
+            disposition, condition = 'blocked_native_binding', 'exact_native_launch_binding_confirmed'
+        elif retryable:
+            disposition, condition = 'explicit_retry_available', 'pinned_source_ready_for_revalidation'
+        else:
+            disposition, condition = 'inspection_required', 'binding_storage_or_receipt_ambiguity_resolved'
+        item = dict(operation_id=op['operation_id'], disposition=disposition,
+                    retry_saved_receipt_available=retryable, resume_when=condition,
+                    new_evidence_required=op['status'] != 'collected')
+        if retryable:
+            item['receipt_key'] = steps[0]['receipt_key']
+        if op['status'] == 'missing':
+            # Absence alone cannot establish hook distrust, restart, or process failure.
+            item.update(root_cause='undetermined', explicit_source_does_not_replace_stop=True)
+        result.append(item)
+    return dict(mode='diagnostic_only', automatic_retry=False, source_reads=False,
+                reconstructs_missing_stop=False, full_usage_complete=False, operations=result)
+
+
 def inspect(config, request_id=None):
     if request_id is not None: identifier(request_id)
     ops = catalog(config)
@@ -242,9 +273,10 @@ def inspect(config, request_id=None):
     state = 'no_registered_operations' if not operations and not errors and not coordinator_errors else 'attention_required' if errors or coordinator_errors or any(o['status'] != 'collected' for o in operations) else 'observed_receipts_verified'
     request_state = 'no_registered_operations' if not operations and not coordinator_errors else 'attention_required' if coordinator_errors or any(
         o['status'] != 'collected' for o in operations) else 'observed_receipts_verified'
+    suggested = actions(operations, rows)
     return dict(version=1, observed_at=now(), status=state,
                 request_status=request_state, unassociated_receipts=errors,
-                suggested_actions=actions(operations, rows),
+                suggested_actions=suggested, recovery_plan=recovery_plan(operations, suggested),
                 coordinator_observation_errors=coordinator_errors,
                 coverage_summary=dict(registered_worker_operations=len(operations),
                                       verified_worker_receipts=sum(r['status'] == 'collected' for r in rows),
