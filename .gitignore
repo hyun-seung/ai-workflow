@@ -17,3 +17,6 @@ __pycache__/
 
 # Generated project-local hook activation may contain private absolute paths
 /.codex/hooks.json
+
+# Project-specific delegation opt-in; user acceptance stays local and separate
+/.ai-development-policy.json
