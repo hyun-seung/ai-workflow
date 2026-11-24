@@ -1,0 +1,15 @@
+# 기술 문서 방법의 출처와 채택 범위
+
+2026-11-19 조사. 외부 스킬을 설치하거나 실행하지 않았다. 이 저장소의 간결한 한국어 지침은 자체 작성했으며 원문·예제·hook을 vendoring하지 않는다.
+
+- Docker docs 고정 커밋 [f8d4abc](https://github.com/docker/docs/tree/f8d4abc333036d7d71928bab49a417876d348966)의 [STYLE.md](https://github.com/docker/docs/blob/f8d4abc333036d7d71928bab49a417876d348966/STYLE.md)와 [write/SKILL.md](https://github.com/docker/docs/blob/f8d4abc333036d7d71928bab49a417876d348966/.agents/skills/write/SKILL.md)를 읽었다. 독자 작업·관측 결과 중심 설명, 정확성·간결성·충분성·명확성, 기존 범위 보존과 최소 수정을 방법 참고로 채택했다. 루트 LICENSE Apache-2.0 확인; NOTICE, .agents/NOTICE, write/LICENSE 조회는 404였고 하위 전체 라이선스 조사 완료를 주장하지 않는다. 복사하지 않았으므로 원문 notice를 재배포하지 않는다. upstream hook·branch·commit·frontmatter·영문 표현/경로 규칙·Vale 실행은 채택하지 않았다.
+- Anthropic [e4bb5d9 doc-coauthoring](https://github.com/anthropics/skills/blob/e4bb5d960d87126ff3b3a8af1a104b7db67560ba/skills/doc-coauthoring/SKILL.md)은 독자가 문서만으로 이해할 수 있는지 살피는 개념 참고다. 정확한 개별 라이선스는 미해결이며 복사·설치하지 않았다. 반복 질문·질문별 에이전트·artifact 절차는 실행하거나 필수화하지 않았다. 독자 시험 양식은 자체 작성했고 영향에 따라 선택한다.
+- markdown-it-py [d504583 소스](https://github.com/executablebooks/markdown-it-py/blob/d504583a458edfa399ee800074244fceec288862/markdown_it/main.py)의 parse/token/children/CommonMark 방식을 조사하고 [MIT LICENSE](https://github.com/executablebooks/markdown-it-py/blob/d504583a458edfa399ee800074244fceec288862/LICENSE)를 확인했다. 실행 dependency는 이 커밋의 main이 아니라 배포판 markdown-it-py 3.0.0 및 mdurl 0.1.2로 고정했다. 격리 설치한 두 wheel의 metadata와 LICENSE를 확인했으며 모두 MIT다. markdown-it-py의 LICENSE.markdown-it도 MIT 허가문을 포함한다. 패키지에 포함된 LICENSE를 보존하는 pip 격리 설치를 사용한다. CommonMark 모드만 실행하며 linkify/plugin은 설치하지 않는다. macOS Python 3.14.3에서 로컬 회귀와 합성 trial을 수행했다. 세부 통과 결과는 작업 결과에 기록하며 미수행 범위를 통과로 확대하지 않는다.
+
+lychee/Vale는 별도 선택형 로컬 어댑터로만 연동한다. 신규 문서 생성 엔진, native technical-writer 실행 단계와 기본 모델 변경은 보류한다. 로컬 링크 존재 검사는 원격/anchor/HTML/wiki/Mermaid나 문서 내용의 진실을 검증하지 않는다.
+
+
+- lychee 고정 source [2bba271](https://github.com/lycheeverse/lychee/tree/2bba271688c1abb1503097a064e6c3bc1d1b6a9b), release/tag [lychee-v0.24.2](https://github.com/lycheeverse/lychee/releases/tag/lychee-v0.24.2)의 공식 README·라이선스 및 배포 바이너리 `--help`를 확인했다. source의 LICENSE-APACHE / LICENSE-MIT(이중 라이선스)를 격리 바이너리 옆에 보존했다. macOS arm64 tar.gz의 게시 .sha256과 다운로드 SHA256을 대조하고 실제 `lychee 0.24.2`를 실행했다. offline/cache/config/preprocess 경계와 JSON 오류 exit 2를 확인했다. 원격 링크가 포함된 직접 offline 시험은 excludes로 기록되므로 원격 성공을 주장하지 않는다. 어댑터는 원문 대신 허용 링크만 재구성한다.
+- Vale 고정 source [4ce91ef](https://github.com/vale-cli/vale/tree/4ce91ef208b37f9ac2894766e8cd7b33ffe3baed), release [v3.27.0](https://github.com/vale-cli/vale/releases/tag/v3.27.0)의 공식 README·MIT LICENSE, 배포 바이너리 `--help`를 확인했다. 공식 checksum 목록과 macOS arm64 tar.gz SHA256을 대조하고 `vale version 3.27.0`을 실행했다. LICENSE는 격리 배포물에 보존했다. warning JSON이 exit 0에도 나타남을 확인했다. 프로젝트가 지정한 합성 한글 용어만 자체 생성한 existence 규칙으로 검사하며 영문 스타일·외부 Packages·sync·한국어 문법 교정으로 확대하지 않는다. 실제 native 시험과 가짜 subprocess 프로토콜 시험을 구분한다.
+
+배포 바이너리·원시 출력·다운로드 URL/checksum·native 시험 결과는 요청 전용 비공개 scratch 증거에 남긴다. 공개 예제에는 가상 용어와 재현 명령만 두며, 실행할 바이너리의 실제 절대 경로/hash는 사용하는 프로젝트 설정에 둔다. 설치나 다운로드는 운영자가 별도로 수행하고 runner는 수행하지 않는다.

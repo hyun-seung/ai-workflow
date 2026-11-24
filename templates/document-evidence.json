@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "project": "REPLACE_WITH_ABSOLUTE_PROJECT_ROOT",
+  "roots": ["docs", "src"],
+  "files": ["docs/guide.md", "src/response.txt"],
+  "claims": [{
+    "id": "delete-response",
+    "documents": ["docs/guide.md"],
+    "sources": [{"kind": "code", "file": "src/response.txt", "sha256": "REPLACE_WITH_CURRENT_SOURCE_SHA256"}]
+  }]
+}
