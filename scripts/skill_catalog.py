@@ -17,7 +17,7 @@ import tempfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
-ROLES = {"coordinator", "architect", "designer", "frontend", "backend", "verifier"}
+ROLES = {"coordinator", "architect", "designer", "frontend", "backend", "verifier", "technical-writer"}
 STATES = {"pilot", "active", "disabled", "retired"}
 
 

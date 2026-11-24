@@ -48,3 +48,5 @@ Orca + Codex 완료 알림은 [완료 처리](../runtime/completion.md)에 따�
 ## 전문 스킬 적용
 
 [이 역할의 적용 스킬](../.agents/skills/ai-role-coordinator/SKILL.md)을 필요한 작업에 사용한다. [역할별 연결 기준](../skills/README.md)에 따라 스택·변경 범위에 맞는 원본만 읽고 실제 사용·수정·검증과 다음 역할에 전달할 내용을 결과에 남긴다. 설치 자체를 검토 완료로 간주하지 않는다.
+
+기술 문서 작업은 [작성자 역할](technical-writer.md)과 [절차](../runtime/technical-documentation.md)를 전달하고, 검토 결론과 사람의 정책 결정을 구분한다.

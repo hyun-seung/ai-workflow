@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "project": "/path/to/fictional-project",
+  "roots": [
+    "docs"
+  ],
+  "files": [
+    "docs/README.md",
+    "docs/guide.md"
+  ],
+  "tools": {
+    "lychee": {
+      "enabled": false,
+      "executable": "",
+      "sha256": "",
+      "version": "lychee 0.24.2"
+    },
+    "vale": {
+      "enabled": false,
+      "executable": "",
+      "sha256": "",
+      "version": "vale version 3.27.0",
+      "terms": [
+        {
+          "disallowed": "구름단추",
+          "preferred": "하늘단추"
+        }
+      ]
+    }
+  },
+  "targets": [
+    "docs/guide.md",
+    "docs/missing.md"
+  ]
+}

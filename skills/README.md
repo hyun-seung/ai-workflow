@@ -57,3 +57,5 @@ Web 한정의 재현 절차는 [역할 시험 화면](../examples/role-ui-trial/
 ## 다른 설치에서 재사용
 
 Git에는 역할 적용 스킬·출처 목록·관리 도구·범용 양식만 포함한다. 원본 라이브러리, 활성 상태와 이력, 개인 경로·자동화 ID·실행 보고서는 `local/`에 남기고 공개하지 않는다. 저장소를 복제한 환경에서는 설치와 실제 스킬 발견을 확인하고, 예약도 그 환경의 프로젝트·권한·보관 위치에 맞게 별도로 등록한다. 기존 설치의 예약이나 활성 목록이 Git으로 배포되는 것은 아니다.
+
+기술 문서는 [역할](../roles/technical-writer.md)과 [적용 스킬](../.agents/skills/ai-role-technical-writer/SKILL.md)로 발견한다. `skill_catalog.py select --role technical-writer`는 후보 조회이며 legacy runner/native controller 단계 등록이 아니다.

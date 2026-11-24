@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "document_roots": [
+    "docs"
+  ],
+  "permitted_files": [
+    "docs/README.md",
+    "docs/guide.md",
+    "docs/adr.md"
+  ],
+  "source_priority": [
+    "human-decisions",
+    "verified-behavior",
+    "code",
+    "design"
+  ],
+  "source_scope": [
+    "src",
+    "docs",
+    "verification"
+  ],
+  "review_criteria": [
+    "근거 정확성",
+    "독자와 범위",
+    "불일치 기록",
+    "링크와 형식",
+    "독자 작업 완료와 최소 수정",
+    "근거 drift 재검토",
+    "영향에 따른 문서만의 독자 시험"
+  ],
+  "reviewers": [
+    "document-reviewer"
+  ],
+  "appliers": [
+    "document-applier"
+  ],
+  "policy_approvers": [
+    "policy-owner"
+  ],
+  "backup_directory": "document-backups",
+  "environment": {
+    "format": "Markdown (optional)",
+    "editor": "project choice",
+    "validation": "markdown-it-py CommonMark local existence; skipped and actual app checks separate"
+  },
+  "synthetic_trial": false
+}
