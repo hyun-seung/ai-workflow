@@ -299,3 +299,16 @@ class DevelopmentEntryTests(fixtures.DevelopmentWorkflowTests):
         self.enter()
         self.assertNotIn('plan', self.e._read()['request'])
         self.assertNotIn('plan', self.e.report())
+
+    def test_non_ui_completion_does_not_claim_strict_visual_or_device_pass(self):
+        v = self.run_stage(self.enter(), 'dev')
+        self.run_stage(v, 'review')
+        before = self.state.read_bytes()
+        report = self.e.report()
+        self.assertTrue(report['workflow_complete'])
+        self.assertFalse(report['strict_visual_quality_active'])
+        self.assertEqual(report['visual_quality_coverage'], 'not_activated')
+        self.assertEqual(report['visual_quality'], 'unverified')
+        self.assertEqual(report['reference_match'], 'unverified')
+        self.assertEqual(report['real_device']['status'], 'unverified')
+        self.assertEqual(before, self.state.read_bytes())

@@ -12,6 +12,8 @@ import uuid
 from lifecycle_io import digest, locked, private_file, read_json, save
 from native_record import identifier, unique_object, reject_constant
 
+# Storage stays v2/v3; role plan v3 adds frozen frontend prerequisites to plan v2 visual gates.
+# Plan v1 and historical receipts keep their original validation and bytes.
 VERSION = 2
 POLICY_VERSION = 1
 POLICY = '.ai-development-policy.json'

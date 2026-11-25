@@ -497,6 +497,12 @@ class DevelopmentWorkflowTests(unittest.TestCase):
         self.assertIn('backend-developer.md', v['instructions'][0])
         self.assertNotIn('plan', self.c._read())
 
+    def test_quality_contract_does_not_relax_hidden_snapshot_paths(self):
+        (self.project/'.hidden').mkdir()
+        (self.project/'.hidden'/'screen.txt').write_text('synthetic')
+        with self.assertRaises(ValueError):
+            dw.paths(self.project, ['.hidden/screen.txt'])
+
 
 if __name__ == '__main__':
     unittest.main()

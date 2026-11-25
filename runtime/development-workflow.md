@@ -243,6 +243,40 @@ fresh/reuse 기준 시안 artifact가 변경되면 report와 controller view 모
 
 독립성은 attach뿐 아니라 report/view의 공통 gate 판정에서도 확인한다. functional reviewer 또는 visual reviewer의 canonical provider/session이 구현자·pre_design 작성자·coordinator와 충돌하면 해당 공개 상태와 gate는 unverified이며 `independence_collision:<role>:<stage_id>` omission을 남긴다. 결과와 receipt의 identity를 일치시켜 integrity를 재계산해도 pass로 표시하지 않는다. source 변경 여부와 무관하게 충돌을 표시하며 실제 저장된 guard 실행 참조는 그대로 보고한다. 현재 source가 달라진 정상 독립 검토는 기존대로 stale이다.
 
+### 엄격 UI 품질 계약 (plan v2)
+
+이전 v3는 AC·역할 pass와 실제 구현 capture provenance를 검사했지만 같은 비교 조건·항목별 시각 관찰은 강제하지 않았다. plan.version=2는 아래 시각 검토 gate를 도입한 과거 경로다. **새 UI 구현/수정은 아래 plan v3 프론트엔드 선행 계약까지 전달한다.** 저장 controller v3/Entry journal v1은 유지한다. plan v1·계획 없는 v2·과거 receipt는 그대로 읽고 소급 수정하지 않는다. 비 UI는 기존 경로다. 자동 UI 분류는 없으며 조율자가 판단한다. 계획 생략/v1은 strict 미활성, plan v2는 시각 검토만의 범위이며 새 전체 UI 품질 인증을 주장하지 않는다.
+
+plan v2는 v1의 정확한 필드에 `visual_quality`만 추가하며 frontend 의무와 visual_review=true가 필수다. 계약의 정확한 필드는 `{version:1,required:[...],context:{viewport,theme,content,state}}`. required는 중복 없는 여섯 차원 `theme_reference,hierarchy,typography,spacing_density,alignment,consistency`의 부분집합이며 최소 기준/테마·위계·간격/밀도·일관성 네 항목을 포함한다. 나머지도 원래 요청에 따라 필수로 고정한다. context 값은 비어 있지 않은 최대 4096자 문자열 또는 null(미확인). viewport에는 논리적 크기/배율 등 비교 조건을, content/state에는 같은 데이터와 정상/오류 등 상태를 특정한다. 계약 전체는 Entry request와 plan_hash에 실행 전에 동결하고 resume 변경을 거부한다.
+
+엄격 결과는 기존 v3 result를 유지하고 선택 필드 `visual_quality`를 추가한다. 없거나 null이면 visual gate는 unverified와 `strict_visual_quality_missing` omission이다. 구현/기능 검토 stage에는 생략할 수 있다. 객체의 정확한 필드는 다음과 같다.
+
+- `version:1`, `reference_context`, `implementation_context`: 계약과 같은 context 네 필드.
+- `observations`: 위 여섯 차원 모두를 키로 가지며 각각 정확히 `{status,detail,reference_ref,implementation_ref}`. status=pass/fail/unverified, detail은 비어 있지 않은 최대 4096자 구체적 비교 관찰, 이미지 참조는 같은 한도의 문자열 또는 null이다. 기준/테마, 정보 위계, 타이포 가독성, 행/화면 간격과 밀도, 레이블/값/화살표 정렬, 컴포넌트/토큰 일관성을 따로 관찰한다.
+- `inspections`: `full_actual,full_enlarged,detail_actual,detail_enlarged` 네 키에 각각 정확히 `{source_ref,observation}`. 각 값은 위 한도의 문자열 또는 null이며 현재 실제 구현 이미지 참조여야 한다. 같은 원본을 실제 크기·확대로 볼 수 있으나 수행한 관찰만 기록한다. full_actual은 현재 전체 정상 화면 검토다.
+- `prior_findings_rechecked`: boolean. 수정 라운드에는 이전 지적과 현재 전체 정상 화면까지 재확인해야 true다. 상세 crop만 고쳤다면 false와 누락 inspection을 남긴다.
+- `device`: 정확히 `{status,source_ref,detail}`. status=observed/unverified/not_performed, detail은 위 한도의 문자열, source_ref는 문자열 또는 null. observed는 실기기 관측 참조가 필수다. Web/에뮬레이터를 실기기로 추정하지 않는다. 이 계약이 실기기 pass를 자동 요구하지는 않는다.
+
+필수 관찰의 기준/구현 이미지 참조는 같은 result의 visual_evidence에 있어야 한다. 기준은 kind=image/subject=design_reference, 구현은 kind=image/subject=implementation/provenance=implementation_capture다. 생성 mockup은 기준으로만 쓰며 구현 이미지가 될 수 없다. real_ui 관측만으로 이미지 요구를 대체하지 않는다. 기존 R1의 마지막 필수 구현 stage ID·snapshot·observer·자체 검사, R2 독립성, R3 설계/소스 freshness를 함께 유지한다. 모든 inspection도 현재 구현 이미지에 연결한다.
+
+고정/기준/구현 context의 네 값이 명시적으로 모두 같아야 strict pass다. null/unknown/unset/unverified 또는 불일치는 보수적으로 비교 전체를 unverified로 두고 `visual_comparison_context_unverified_or_mismatched`를 보고한다. 필수 관찰 fail/unverified/이미지 누락, inspection 누락, 이전 지적 미확인도 이름 있는 omissions로 surfaced되며 완료를 막는다. 구조·터치·테스트 pass로 덮지 않는다. 합의 시안 불일치는 취향으로 기각하지 않는다.
+
+view/Entry report는 `strict_visual_quality_active`, `visual_quality_coverage`, `functionality`, `visual_quality`, `reference_match`, `real_device`, `visual_quality_review`를 분리한다. plan v2는 visual_only_v1_frontend_unverified로 원래 시각 gate 범위만 밝힌다. plan v1은 legacy_not_strictly_certified이며 workflow_complete/visual_review의 과거 pass를 유지해도 새 visual_quality/reference_match는 unverified다. 계획 없는/직접 경로는 not_activated다. 원본 계약과 관찰을 함께 보존한다. 기능은 별도 reviewer gate, 시각은 visual gate, 실기기는 관측 기록 범위다. 보고는 과거 state/result bytes를 바꾸지 않는다.
+
+컨트롤러는 관측 주장의 schema·연결을 검사하며 픽셀 심미 평가·이미지 진위 인증·자동 캡처 엔진이 아니다. 합성 fixture 검사를 실제 제품 디자인 pass나 native frontend chain 실증으로 확대하지 않는다. 이 개선의 bootstrap은 기존 고정 컨트롤러를 사용하며 새 gate를 실제 사용했다고 소급 주장하지 않는다.
+
+### 프론트엔드 선행 계약 (plan v3)
+
+F1 보완 전 plan v2의 frontend pass는 self_test만 요구해 구현 전 기준과 자체 비교 없이 독립 검토로 진행할 수 있었다. **새 UI 명시 Entry의 plan.version=3**은 plan v2 필드에 `frontend_baseline`을 추가하고 frontend 결과에 `frontend_comparison`을 연결한다. 기준은 Entry/begin에서 실행 예약 전에 accepted request/plan_hash에 동결한다. 실행 후 결과만으로 기준을 재구성할 수 없으며 resume에서 바꿀 수 없다. 기존 시각 계약·provenance·독립성·소스/설계 freshness·수정 후 전체 재검토는 모두 유지한다.
+
+`frontend_baseline`의 정확한 필드는 `{version:1,reference_ref,source_ref,context,decisions}`다. reference_ref는 합의한 정확한 기준 이미지 버전 참조, source_ref는 컴포넌트/토큰/레이아웃 결정의 수용 근거, context는 visual_quality 계약과 같은 viewport/theme/content/state다. decisions는 정확히 `components,tokens,layout,shared_components,separate_label_value_chevron` 다섯 키에 각각 `{decision,allowed_reason}`을 가진다. decision은 공통 컴포넌트 선택/재사용, 토큰, 배치, 레이블/값/chevron 별도 요소 정렬 등 구체적 수용 결정을 적는다. allowed_reason은 사전 허용한 차이의 정확한 근거 문자열 또는 null이다. 참조·결정·근거는 비어 있지 않은 최대 4096자 문자열이다. context의 null/unknown/unset/unverified와 미확인 source/reference는 actionable omission을 내고 frontend reserve/attach를 차단한다. 필드 누락은 admission schema 오류다. 파일/이미지의 진위는 자동 인증하지 않는다.
+
+frontend 결과의 선택 필드 `frontend_comparison`이 없거나 null이면 그 frontend stage는 통과하지 않으며 독립 검토로 전환하지 않는다. 정확한 객체 필드는 `{version:1,baseline_hash,stage_id,snapshot,context,comparisons}`다. baseline_hash는 동결된 baseline 객체의 기존 canonical digest, stage_id는 현재 frontend stage, snapshot은 result와 같은 현재 소스 해시, context는 baseline과 정확히 같은 조건이다. comparisons는 decisions와 같은 다섯 키이며 각각 정확히 `{status,observation,difference,allowed_reason,reference_ref,implementation_ref}`다. status는 match/allowed_difference/fail/unverified, observation과 difference는 최대 4096자의 구체적 비교·차이 기록(차이 없으면 명시), 나머지는 같은 한도의 문자열 또는 null이다. allowed_difference는 baseline에 사전 수용한 allowed_reason과 정확히 일치해야 한다. 실행 뒤 만든 허용 사유로 차이를 덮지 않는다.
+
+모든 다섯 비교는 필수다. pass 가능한 것은 match 또는 사전 수용 이유가 일치하는 allowed_difference뿐이다. reference_ref는 동결 reference_ref이며 같은 result에 image/design_reference 증거가 있어야 한다. implementation_ref는 같은 result의 image/implementation_capture 증거로 현재 frontend stage_id/snapshot/coordinator observer에 연결한다. mockup이나 이전 stage/crop을 실제 현재 구현으로 대체하지 않는다. 잘못된 shape/범위는 거부하고, 누락/실패/미확인/바인딩·이미지 불일치는 `frontend_self_comparison_*` omissions로 통과를 거부한다. self_test/기하 검사 pass는 이를 대체하지 않는다. 별도 label/value/chevron과 공통 컴포넌트 사용 기록은 감사 가능한 주장이지 AST/픽셀 자동 인증이 아니다.
+
+view/Entry report에 `frontend_quality_active`, `frontend_prerequisite`, `frontend_baseline`, `frontend_baseline_hash`, `frontend_comparisons`를 노출한다. plan v3만 frontend_quality_active=true 및 coverage=strict_v2_with_frontend_prerequisites다. plan v2는 원래 state/result schema와 완료 의미/바이트를 그대로 유지하되 coverage=visual_only_v1_frontend_unverified, frontend_quality_active=false, frontend_prerequisite=unverified다. 과거 pass를 프론트엔드 선행 계약까지 검증한 것으로 소급 인증하지 않는다. plan v1/no-plan/direct/backend 경로도 기존 의미를 유지한다. 변경된 계획은 새 명시 진입이 필요하며 자동 이관하지 않는다.
+
 ### v3 검증 범위
 
 최종 코드에서 집중 Python 검사 137개와 전체 919개가 통과했고, 별도 검증자가 독립적으로 선택한 합성 경계 사례 43개를 통과했다. 생성 시안만으로 화면 검토를 통과시키는 문제, 동일 작성자의 검토를 독립 통과로 표시하는 문제, 기준 시안 변경 후 화면 검토가 pass로 남는 문제를 수정하고 재검토했다. 과거 실패 기록은 보존했다.

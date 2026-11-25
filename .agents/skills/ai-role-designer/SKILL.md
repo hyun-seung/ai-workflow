@@ -5,6 +5,8 @@ description: 디자이너 역할로 사용자 흐름·화면 상태·시각 방�
 
 # 디자이너의 스킬 적용
 
+로컬 방법: [디자이너 역할](../../../roles/designer.md)의 여섯 시각 차원과 [엄격 UI 품질 계약](../../../runtime/development-workflow.md#엄격-ui-품질-계약-plan-v2)을 적용한다. 기준/현재 실제 구현 이미지와 viewport·theme·content·state를 맞추고 전체/상세를 실제 크기·확대로 관찰한다. 불일치·미확인은 통과시키지 않으며 수정 뒤 이전 지적과 현재 전체 정상 화면을 재검토한다. 이 방법은 외부 스킬 설치나 도구 실행을 뜻하지 않는다.
+
 [연결 기준](../../../skills/README.md)을 읽고 필요한 규칙만 선택한다. 이 파일의 위치에서 공통 저장소 루트를 확인해 `python3 /path/to/ai-workflow/scripts/skill_catalog.py select --role designer`를 실행한다. 다른 프로젝트에서도 작업 cwd를 바꾸지 않고 전달받은 공통 저장소 절대 경로를 쓴다. 출력된 원본 경로·버전·상태·모드와 역할 적합성을 확인한다. common은 후보이며 모두 실행하라는 뜻이 아니다. 원문 참고·설치·실제 실행을 구분하고 미설치·비활성·무결성 실패는 미확인으로 보고한다.
 
 frontend-design은 정보 위계·타이포·방향에, Impeccable은 reference-only shape/critique에, Expo 작업은 --tag expo의 기존 토큰 일관성에 활용한다. 정확한 기준 시안·고정 요소·변경 범위, 상태·행동·접근성 조건을 프론트엔드에 전달한다. 작은 보정에 새 시안을 강제하지 않는다. 시안 생성·Figma는 제공 도구와 사용자 요구에 맞게 선택하고 실제 사용성 검증과 구분한다.

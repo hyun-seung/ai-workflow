@@ -15,10 +15,217 @@ def plan(roles=None, pre='none', human=False, visual=False):
                 reuse=None, selection_ref='explicit-role-choice')
 
 
+def strict_plan():
+    from development_plan import DIMENSIONS, FRONTEND_DECISIONS
+    context = dict(viewport='synthetic portrait', theme='light', content='fixture rows', state='normal')
+    return dict(plan(visual=True), version=3, visual_quality=dict(version=1, required=list(DIMENSIONS), context=context),
+        frontend_baseline=dict(version=1, reference_ref='synthetic-reference-image', source_ref='accepted-design-decisions',
+            context=copy.deepcopy(context), decisions={k:dict(decision='Accepted synthetic '+k, allowed_reason=None)
+                                                     for k in FRONTEND_DECISIONS}))
+
+
+def frontend_result(view, result):
+    from development_plan import FRONTEND_DECISIONS
+    baseline = view['plan']['frontend_baseline']
+    snap = result['snapshot']
+    result['visual_evidence'] = [dict(kind='image', subject='implementation', provenance='implementation_capture',
+        implementation_stage_id=view['stage_id'], source_ref='synthetic-frontend-current', snapshot=snap, observer='coordinator-example'),
+        dict(kind='image', subject='design_reference', provenance='design_reference', implementation_stage_id=None,
+             source_ref=baseline['reference_ref'], snapshot=snap, observer='coordinator-example')]
+    result['frontend_comparison'] = dict(version=1, baseline_hash=dw.digest(baseline), stage_id=view['stage_id'],
+        snapshot=snap, context=copy.deepcopy(baseline['context']), comparisons={k:dict(status='match',
+            observation='Compared actual and reference '+k, difference='No difference observed', allowed_reason=None,
+            reference_ref=baseline['reference_ref'], implementation_ref='synthetic-frontend-current') for k in FRONTEND_DECISIONS})
+    return result
+
+
+def quality_result(capture, reference):
+    from development_plan import DIMENSIONS, INSPECTIONS
+    return dict(version=1, reference_context=copy.deepcopy(strict_plan()['visual_quality']['context']),
+        implementation_context=copy.deepcopy(strict_plan()['visual_quality']['context']),
+        observations={k:dict(status='pass', detail='Synthetic comparison observation for '+k,
+            reference_ref=reference['source_ref'], implementation_ref=capture['source_ref']) for k in DIMENSIONS},
+        inspections={k:dict(source_ref=capture['source_ref'], observation='Synthetic '+k+' inspection') for k in INSPECTIONS},
+        prior_findings_rechecked=True, device=dict(status='unverified', source_ref=None, detail='Synthetic schema only'))
+
+
 class PlanTests(unittest.TestCase):
     setUp = f.DevelopmentWorkflowTests.setUp
     write_policy = f.DevelopmentWorkflowTests.write_policy
     unchanged_failure = f.DevelopmentWorkflowTests.unchanged_failure
+
+    def strict_receipt(self, v):
+        capture = self.current_capture()
+        reference = dict(capture, subject='design_reference', provenance='design_reference',
+                         implementation_stage_id=None, source_ref='synthetic-reference-image')
+        r = self.visual_receipt(v, [capture, reference])
+        r['result']['visual_quality'] = quality_result(capture, reference)
+        return r
+
+    def frontend_receipt(self, v):
+        r = self.visual_receipt(v, [])
+        r['result']['self_test'] = 'pass'
+        frontend_result(v, r['result'])
+        return r
+
+    def test_f1_missing_failed_unverified_and_mismatched_self_comparison_blocks_frontend(self):
+        cases = ('missing', 'null', 'fail', 'unverified', 'baseline', 'stage', 'snapshot', 'context',
+                 'reference', 'capture', 'image_stage', 'mockup', 'allowed_reason', 'missing_reference_image')
+        for case in cases:
+            with self.subTest(case=case):
+                self.state.unlink(missing_ok=True)
+                if hasattr(self, 'e'): self.e.path.unlink(missing_ok=True)
+                v = self.launch(self.entry(strict_plan()))
+                receipt = self.frontend_receipt(v); r = receipt['result']; q = r['frontend_comparison']
+                if case == 'missing': del r['frontend_comparison']
+                elif case == 'null': r['frontend_comparison'] = None
+                elif case in ('fail', 'unverified'): q['comparisons']['layout']['status'] = case
+                elif case == 'baseline': q['baseline_hash'] = '0'*64
+                elif case == 'stage': q['stage_id'] = '0'*32
+                elif case == 'snapshot': q['snapshot'] = '0'*64
+                elif case == 'context': q['context']['theme'] = 'dark'
+                elif case == 'reference': q['comparisons']['tokens']['reference_ref'] = 'unaccepted-reference'
+                elif case == 'capture': q['comparisons']['components']['implementation_ref'] = 'old-capture'
+                elif case == 'image_stage': r['visual_evidence'][0]['implementation_stage_id'] = '0'*32
+                elif case == 'mockup': r['visual_evidence'][0].update(subject='design_reference', provenance='generated_mockup', implementation_stage_id=None)
+                elif case == 'allowed_reason': q['comparisons']['layout'].update(status='allowed_difference', allowed_reason='posthoc excuse')
+                elif case == 'missing_reference_image': r['visual_evidence'].pop()
+                next_view = self.c.complete(receipt)
+                self.assertEqual(next_view['role'], 'frontend')
+                self.assertNotEqual(next_view['phase'], 'completed')
+                report = self.e.report(self_tests='pass')
+                self.assertFalse(report['workflow_complete'])
+                self.assertNotEqual(report['frontend_prerequisite'], 'pass')
+                self.assertTrue(any('frontend_self_comparison' in x for x in report['omissions']))
+
+    def test_f1_baseline_frozen_before_reserve_and_resume(self):
+        p = strict_plan(); v = self.entry(p)
+        for field in ('reference_ref', 'source_ref'):
+            changed = copy.deepcopy(p); changed['frontend_baseline'][field] = 'changed'
+            with self.assertRaises(ValueError): self.e.enter(**dict(self.entry_args, plan=changed))
+        changed = copy.deepcopy(p); changed['frontend_baseline']['decisions']['tokens']['decision'] = 'changed'
+        with self.assertRaises(ValueError): self.begin(changed)
+        self.launch(v)
+        with self.assertRaises(ValueError): self.e.enter(**dict(self.entry_args, plan=changed))
+        self.state.unlink(); self.e.path.unlink()
+        p = strict_plan(); p['frontend_baseline']['context']['theme'] = None; p['visual_quality']['context']['theme'] = None
+        v = self.entry(p)
+        self.assertTrue(any('frontend_baseline_context' in x for x in v['omissions']))
+        self.unchanged_failure(lambda:self.c.reserve(v['stage_id'], dw.intent_for(f.execution())))
+        for key in ('components', 'shared_components', 'separate_label_value_chevron'):
+            bad = strict_plan(); del bad['frontend_baseline']['decisions'][key]
+            with self.assertRaises(ValueError): validate_plan(bad)
+
+    def test_f1_allowed_difference_requires_frozen_reason_and_valid_images(self):
+        p = strict_plan(); p['frontend_baseline']['decisions']['layout']['allowed_reason'] = 'Accepted responsive adaptation'
+        v = self.launch(self.entry(p)); receipt = self.frontend_receipt(v)
+        receipt['result']['frontend_comparison']['comparisons']['layout'].update(status='allowed_difference',
+            difference='Responsive adaptation', allowed_reason='Accepted responsive adaptation')
+        v = self.c.complete(receipt)
+        self.assertEqual(v['role'], 'visual_review')
+        self.assertEqual(v['frontend_prerequisite'], 'pass')
+        self.advance(self.c.complete(self.strict_receipt(self.launch(v))))
+        self.assertTrue(self.e.report()['workflow_complete'])
+
+    def test_f1_stale_outer_snapshot_and_malformed_claim_rejected(self):
+        v = self.launch(self.entry(strict_plan())); receipt = self.frontend_receipt(v)
+        (self.project/'app.py').write_text('synthetic change after self comparison')
+        self.unchanged_failure(lambda:self.c.complete(receipt))
+        receipt = self.frontend_receipt(v)
+        receipt['result']['frontend_comparison']['comparisons']['layout']['observation'] = 'x'*4097
+        self.unchanged_failure(lambda:self.c.complete(receipt))
+        bad = strict_plan(); del bad['frontend_baseline']
+        with self.assertRaisesRegex(ValueError, 'frontend_baseline_required_before_entry'): validate_plan(bad)
+
+    def test_f1_plan_v2_history_keeps_bytes_and_only_visual_coverage(self):
+        p = strict_plan(); p['version'] = 2; del p['frontend_baseline']
+        v = self.launch(self.advance(self.entry(p)))
+        self.advance(self.c.complete(self.strict_receipt(v)))
+        before = self.state.read_bytes(); report = self.e.report()
+        self.assertTrue(report['workflow_complete'])
+        self.assertFalse(report['frontend_quality_active'])
+        self.assertEqual(report['frontend_prerequisite'], 'unverified')
+        self.assertEqual(report['visual_quality_coverage'], 'visual_only_v1_frontend_unverified')
+        self.assertEqual(before, self.state.read_bytes())
+
+    def test_strict_matched_positive_and_separate_device_coverage(self):
+        v = self.launch(self.advance(self.entry(strict_plan())))
+        v = self.c.complete(self.strict_receipt(v))
+        self.advance(v)
+        report = self.e.report()
+        self.assertTrue(report['workflow_complete'])
+        for key in ('functionality', 'visual_quality', 'reference_match'):
+            self.assertEqual(report[key], 'pass')
+        self.assertTrue(report['strict_visual_quality_active'])
+        self.assertEqual(report['real_device']['status'], 'unverified')
+
+    def test_strict_visual_failures_prevent_completion_despite_tests_and_ac(self):
+        cases = ('cramped_touch_pass', 'dense_rows_unused_lower_area', 'theme_mismatch', 'context_unknown',
+                 'missing_reference', 'missing_capture', 'mockup_capture', 'real_ui_only', 'missing_quality',
+                 'missing_full_screen', 'missing_enlarged_detail', 'missing_observation_reference', 'unverified_hierarchy')
+        for case in cases:
+            with self.subTest(case=case):
+                self.state.unlink(missing_ok=True)
+                if hasattr(self, 'e'): self.e.path.unlink(missing_ok=True)
+                v = self.launch(self.advance(self.entry(strict_plan())))
+                receipt = self.strict_receipt(v); r = receipt['result']; q = r['visual_quality']
+                if case in ('cramped_touch_pass', 'dense_rows_unused_lower_area'):
+                    q['observations']['spacing_density'].update(status='fail', detail=(
+                        'Minimum touch passes but label/value/arrow feel cramped' if case == 'cramped_touch_pass' else
+                        'Dense rows despite unused lower screen area'))
+                elif case == 'theme_mismatch': q['implementation_context']['theme'] = 'dark'
+                elif case == 'context_unknown': q['reference_context']['content'] = None
+                elif case == 'missing_reference': r['visual_evidence'].pop()
+                elif case == 'missing_capture': r['visual_evidence'].pop(0)
+                elif case == 'mockup_capture': r['visual_evidence'][0].update(subject='design_reference', provenance='generated_mockup', implementation_stage_id=None)
+                elif case == 'real_ui_only': r['visual_evidence'][0].update(kind='real_ui', provenance='real_ui_observation')
+                elif case == 'missing_quality': del r['visual_quality']
+                elif case == 'missing_full_screen': q['inspections']['full_actual']['source_ref'] = None
+                elif case == 'missing_enlarged_detail': q['inspections']['detail_enlarged']['observation'] = None
+                elif case == 'missing_observation_reference': q['observations']['consistency']['reference_ref'] = None
+                elif case == 'unverified_hierarchy': q['observations']['hierarchy']['status'] = 'unverified'
+                v = self.c.complete(receipt)
+                self.assertNotEqual(v['phase'], 'completed')
+                self.assertFalse(self.e.report(self_tests='pass')['workflow_complete'])
+                self.assertTrue(self.e.report()['omissions'])
+
+    def test_strict_partial_fix_requires_current_full_screen_and_prior_recheck(self):
+        self.p.update(max_dispatches=6, max_fix_rounds=1); self.write_policy()
+        v = self.launch(self.advance(self.entry(strict_plan())))
+        receipt = self.strict_receipt(v)
+        receipt['result']['visual_quality']['observations']['spacing_density']['status'] = 'fail'
+        v = self.launch(self.advance(self.c.complete(receipt)))
+        receipt = self.strict_receipt(v)
+        receipt['result']['visual_quality']['prior_findings_rechecked'] = False
+        receipt['result']['visual_quality']['inspections']['full_actual']['source_ref'] = 'old-capture'
+        self.assertEqual(self.c.complete(receipt)['phase'], 'exhausted')
+        self.assertFalse(self.e.report()['workflow_complete'])
+
+    def test_strict_plan_immutable_and_schema_bounded(self):
+        p = strict_plan(); v = self.entry(p)
+        before = self.state.read_bytes()
+        changed = copy.deepcopy(p); changed['visual_quality']['required'].remove('typography')
+        with self.assertRaises(ValueError): self.e.enter(**dict(self.entry_args, plan=changed))
+        self.assertEqual(before, self.state.read_bytes())
+        for change in (dict(required=['hierarchy']), dict(version=True), dict(extra=True)):
+            bad = copy.deepcopy(p); bad['visual_quality'].update(change)
+            with self.assertRaises(ValueError): validate_plan(bad)
+        bad = copy.deepcopy(p); del bad['visual_quality']
+        with self.assertRaises(ValueError): validate_plan(bad)
+        v = self.launch(self.advance(v)); receipt = self.strict_receipt(v)
+        receipt['result']['visual_quality']['observations']['alignment']['detail'] = 'x'*4097
+        self.unchanged_failure(lambda:self.c.complete(receipt))
+
+    def test_legacy_pass_readable_immutable_without_quality_certification(self):
+        v = self.entry(plan(visual=True))
+        self.advance(self.advance(self.advance(v)))
+        before = self.state.read_bytes()
+        report = self.e.report()
+        self.assertTrue(report['workflow_complete'])
+        self.assertFalse(report['strict_visual_quality_active'])
+        self.assertEqual(report['visual_quality'], 'unverified')
+        self.assertEqual(report['visual_quality_coverage'], 'legacy_not_strictly_certified')
+        self.assertEqual(before, self.state.read_bytes())
 
     def artifact(self):
         (self.project / 'design.txt').write_text('proposal one')
@@ -50,6 +257,8 @@ class PlanTests(unittest.TestCase):
                      implementation_stage_id=[x['id'] for x in self.c._read()['stages'] if x['role'] in ('frontend', 'backend')][-1],
                      source_ref='synthetic-implementation-capture', snapshot=snap, observer='coordinator-example')] if v['role'] == 'visual_review' and evidence else [])
         receipt = dict(id='r'+str(self.serial), binding=self.c.binding, stage_id=v['stage_id'], native=v['native'], observer='coordinator-example', source_tool='synthetic-official', terminal='succeeded', result=r)
+        if v['role'] == 'frontend' and v['plan']['version'] == 3:
+            frontend_result(v, r)
         return self.c.complete(receipt)
 
     def advance(self, v, **kwargs):

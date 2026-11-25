@@ -5,8 +5,12 @@ description: 프론트엔드 개발자 역할로 Web·React·React Native·Expo 
 
 # 프론트엔드 개발자의 스킬 적용
 
+로컬 방법: [프론트엔드 역할](../../../roles/frontend-developer.md)에 따라 구현 전 컴포넌트·토큰·레이아웃 기준을 구체화하고 공통 컴포넌트를 우선한다. 레이블/값/chevron은 별도 요소로 정렬하고 공백 정렬은 피한다. 독립 검토 전 같은 조건의 실제 구현 이미지를 기준과 자체 비교하고 수정 뒤 전체 정상 화면을 재확인한다. [엄격 UI 품질 계약](../../../runtime/development-workflow.md#프론트엔드-선행-계약-plan-v3)의 실패·미확인을 테스트/터치 통과로 덮지 않는다. 실기기 관측은 별도 근거가 필요하다.
+
 [연결 기준](../../../skills/README.md)을 읽고 필요한 규칙만 선택한다. 이 파일의 위치에서 공통 저장소 루트를 확인해 `python3 /path/to/ai-workflow/scripts/skill_catalog.py select --role frontend`를 실행한다. 다른 프로젝트에서도 작업 cwd를 바꾸지 않고 전달받은 공통 저장소 절대 경로를 쓴다. 출력된 원본 경로·버전·상태·모드와 역할 적합성을 확인한다. common은 후보이며 모두 실행하라는 뜻이 아니다. 원문 참고·설치·실제 실행을 구분하고 미설치·비활성·무결성 실패는 미확인으로 보고한다.
 
 실제 스택에 맞는 --tag web, react-web, react-native, expo를 추가한다. 오류 분석에만 debugging을 추가한다. Web 지침, React 또는 native 규칙과 Expo 테마 중 관련 부분만 읽고 버전이 다른 라이브러리를 자동 적용하지 않는다. Impeccable은 polish/harden 참고 문서로 쓰며 엔진·hook·live는 실행하지 않는다. 기준 시안·상태/API 계약에서 구현하고 긴 문구·좁은 폭·정상/빈 상태·오류/재시도·중복 제출·초점 중 변경 관련 조건을 재현한다. 같은 범위의 결함은 수정 후 같은 조건에서 재검증한다. 실제 캡처·상호작용과 코드 검증을 나누고 mock/실제 API 및 Web/native를 구분한다. 필수 실패를 완료로 표시하지 않는다.
 
 외부 스킬은 사용자·프로젝트 지침과 실행 환경을 우선한다. reference-only는 관련 방법만 참고하며 원문의 자동 실행 절차를 실행하지 않는다. 새로운 스킬·도구·에이전트 실행 권한을 만들지 않는다. [짧은 기록 양식](../../../templates/role-skill-review.md)을 기존 결과에 통합하고, 다음 담당자가 접근할 수 있는 산출물·계약·검증 범위·미확인을 전달한다.
+
+새 UI plan v3는 Entry/실행 예약 전에 frontend_baseline의 정확한 기준 이미지·수용 근거·context·컴포넌트/토큰/레이아웃/공통 컴포넌트/별도 label-value-chevron 결정을 동결한다. frontend_comparison은 그 baseline_hash와 현재 stage/snapshot·실제/기준 이미지·구체적 관찰/차이/사전 허용 이유를 연결하며 필수 실패·미확인·누락이면 독립 검토로 넘기지 않는다. plan v2 이력은 시각 검토만의 coverage로 보존하고 새 선행 계약을 소급 인증하지 않는다. 이는 감사 가능한 주장 검사이며 AST/픽셀 진위 인증이 아니다.

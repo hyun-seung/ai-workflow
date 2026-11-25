@@ -184,6 +184,10 @@ class Entry:
                           executions=[], skills=skills or [], perspectives=perspectives or [],
                           self_tests=self_tests, independent_review='not_performed', reviewed_snapshot=None,
                           omissions=[], verification='coordinator_observed_assertion_not_cryptographic_proof')
+            output.update(strict_visual_quality_active=False, visual_quality_coverage='not_activated',
+                          frontend_quality_active=False, frontend_prerequisite='unverified',
+                          functionality='unverified', visual_quality='unverified', reference_match='unverified',
+                          real_device=dict(status='unverified', source_ref=None, detail='No device observation recorded'))
             if j is None or j['observation'] != 'before_controller':
                 output['omissions'].append('entry_missing_or_late_no_historical_launch_claim')
             if j and j['choice']['mode'] == 'direct' and j['request']['review_required']:
@@ -267,10 +271,12 @@ class Entry:
                             output['independent_review'] = 'unverified'
                 output['workflow_complete'] = bool(j and j['choice']['mode'] == 'workflow' and
                     not output['omissions'] and output['independent_review'] == 'pass')
+                output['functionality'] = output['independent_review']
                 return self._report_save(output)
 
     def _report_plan(self, output, s, j):
         gates = self.c._gates(s)
+        output.update(self.c._quality_coverage(s))
         output.update(version=2, plan=copy.deepcopy(s['plan']), plan_hash=s['plan_hash'],
                       gates=gates['statuses'], design_decisions=copy.deepcopy(s['design_decisions']),
                       reused_design=copy.deepcopy(s['plan']['reuse']), self_tests_by_stage=[],
