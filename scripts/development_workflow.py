@@ -514,7 +514,27 @@ from development_plan import PlanMixin
 
 
 class Controller(PlanMixin, LegacyController):
-    pass
+    def checked_complete(self, receipt, *, capture_manifest):
+        """Point-in-time capture preflight, then the unchanged completion gates.
+
+        Replays revalidate current files; no certification is stored or cached.
+        """
+        from ui_capture_evidence import check_manifest
+        receipt = copy.deepcopy(receipt)
+        if not isinstance(receipt, dict) or not isinstance(receipt.get('result'), dict):
+            raise ValueError('capture_visual_evidence_required')
+        evidence = receipt['result'].get('visual_evidence')
+        if (not isinstance(evidence, list) or not 1 <= len(evidence) <= 32 or
+                any(not isinstance(row, dict) for row in evidence)):
+            raise ValueError('capture_visual_evidence_required')
+        refs = [row.get('source_ref') for row in evidence
+                if row.get('kind') == 'image' and row.get('subject') == 'implementation'
+                and row.get('provenance') == 'implementation_capture']
+        # Coverage is bound within the helper's single bounded manifest read/verify pass.
+        result = check_manifest(capture_manifest, expected_image_refs=refs)
+        if result['status'] != 'pass':
+            raise ValueError('capture_preflight_failed')
+        return self.complete(receipt)
 
 
 def actor_from_coordinator(coordinator):
@@ -535,7 +555,10 @@ def main(argv=None):
     parser.add_argument('--state')
     parser.add_argument('--entry-state', help='private development entry journal')
     parser.add_argument('--input', help='JSON object with API keyword arguments (receipt itself for complete)')
+    parser.add_argument('--capture-manifest', help='complete only: opt-in current PNG capture preflight')
     args = parser.parse_args(argv)
+    if args.capture_manifest is not None and args.command != 'complete':
+        parser.error('--capture-manifest requires complete')
     try:
         payload = read_json(args.input) if args.input else {}
         if args.command == 'decision':
@@ -549,7 +572,8 @@ def main(argv=None):
                 entry = Entry(controller, args.entry_state)
                 output = entry.enter(**payload) if args.command == 'entry' else entry.report(**payload)
             elif args.command == 'complete':
-                output = controller.complete(payload)
+                output = (controller.complete(payload) if args.capture_manifest is None else
+                          controller.checked_complete(payload, capture_manifest=args.capture_manifest))
             else:
                 output = getattr(controller, args.command)(**payload)
         print(json.dumps(output, ensure_ascii=False))

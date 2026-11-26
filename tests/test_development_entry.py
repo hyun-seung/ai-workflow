@@ -312,3 +312,24 @@ class DevelopmentEntryTests(fixtures.DevelopmentWorkflowTests):
         self.assertEqual(report['reference_match'], 'unverified')
         self.assertEqual(report['real_device']['status'], 'unverified')
         self.assertEqual(before, self.state.read_bytes())
+
+    def test_strict_reference_status_matches_view_and_persisted_entry_report(self):
+        from test_development_plan import PlanTests, strict_plan
+        fixture = PlanTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        v = fixture.launch(fixture.advance(fixture.entry(strict_plan())))
+        receipt = fixture.strict_receipt(v)
+        receipt['result']['visual_quality']['observations']['spacing_density']['status'] = 'fail'
+        fixture.c.complete(receipt)
+        state = fixture.state.read_bytes(); journal = fixture.e.path.read_bytes()
+        for stale in (False, True):
+            if stale: (fixture.project/'app.py').write_text('changed after synthetic observation')
+            view = fixture.c.next(); report = fixture.e.report(self_tests='pass')
+            for key in ('reference_match', 'visual_quality', 'functionality', 'real_device'):
+                self.assertEqual(report[key], view[key])
+            self.assertEqual(report['reference_match'], 'unverified' if stale else 'pass')
+            self.assertFalse(report['workflow_complete'])
+            self.assertEqual(report, io.read_json(fixture.e.path.with_suffix('.report.json')))
+            self.assertEqual(state, fixture.state.read_bytes())
+            self.assertEqual(journal, fixture.e.path.read_bytes())

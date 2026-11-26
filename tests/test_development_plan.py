@@ -152,12 +152,15 @@ class PlanTests(unittest.TestCase):
         v = self.launch(self.advance(self.entry(strict_plan())))
         v = self.c.complete(self.strict_receipt(v))
         self.advance(v)
+        before = self.state.read_bytes(); journal = self.e.path.read_bytes()
         report = self.e.report()
         self.assertTrue(report['workflow_complete'])
         for key in ('functionality', 'visual_quality', 'reference_match'):
             self.assertEqual(report[key], 'pass')
         self.assertTrue(report['strict_visual_quality_active'])
         self.assertEqual(report['real_device']['status'], 'unverified')
+        self.assertEqual(before, self.state.read_bytes())
+        self.assertEqual(journal, self.e.path.read_bytes())
 
     def test_strict_visual_failures_prevent_completion_despite_tests_and_ac(self):
         cases = ('cramped_touch_pass', 'dense_rows_unused_lower_area', 'theme_mismatch', 'context_unknown',
@@ -188,17 +191,110 @@ class PlanTests(unittest.TestCase):
                 self.assertNotEqual(v['phase'], 'completed')
                 self.assertFalse(self.e.report(self_tests='pass')['workflow_complete'])
                 self.assertTrue(self.e.report()['omissions'])
+                expected = 'pass' if case in ('cramped_touch_pass', 'dense_rows_unused_lower_area',
+                    'missing_observation_reference', 'unverified_hierarchy') else 'unverified'
+                self.assertEqual(v['reference_match'], expected)
+                self.assertEqual(self.e.report()['reference_match'], expected)
+
+    def test_reference_comparison_requires_its_own_current_evidence(self):
+        cases = ('pass', 'fail', 'unverified', 'missing_reference_ref', 'missing_capture_ref',
+                 'wrong_stage', 'unknown_context', 'unset_context', 'unverified_context', 'failed_terminal',
+                 'null_quality', 'fail_without_context')
+        for version in (2, 3):
+            for case in cases:
+                with self.subTest(version=version, case=case):
+                    self.state.unlink(missing_ok=True)
+                    if hasattr(self, 'e'): self.e.path.unlink(missing_ok=True)
+                    p = strict_plan()
+                    if version == 2:
+                        p['version'] = 2; del p['frontend_baseline']
+                    v = self.launch(self.advance(self.entry(p)))
+                    receipt = self.strict_receipt(v); q = receipt['result']['visual_quality']
+                    q['observations']['spacing_density']['status'] = 'fail'
+                    row = q['observations']['theme_reference']
+                    if case in ('pass', 'fail', 'unverified'): row['status'] = case
+                    elif case == 'missing_reference_ref': row['reference_ref'] = None
+                    elif case == 'missing_capture_ref': row['implementation_ref'] = None
+                    elif case == 'wrong_stage': receipt['result']['visual_evidence'][0]['implementation_stage_id'] = '0'*32
+                    elif case == 'null_quality': receipt['result']['visual_quality'] = None
+                    elif case == 'fail_without_context':
+                        row['status'] = 'fail'; q['implementation_context']['state'] = None
+                    elif case.endswith('_context'): q['reference_context']['theme'] = case.removesuffix('_context')
+                    elif case == 'failed_terminal': receipt['terminal'] = 'failed'
+                    v = self.c.complete(receipt)
+                    before = self.state.read_bytes(); journal = self.e.path.read_bytes()
+                    report = self.e.report()
+                    expected = case if case in ('pass', 'fail') else 'unverified'
+                    self.assertEqual(v['reference_match'], expected)
+                    self.assertEqual(report['reference_match'], expected)
+                    self.assertFalse(report['workflow_complete'])
+                    self.assertNotEqual(report['visual_quality'], 'pass')
+                    self.assertEqual(report['real_device']['status'], 'unverified')
+                    self.assertEqual(before, self.state.read_bytes())
+                    self.assertEqual(journal, self.e.path.read_bytes())
+
+    def test_reference_comparison_stale_source_design_and_independence(self):
+        self.p['max_fix_rounds'] = 0; self.write_policy()
+        for case in ('source', 'design', 'selection', 'collision', 'frontend'):
+            with self.subTest(case=case):
+                self.state.unlink(missing_ok=True)
+                if hasattr(self, 'e'): self.e.path.unlink(missing_ok=True)
+                p = strict_plan()
+                if case in ('design', 'selection'):
+                    p.update(pre_design='reuse', artifact='design.txt', reuse=self.artifact(), human_selection=True)
+                v = self.entry(p)
+                if p['human_selection']:
+                    decision = dict(plan_hash=v['plan_hash'], artifact=v['proposal'], proposal_stage_id='reuse',
+                        decision='approved', instruction_ref='synthetic exact approval', observer='coordinator-example')
+                    v = self.c.select_design(decision)
+                v = self.launch(self.advance(v)); receipt = self.strict_receipt(v)
+                receipt['result']['visual_quality']['observations']['spacing_density']['status'] = 'fail'
+                self.c.complete(receipt)
+                if case == 'source': (self.project/'app.py').write_text('new source snapshot')
+                elif case == 'design': (self.project/'design.txt').write_text('changed design baseline')
+                else:
+                    s = self.c._read()
+                    if case == 'selection': s['design_decisions'] = []
+                    elif case == 'collision':
+                        s['stages'][-1]['native']['provider_session_id'] = s['stages'][0]['native']['provider_session_id']
+                        s['receipts'][receipt['id']]['native'] = copy.deepcopy(s['stages'][-1]['native'])
+                        s['stages'][-1]['intent'] = dw.intent_for(s['stages'][-1]['native'])
+                    elif case == 'frontend':
+                        s['stages'][0]['result']['frontend_comparison']['comparisons']['layout']['status'] = 'fail'
+                        first = next(x for x in s['receipts'].values() if x['stage_id'] == s['stages'][0]['id'])
+                        first['result'] = copy.deepcopy(s['stages'][0]['result'])
+                    # Coherent synthetic history is injected only to exercise reporting defenses.
+                    self.c._save(s)
+                before = self.state.read_bytes()
+                if case == 'frontend':
+                    # This fabricated history already violates the original stage sequence.
+                    with self.assertRaises(ValueError): self.c.next()
+                    with self.assertRaises(ValueError): self.e.report()
+                    self.assertEqual(before, self.state.read_bytes())
+                    continue
+                with patch.object(self.c, '_guard'):
+                    view = self.c.next(); report = self.e.report()
+                self.assertEqual(view['reference_match'], 'unverified')
+                self.assertEqual(report['reference_match'], 'unverified')
+                self.assertFalse(report['workflow_complete'])
+                self.assertEqual(before, self.state.read_bytes())
 
     def test_strict_partial_fix_requires_current_full_screen_and_prior_recheck(self):
         self.p.update(max_dispatches=6, max_fix_rounds=1); self.write_policy()
         v = self.launch(self.advance(self.entry(strict_plan())))
         receipt = self.strict_receipt(v)
         receipt['result']['visual_quality']['observations']['spacing_density']['status'] = 'fail'
-        v = self.launch(self.advance(self.c.complete(receipt)))
+        failed = self.c.complete(receipt)
+        self.assertEqual(failed['reference_match'], 'pass')
+        pending = self.advance(failed)
+        self.assertEqual(pending['reference_match'], 'unverified', 'A new pending review cannot reuse the prior comparison')
+        v = self.launch(pending)
         receipt = self.strict_receipt(v)
         receipt['result']['visual_quality']['prior_findings_rechecked'] = False
         receipt['result']['visual_quality']['inspections']['full_actual']['source_ref'] = 'old-capture'
-        self.assertEqual(self.c.complete(receipt)['phase'], 'exhausted')
+        final = self.c.complete(receipt)
+        self.assertEqual(final['phase'], 'exhausted')
+        self.assertEqual(final['reference_match'], 'unverified')
         self.assertFalse(self.e.report()['workflow_complete'])
 
     def test_strict_plan_immutable_and_schema_bounded(self):
@@ -224,6 +320,7 @@ class PlanTests(unittest.TestCase):
         self.assertTrue(report['workflow_complete'])
         self.assertFalse(report['strict_visual_quality_active'])
         self.assertEqual(report['visual_quality'], 'unverified')
+        self.assertEqual(report['reference_match'], 'unverified')
         self.assertEqual(report['visual_quality_coverage'], 'legacy_not_strictly_certified')
         self.assertEqual(before, self.state.read_bytes())
 

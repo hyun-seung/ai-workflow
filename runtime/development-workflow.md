@@ -263,7 +263,25 @@ plan v2는 v1의 정확한 필드에 `visual_quality`만 추가하며 frontend �
 
 view/Entry report는 `strict_visual_quality_active`, `visual_quality_coverage`, `functionality`, `visual_quality`, `reference_match`, `real_device`, `visual_quality_review`를 분리한다. plan v2는 visual_only_v1_frontend_unverified로 원래 시각 gate 범위만 밝힌다. plan v1은 legacy_not_strictly_certified이며 workflow_complete/visual_review의 과거 pass를 유지해도 새 visual_quality/reference_match는 unverified다. 계획 없는/직접 경로는 not_activated다. 원본 계약과 관찰을 함께 보존한다. 기능은 별도 reviewer gate, 시각은 visual gate, 실기기는 관측 기록 범위다. 보고는 과거 state/result bytes를 바꾸지 않는다.
 
+strict plan의 `reference_match`는 최신 화면 검토의 `theme_reference` 관찰을 별도로 보고한다. 같은 명시 context, 현재 snapshot, 성공 receipt, 독립 검토, 유효한 시안 선택, 구현 선행 gate와 최종 구현 단계의 이미지 capture provenance, 참조 이미지·inspection·이전 지적 재확인이 유효하면 해당 관찰의 pass/fail을 유지한다. 누락·unverified·오래된 근거·다른 단계의 capture는 unverified다. spacing_density 등 다른 품질 항목의 실패만으로 유효한 참조 비교 pass를 낮추지 않으며, 전체 visual_quality·완료 gate는 그대로 실패/미확인 상태를 유지한다. 이는 기존 조율자 관측의 보고이며 이미지 진위 인증이나 실제 미감·실기기 검증을 새로 제공하지 않는다.
+
 컨트롤러는 관측 주장의 schema·연결을 검사하며 픽셀 심미 평가·이미지 진위 인증·자동 캡처 엔진이 아니다. 합성 fixture 검사를 실제 제품 디자인 pass나 native frontend chain 실증으로 확대하지 않는다. 이 개선의 bootstrap은 기존 고정 컨트롤러를 사용하며 새 gate를 실제 사용했다고 소급 주장하지 않는다.
+
+### 명시적 PNG 캡처 사전 검사
+
+UI 캡처를 완료 근거로 제출하는 호출자는 완료 보고 전에 `python3 scripts/ui_capture_evidence.py --manifest /private/tmp/capture-manifest.json`을 실행하고 JSON 결과와 종료값을 비공개 근거로 보관한다. 아래 checked completion을 명시 선택하면 같은 helper 검사를 완료 제출에 연결한다. 기본 complete는 helper를 자동 강제하지 않으며 기존 결과 schema·이력은 변경하거나 소급 보정하지 않는다.
+
+manifest는 정확히 `{"version":1,"captures":[...]}`이며 captures는 1~32개다. 항목은 정확히 `expected_receipt_id, expected_page_id, receipt_path, native_image_path, image_path, image_sha256` 여섯 필드다. ID는 기대하는 실제 성공 영수증 ID와 page ID, 세 경로는 명시적 절대 파일 경로(상위 이동 금지), hash는 보존 PNG의 소문자 SHA256 64자다. 원본 native PNG도 실제로 있어야 하며 두 PNG의 signature·hash가 기대값과 일치해야 한다. JSON 파일별 1 MiB, PNG별 32 MiB, 실행 전체 읽기 256 MiB 상한을 적용한다. 링크 경로·비정규 파일·읽는 중 변경을 거부하며 macOS `/tmp`·`/var` 시스템 별칭만 `/private` 아래로 정규화한다.
+
+receipt_path는 저장한 공식 실행 wrapper다. 정확한 필수 키는 `command, exit, stdout, stderr`, 선택 키는 `time`이다. command는 `["orca","screenshot","--page","page-example","--json"]` 형태이며 executable의 절대 경로와 `full-screenshot`도 허용한다. 중복 flag·추가 인자는 거부한다. exit는 정수 0, stderr는 빈 문자열, stdout은 공식 응답을 JSON 인코딩한 문자열이어야 한다. 응답 필수 키는 `id, ok, result`(ok=true), 선택 키는 `_meta`(선택 문자열 runtimeId만)다. result는 `format="png", path`와 선택 문자열 `expiresAt`만 허용한다. 선택 time도 문자열이다. ID와 page는 정확히 비교하고 result.path는 명시한 native_image_path와 정규 경로를 비교할 뿐 영수증의 임의 경로를 열지 않는다. expiresAt는 참고 메타데이터이며 삭제·유효성 증거가 아니다. 누락·만료 뒤 사라진 원본은 통과할 수 없다.
+
+stdout 결과는 `status=pass|fail|invalid`, `scope=metadata_consistency_only`와 capture별 index/status/code다(입력 자체가 invalid이면 일반 code). 종료값은 pass=0, 나머지=1이다. 호출자는 실제 관측과 함께 결과를 연결한다. 이 검사는 메타데이터·파일 바이트 일치만 확인하며 영수증 진위·이미지 심미성·실기기·PNG 전체 디코딩을 증명하지 않는다. 캡처·복사·변환·네트워크·native 실행·DB 쓰기를 수행하지 않는다.
+
+완료 제출에 사전 검사를 연결할 때는 `controller.checked_complete(receipt, capture_manifest="/private/tmp/capture-manifest.json")` 또는 기존 `development_workflow.py complete` 명령의 binding·state·input 인자에 `--capture-manifest /private/tmp/capture-manifest.json`을 추가한다. 이 옵션은 complete에만 허용된다. manifest를 한 번 읽고 검증하는 같은 helper 호출 안에서 모든 capture의 image_path와 receipt.result.visual_evidence 중 kind=image, subject=implementation, provenance=implementation_capture인 source_ref를 정규 경로로 정확히 대응한다. 현재 참조가 1개 이상 필요하며 누락·추가·중복 참조, 중복 image/native 경로·영수증 ID와 잘못된 타입을 거부한다. 디자인 기준 이미지와 real_ui 관측은 구현 PNG를 대신하지 않는다.
+
+현재 checked CLI는 **독립 검토 후 수정 대기**다. 깊게 중첩된 manifest에서 traceback이 나오고, 없는 manifest의 파일명이 오류에 노출되는 두 문제가 확인됐다. 두 경우 컨트롤러 상태는 보존됐지만 완료된 오류 처리로 취급하지 않는다. 명시 검사 도구 자체의 고정 JSON 오류 처리와 구분하며, 수정·독립 재검토 전에는 민감한 경로를 포함한 실패 출력을 외부에 공유하지 않는다.
+
+사전 검사·대응 실패는 정상 complete나 controller 상태 변경 전에 거부한다. 성공 뒤에는 기존 complete의 역할·stage·snapshot·provenance·독립성·전체 품질 검사를 그대로 적용한다. 메타데이터 일치만으로 품질 gate를 통과시키지 않으며 인증 필드를 저장하지 않는다. checked replay도 매번 원본 native PNG의 현재 가용성을 포함해 재검사하므로 이전 성공 뒤 파일이 사라지면 실패할 수 있다. 이는 해당 호출 시점의 검사이며 파일시스템을 원자적으로 잠그지 않는다. 검사 뒤 파일·manifest가 변경될 수 있고 진위 인증도 제공하지 않는다. 기본 API/CLI complete, legacy/no-UI 기록에는 기존 동작을 유지하며 새 품질 인증을 소급 부여하지 않는다. 이 선택 경로는 전역 강제나 앱 입력 자동 hook이 아니다.
 
 ### 프론트엔드 선행 계약 (plan v3)
 

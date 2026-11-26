@@ -199,7 +199,7 @@ class PlanMixin:
                 missing.append('frontend_self_comparison_unverified_or_failed:' + key)
         return missing
 
-    def _quality_omissions(self, s, stage, r):
+    def _quality_omissions(self, s, stage, r, *, reference_only=False):
         q = r.get('visual_quality')
         if q is None: return ['strict_visual_quality_missing']
         contract = s['plan']['visual_quality']
@@ -216,9 +216,10 @@ class PlanMixin:
                     e['implementation_stage_id'] == last_id and e['snapshot'] == r['snapshot']}
         references = {e['source_ref'] for e in r['visual_evidence'] if e['kind'] == 'image' and
                       e['subject'] == 'design_reference'}
-        for key in contract['required']:
+        for key in ('theme_reference',) if reference_only else contract['required']:
             row = q['observations'][key]
-            if row['status'] != 'pass' or row['reference_ref'] not in references or row['implementation_ref'] not in captures:
+            statuses = ('pass', 'fail') if reference_only else ('pass',)
+            if row['status'] not in statuses or row['reference_ref'] not in references or row['implementation_ref'] not in captures:
                 missing.append('visual_criterion_unverified_or_failed:' + key)
         for key in INSPECTIONS:
             row = q['inspections'][key]
@@ -231,17 +232,38 @@ class PlanMixin:
             missing.append('prior_findings_not_rechecked')
         return missing
 
+    def _reference_match(self, s, stage):
+        # A separate observation, with the same comparison/evidence safeguards.
+        # Neither coordinator assertions nor this report authenticate image sources.
+        r = stage['result'] if stage else None
+        if (r is None or r.get('visual_quality') is None or stage['native'] is None or
+                stage['snapshot'] != r['snapshot'] or
+                stage['snapshot'] != api().snapshot(self.project, s['files']) or
+                self._review_collision(s, 'visual_review', stage['native']) or
+                not self._design_ready(s) or
+                any(x['attempt'] > stage['attempt'] and x['role'] in ('frontend', 'backend') and x['result'] for x in s['stages']) or
+                not self._implementation_observed(s, stage, r)):
+            return 'unverified'
+        for role in s['plan']['implementation']:
+            implemented = [x for x in s['stages'] if x['attempt'] < stage['attempt'] and x['role'] == role]
+            if not implemented or not implemented[-1]['result'] or not self._passed(s, implemented[-1], implemented[-1]['result']):
+                return 'unverified'
+        receipts = [x for x in s['receipts'].values() if x['stage_id'] == stage['id']]
+        if (len(receipts) != 1 or receipts[0]['terminal'] != 'succeeded' or
+                receipts[0]['result'] != r or receipts[0]['native'] != stage['native'] or
+                self._quality_omissions(s, stage, r, reference_only=True)):
+            return 'unverified'
+        return r['visual_quality']['observations']['theme_reference']['status']
+
     def _quality_coverage(self, s):
         strict = s['plan']['version'] in (2, 3)
         gates = self._gates(s)['statuses']
-        visual = [x for x in s['stages'] if x['role'] == 'visual_review' and x['result']]
-        q = visual[-1]['result'].get('visual_quality') if visual else None
+        visual = [x for x in s['stages'] if x['role'] == 'visual_review']
+        stage = visual[-1] if visual else None
+        observed = [x for x in visual if x['result']]
+        q = observed[-1]['result'].get('visual_quality') if observed else None
         status = gates.get('visual_review', 'not_performed')
-        reference = 'unverified'
-        if strict and q and status == 'pass':
-            reference = 'pass'
-        elif strict and q and q['observations']['theme_reference']['status'] == 'fail':
-            reference = 'fail'
+        reference = self._reference_match(s, stage) if strict else 'unverified'
         return dict(strict_visual_quality_active=strict,
                     visual_quality_coverage={1:'legacy_not_strictly_certified', 2:'visual_only_v1_frontend_unverified',
                                              3:'strict_v2_with_frontend_prerequisites'}[s['plan']['version']],

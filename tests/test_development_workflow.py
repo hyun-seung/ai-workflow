@@ -504,5 +504,149 @@ class DevelopmentWorkflowTests(unittest.TestCase):
             dw.paths(self.project, ['.hidden/screen.txt'])
 
 
+class CheckedCompletionTests(unittest.TestCase):
+    # Reuse fixture methods without inheriting and rerunning the legacy test suite.
+    setUp = DevelopmentWorkflowTests.setUp
+    write_policy = DevelopmentWorkflowTests.write_policy
+    unchanged_failure = DevelopmentWorkflowTests.unchanged_failure
+
+    def capture_fixture(self):
+        from test_ui_capture_evidence import CaptureTests
+        fixture = CaptureTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        return fixture
+
+    def submission(self, strict=False):
+        from test_development_plan import PlanTests, strict_plan
+        self.capture = self.capture_fixture()
+        if strict:
+            v = self.c.begin(**self.args, plan=strict_plan())
+        else:
+            v = PlanTests.begin(self)
+        v = PlanTests.launch(self, v)
+        r = PlanTests.visual_receipt(self, v, [dict(kind='image', subject='implementation',
+            provenance='implementation_capture', implementation_stage_id=v['stage_id'],
+            source_ref=str(self.capture.image), snapshot=dw.snapshot(self.project, ['app.py']),
+            observer='coordinator-example')])
+        r['result']['self_test'] = 'pass'
+        return r
+
+    def checked(self, r):
+        return self.c.checked_complete(r, capture_manifest=str(self.capture.manifest))
+
+    def cli(self, r, *extra):
+        path = self.root / 'submission.json'
+        path.write_text(json.dumps(r))
+        command = [sys.executable, str(Path(dw.__file__)), 'complete', '--project', str(self.project),
+            '--request-id', 'request-example', '--coordinator', 'coordinator-example',
+            '--coordinator-actor', 'example/coordinator', '--state', str(self.state), '--input', str(path)]
+        result = subprocess.run(command + list(extra), capture_output=True, text=True, timeout=20)
+        self.assertEqual(path.read_text(), json.dumps(r))
+        return result
+
+    def test_api_success_and_checked_replay_revalidate_current_files(self):
+        r = self.submission()
+        original = copy.deepcopy(r)
+        v = self.checked(r)
+        self.assertEqual(v['role'], 'reviewer')
+        before = self.state.read_bytes()
+        self.assertEqual(self.checked(r), v)
+        self.assertEqual(before, self.state.read_bytes())
+        self.capture.native.unlink()
+        self.unchanged_failure(lambda: self.checked(r))
+        self.assertEqual(self.c.complete(r), v)  # Unchecked replay retains its semantics.
+        self.assertEqual(original, r)
+
+    def test_cli_matching_success_missing_manifest_and_no_flag_compatibility(self):
+        r = self.submission()
+        before = self.state.read_bytes()
+        result = self.cli(r, '--capture-manifest', str(self.root / 'missing.json'))
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(before, self.state.read_bytes())
+        result = self.cli(r, '--capture-manifest', str(self.capture.manifest))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        before = self.state.read_bytes()
+        self.capture.native.unlink()
+        self.assertEqual(self.cli(r, '--capture-manifest', str(self.capture.manifest)).returncode, 2)
+        self.assertEqual(self.cli(r).returncode, 0)
+        self.assertEqual(before, self.state.read_bytes())
+
+    def test_capture_id_page_hash_path_failures_preserve_state(self):
+        r = self.submission()
+        original = self.capture.row.copy()
+        for key, value in [('expected_receipt_id', 'wrong'), ('expected_page_id', 'wrong'),
+                           ('image_sha256', '0'*64), ('native_image_path', str(self.capture.image))]:
+            with self.subTest(key=key):
+                self.capture.row = dict(original, **{key: value}); self.capture.write()
+                self.unchanged_failure(lambda: self.checked(r))
+                self.assertEqual(self.cli(r, '--capture-manifest', str(self.capture.manifest)).returncode, 2)
+
+    def test_missing_extra_duplicate_unrelated_and_malformed_evidence(self):
+        r = self.submission(); evidence = r['result']['visual_evidence']
+        for entries in ([], None, {}, [None], [1], evidence * 2,
+                        [dict(evidence[0], source_ref=None)], [dict(evidence[0], source_ref='')],
+                        [dict(evidence[0], source_ref=str(self.capture.native))],
+                        evidence + [dict(evidence[0], source_ref=str(self.capture.native))],
+                        [dict(evidence[0], subject='design_reference', provenance='generated_mockup')],
+                        [dict(evidence[0], kind='real_ui', provenance='real_ui_observation')]):
+            with self.subTest(entries=entries):
+                bad = copy.deepcopy(r); bad['result']['visual_evidence'] = entries
+                self.unchanged_failure(lambda: self.checked(bad))
+        bad = copy.deepcopy(r)
+        bad['result']['visual_evidence'][0]['source_ref'] = str(self.capture.native)
+        before = self.state.read_bytes()
+        self.assertEqual(self.cli(bad, '--capture-manifest', str(self.capture.manifest)).returncode, 2)
+        self.assertEqual(before, self.state.read_bytes())
+        self.capture.manifest.write_text(json.dumps(dict(version=1, captures=[self.capture.row]*2)))
+        self.unchanged_failure(lambda: self.checked(r))
+
+    def test_good_preflight_does_not_bypass_normal_gates(self):
+        r = self.submission()
+        for field, value in [('stage_id', 'stale'), ('observer', 'foreign')]:
+            bad = dict(r, **{field: value})
+            self.unchanged_failure(lambda: self.checked(bad))
+        for field, value in [('snapshot', '0'*64), ('extra', True)]:
+            bad = copy.deepcopy(r); bad['result'][field] = value
+            self.unchanged_failure(lambda: self.checked(bad))
+        bad = copy.deepcopy(r); bad['result']['visual_evidence'][0]['observer'] = 'foreign'
+        self.unchanged_failure(lambda: self.checked(bad))
+
+    def test_preflight_cannot_replace_strict_frontend_quality(self):
+        r = self.submission(strict=True)
+        v = self.checked(r)
+        self.assertNotEqual(v['role'], 'reviewer')
+        self.assertNotEqual(v['phase'], 'completed')
+
+    def test_no_state_created_on_preflight_failure_and_legacy_noui_preserved(self):
+        self.capture = self.capture_fixture()
+        before = set(self.root.rglob('*'))
+        for receipt in (None, [], {}, {'result': None}, {'result': {'visual_evidence': []}}):
+            with self.assertRaises(ValueError): self.checked(receipt)
+        self.assertEqual(before, set(self.root.rglob('*')))
+        self.assertFalse(self.state.parent.exists())
+        missing = {'result': {'visual_evidence': [dict(kind='image', subject='implementation',
+            provenance='implementation_capture', source_ref=str(self.capture.image))]}}
+        with self.assertRaises(OSError):
+            self.c.checked_complete(missing, capture_manifest=str(self.root / 'missing.json'))
+        self.assertEqual(before, set(self.root.rglob('*')))
+        v = DevelopmentWorkflowTests.attach(self, DevelopmentWorkflowTests.begin(self))
+        r = DevelopmentWorkflowTests.receipt(self, v)
+        self.unchanged_failure(lambda: self.checked(r))
+        self.assertEqual(self.cli(r).returncode, 0)
+
+    # Fixture dependencies for the explicit legacy/no-UI case only.
+    prepare = DevelopmentWorkflowTests.prepare
+
+    def test_capture_flag_rejected_on_every_noncomplete_command(self):
+        for command in ('entry', 'report', 'decision', 'begin', 'next', 'reserve', 'attach', 'cancel', 'select_design'):
+            result = subprocess.run([sys.executable, str(Path(dw.__file__)), command,
+                '--project', str(self.project), '--capture-manifest', '/private/tmp/missing.json'],
+                capture_output=True, text=True, timeout=20)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('--capture-manifest requires complete', result.stderr)
+            self.assertFalse(self.state.parent.exists())
+
+
 if __name__ == '__main__':
     unittest.main()
