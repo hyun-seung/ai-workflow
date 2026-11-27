@@ -135,7 +135,7 @@ class DevelopmentWorkflowTests(unittest.TestCase):
         self.assertFalse(self.state.parent.exists())
 
     def test_policy_is_strict_and_bounded(self):
-        for change in [dict(version=True), dict(extra=1), dict(max_dispatches=9), dict(max_fix_rounds=4), dict(enabled=1)]:
+        for change in [dict(version=True), dict(extra=1), dict(max_dispatches=10), dict(max_fix_rounds=4), dict(enabled=1)]:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 dw.policy(dict(self.p, **change))
 
@@ -538,11 +538,12 @@ class CheckedCompletionTests(unittest.TestCase):
     def cli(self, r, *extra):
         path = self.root / 'submission.json'
         path.write_text(json.dumps(r))
+        before = path.read_bytes()
         command = [sys.executable, str(Path(dw.__file__)), 'complete', '--project', str(self.project),
             '--request-id', 'request-example', '--coordinator', 'coordinator-example',
             '--coordinator-actor', 'example/coordinator', '--state', str(self.state), '--input', str(path)]
         result = subprocess.run(command + list(extra), capture_output=True, text=True, timeout=20)
-        self.assertEqual(path.read_text(), json.dumps(r))
+        self.assertEqual(path.read_bytes(), before)
         return result
 
     def test_api_success_and_checked_replay_revalidate_current_files(self):
@@ -581,6 +582,70 @@ class CheckedCompletionTests(unittest.TestCase):
                 self.capture.row = dict(original, **{key: value}); self.capture.write()
                 self.unchanged_failure(lambda: self.checked(r))
                 self.assertEqual(self.cli(r, '--capture-manifest', str(self.capture.manifest)).returncode, 2)
+
+    def assert_cli_capture_input_failure(self, manifest):
+        from test_development_plan import PlanTests, plan
+        r = self.submission()
+        PlanTests.entry(self, plan())
+        receipt = self.root / 'submission.json'
+        receipt.write_text(json.dumps(r))
+        before = {path: path.read_bytes() for path in
+                  (self.state, self.e.path, receipt, self.capture.receipt)}
+        paths_before = set(self.root.rglob('*'))
+        for existing in (True, False):
+            with self.subTest(existing_state=existing):
+                state = self.state if existing else self.root / 'absent-state' / 'workflow.json'
+                entry = self.e.path if existing else self.root / 'absent-entry' / 'entry.json'
+                result = self.cli(r, '--capture-manifest', str(manifest),
+                                  '--state', str(state), '--entry-state', str(entry))
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertEqual(json.loads(result.stdout),
+                                 {'error': 'capture_invalid_or_unavailable_input'})
+                self.assertEqual(result.stderr, '')
+                for private in ('Traceback', 'PRIVATE_MARKER', str(manifest), manifest.name,
+                                str(self.root), str(Path(dw.__file__))):
+                    self.assertNotIn(private, result.stdout + result.stderr)
+                self.assertEqual(before, {path: path.read_bytes() for path in before})
+                self.assertEqual(paths_before, set(self.root.rglob('*')))
+                if not existing:
+                    self.assertFalse(state.parent.exists())
+                    self.assertFalse(entry.parent.exists())
+
+    def test_cli_deep_manifest_is_generic_and_preserves_state(self):
+        from ui_capture_evidence import JSON_LIMIT
+        manifest = self.root / 'PRIVATE_MARKER-deep.json'
+        raw = b'[' * 200000 + b'0' + b']' * 200000
+        self.assertEqual(len(raw), 400001)
+        self.assertLess(len(raw), JSON_LIMIT)
+        manifest.write_bytes(raw)
+        self.assert_cli_capture_input_failure(manifest)
+        self.assertEqual(manifest.read_bytes(), raw)
+
+    def test_cli_missing_manifest_is_generic_and_preserves_state(self):
+        manifest = self.root / 'PRIVATE_MARKER-missing.json'
+        self.assertFalse(manifest.exists())
+        self.assert_cli_capture_input_failure(manifest)
+        self.assertFalse(manifest.exists())
+
+    def test_capture_exception_boundary_does_not_hide_unexpected_or_completion_errors(self):
+        r = self.submission()
+        before = self.state.read_bytes()
+        for error in (OSError('PRIVATE_MARKER'), ValueError('PRIVATE_MARKER'),
+                      TypeError('PRIVATE_MARKER'), RecursionError('PRIVATE_MARKER'),
+                      OverflowError('PRIVATE_MARKER')):
+            with self.subTest(error=type(error).__name__):
+                with patch('ui_capture_evidence.check_manifest', side_effect=error):
+                    with self.assertRaisesRegex(ValueError, '^capture_invalid_or_unavailable_input$') as caught:
+                        self.checked(r)
+                self.assertTrue(caught.exception.__suppress_context__)
+                self.assertEqual(before, self.state.read_bytes())
+        with patch('ui_capture_evidence.check_manifest', side_effect=RuntimeError('unexpected')):
+            with self.assertRaisesRegex(RuntimeError, '^unexpected$'):
+                self.checked(r)
+        with patch.object(self.c, 'complete', side_effect=ValueError('normal_completion_gate')):
+            with self.assertRaisesRegex(ValueError, '^normal_completion_gate$'):
+                self.checked(r)
+        self.assertEqual(before, self.state.read_bytes())
 
     def test_missing_extra_duplicate_unrelated_and_malformed_evidence(self):
         r = self.submission(); evidence = r['result']['visual_evidence']
@@ -627,7 +692,7 @@ class CheckedCompletionTests(unittest.TestCase):
         self.assertFalse(self.state.parent.exists())
         missing = {'result': {'visual_evidence': [dict(kind='image', subject='implementation',
             provenance='implementation_capture', source_ref=str(self.capture.image))]}}
-        with self.assertRaises(OSError):
+        with self.assertRaisesRegex(ValueError, '^capture_invalid_or_unavailable_input$'):
             self.c.checked_complete(missing, capture_manifest=str(self.root / 'missing.json'))
         self.assertEqual(before, set(self.root.rglob('*')))
         v = DevelopmentWorkflowTests.attach(self, DevelopmentWorkflowTests.begin(self))

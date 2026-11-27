@@ -65,6 +65,41 @@ class Ledger:
     def write(self, data):
         save(self.path, data, self.project)
 
+    def replan(self, request_id, revision_id, expected, proposed, approval_ref):
+        """Explicit, quiescent compare-and-swap; never resets spent operations."""
+        identifier(request_id); identifier(revision_id)
+        if (type(expected) is not int or type(proposed) is not int or
+                not 1 <= expected < proposed or not isinstance(approval_ref, str) or
+                not approval_ref.strip() or len(approval_ref) > 4096):
+            raise ValueError('invalid_limit_replan')
+        intent = dict(request_id=request_id, revision_id=revision_id,
+                      expected_max_dispatches=expected, proposed_max_dispatches=proposed,
+                      approval_ref=approval_ref)
+        with self.lock():
+            data = self.read()
+            revisions = data.get('limit_revisions', [])
+            for previous in revisions:
+                if previous['revision_id'] == revision_id:
+                    if any(previous.get(k) != v for k, v in intent.items()):
+                        raise ValueError('limit_replan_revision_conflict')
+                    return dict(previous, replay=True)
+            known = data['requests'].get(request_id)
+            if not known or known['max_dispatches_per_request'] != expected:
+                raise ValueError('limit_replan_stale_or_unknown_request')
+            operations = [o for o in data['operations'].values() if o['request_id'] == request_id]
+            if (any(o['state'] in ACTIVE for o in data['operations'].values()) or
+                    not operations or any(o['state'] != 'released' for o in operations)):
+                raise ValueError('limit_replan_requires_confirmed_quiescence')
+            if proposed < len(operations):
+                raise ValueError('limit_replan_below_spent_count')
+            record = dict(intent, at=now(), coordinator=self.coordinator,
+                          previous_limits=dict(known), spent_dispatches=len(operations),
+                          operations_digest=digest(data['operations']))
+            known['max_dispatches_per_request'] = proposed
+            data.setdefault('limit_revisions', []).append(record)
+            self.write(data)
+            return dict(record, replay=False)
+
     def reserve(self, request_id, operation_id, plan, limits):
         identifier(request_id); identifier(operation_id)
         if set(limits) != {'max_active_workers', 'max_dispatches_per_request'} or any(type(v) is not int or v < 1 for v in limits.values()):
@@ -346,6 +381,12 @@ def main(argv=None):
     p.add_argument('--config')
     p.add_argument('--orca-cli')
     sub=p.add_subparsers(dest='command',required=True)
+    q=sub.add_parser('replan')
+    q.add_argument('--request-id',required=True)
+    q.add_argument('--revision-id',required=True)
+    q.add_argument('--expected-max-dispatches',type=int,required=True)
+    q.add_argument('--max-dispatches-per-request',type=int,required=True)
+    q.add_argument('--approval-ref',required=True)
     for command in ('start','followup','retry'):
         q=sub.add_parser(command)
         for key in ('request-id','operation-id'):q.add_argument('--'+key,required=True)
@@ -373,6 +414,11 @@ def main(argv=None):
         if not coordinator:raise ValueError('orca_coordinator_session_required')
         ledger=Ledger(args.directory,args.project,coordinator)
         cli=args.orca_cli or executable_for('orca',os.environ)
+        if args.command=='replan':
+            result=ledger.replan(args.request_id,args.revision_id,args.expected_max_dispatches,
+                                 args.max_dispatches_per_request,args.approval_ref)
+            print(json.dumps(result,ensure_ascii=False))
+            return 0
         if args.command=='status':
             data=ledger.read()
             print(json.dumps({'requests':data['requests'],'active':sum(o['state'] in ACTIVE for o in data['operations'].values()),

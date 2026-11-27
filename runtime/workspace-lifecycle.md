@@ -74,6 +74,19 @@ python3 scripts/workspace_resources.py \
 
 ## 기존 정리 도구와 남은 범위
 
+### 푸시·병합이 끝난 Git worktree
+
+사용자가 완료 worktree 정리를 허용한 범위에서는 조율자가 다음 조건을 확인하고 정리한다. 푸시 또는 PR 병합 표시 하나만으로 삭제하지 않는다.
+
+- 정확한 저장소·host·worktree를 식별한다. 현재 작업 중인 checkout, main worktree, 다른 프로젝트는 제외한다.
+- 해당 HEAD가 최신 원격 main에 포함됐는지 확인한다. squash/rebase로 ancestry가 다르면 PR의 정확한 head·병합 결과와 변경 대응을 별도로 확인하며 추정하지 않는다.
+- staged/unstaged 변경, untracked 파일, ignored 로컬 설정·보고서까지 확인한다. 보존할 자료는 worktree 밖의 비공개 위치에 복사해 목록·내용 해시를 검증한다. 미커밋 사용자 작업을 자동 폐기하지 않는다.
+- worker·대화·터미널·서버와 예약 작업·다른 worktree의 의존성이 남아 있는지 확인한다. done 알림만으로 실행 종료를 가정하지 않는다. 예약 작업의 대상 변경은 별도로 검토한다.
+- 설치 버전의 공식 명령과 실제 제거 범위를 확인하고, 제거 직전 HEAD·파일·실행 상태를 다시 대조한다. 기본은 강제 삭제 없이 checkout/앱 등록만 정리하며 브랜치와 대화 기록은 보존한다. 보존 동작을 확인할 수 없으면 유지한다.
+- 제거 후 정확한 worktree가 목록·디스크에서 정리됐는지, 브랜치·기록과 보관 자료가 유지되는지 확인하고 결과와 보류 이유를 남긴다.
+
+Orca에서는 정확한 `worktree list` 식별자로 `worktree rm`을 사용한다. 이 명령은 Git checkout을 실제로 제거하므로 단순 탭 숨김으로 설명하지 않는다. `--force`, `--delete-branch`, archive-hook 실패 무시는 기본으로 사용하지 않으며, 전역 cleanup 규칙을 대신 실행하지 않는다. 이 절차는 조율자의 확인 절차이고 자동 Git 병합 감시기가 아니다.
+
 `scripts/workspace_cleanup.py prepare`로 정확한 대상·명시 권한·수용 근거·배정 목록·보관본·파일 해시를 비공개 계획에 저장한다. `apply` 또는 `finish_worker.py --cleanup-plan`은 계획과 실제 상태를 다시 확인한다. 유지할 프로젝트나 아직 기록되지 않은 과거 프로젝트를 자동 삭제 대상으로 추정하지 않는다.
 
 현재 지원하는 앱 등록 해제는 로컬 Orca folder setup이다. Git worktree·원격 host·프로세스 강제 종료는 제외한다. 단계별 재시작과 부분 실패·중단 시 보존 조건은 [완료 처리 사용법](completion.md)에 따른다.

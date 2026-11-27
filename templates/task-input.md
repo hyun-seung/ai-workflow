@@ -32,6 +32,10 @@ UI 명시 계획에는 [plan v3 엄격 UI 계약](../runtime/development-workflo
 - skills: <필요한 경우 역할 적용 스킬의 접근 가능한 경로, 원본 ID·버전·사용 모드, 스택·선택 이유. 설치·권한과 실제 사용 여부는 별도 확인>
 - execution_profile: <공급자 / 모델·effort 요청값과 사용자 선택 근거 / native 기본값 사용 여부 / 실제 확인값·출처 또는 unknown. 실행 설정을 자동 적용하지 않음>
 - delegation: <여러 작업을 배정할 때만 작성. [병렬 정책](../runtime/parallelism.md) 참조>
+  - 결정 근거: <유효 delegation_decision_maker, 실제 승인 참조와 더 좁은 사용자 제한>
+  - 작업 단위: <각 unit의 원래 AC, snapshot 파일, reads/writes, 배타 공유 자원, depends_on; 독립 후보와 순차 관계>
+  - native 용량: <공식 지원·관측 capacity·출처·observer 또는 unknown. 미확인을 unavailable로 바꾸지 않음>
+  - 동시성 선택: <호환 가능한 ready 집합, 선택한 최대 상한과 이유, 현재 ready/occupied 수. [batch v1](../runtime/development-workflow.md#의존성에-따른-선택적-batch-v1) 사용 시 선택 hash·수용 참조>
   - 담당 경계·선행 조건: <동일 파일 수정은 한 담당자. 독립 병렬 후보와 선택 이유>
   - max_active_workers: <조율자가 관리하는 모든 요청·Run의 합계 동시 상한. 환경 한도 안에서 정하며 고정 기본값 없음>
   - max_dispatches_per_request: <후속 배정·재시도를 포함한 누적 상한>

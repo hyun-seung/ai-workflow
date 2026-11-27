@@ -4,6 +4,8 @@
 
 ## 명시적 개발 진입과 보고
 
+독립 작업 단위가 여럿이면 아래 [선택적 batch v1](#의존성에-따른-선택적-batch-v1)로 같은 요청의 동시 한도를 선택한다. 기존 단일 단위 Entry의 개발 → 검토, UI 계획 내부 순서는 의존성이 있으므로 순차로 유지한다.
+
 복합 개발의 현재 진입은 `scripts/development_entry.py`의 `Entry` API와 기존 `development_workflow.py entry/report` CLI다. 정책 없는 복합 요청에서 절차를 생략해 단독 구현하는 것은 누락이다. 도구 미지원과 진입·선택 누락은 별개다. 이 API가 생기기 전 작업을 사후 기록해 사전 실행으로 바꾸지 않는다.
 
 | 연결 | 담당 / 현재 강제 범위 |
@@ -76,11 +78,56 @@ Entry journal version 1은 v2 controller와 별도다. 정확한 최상위 필�
 {"version": 1, "enabled": true, "max_dispatches": 4, "max_fix_rounds": 1}
 ```
 
-version은 정수 1, enabled는 boolean, max_dispatches는 정수 2..8, max_fix_rounds는 정수 0..3이다. boolean을 정수 대신 사용할 수 없다. active concurrency는 요청당 1로 고정하며 변경 필드가 없다. 정책 파일은 실행 상한 설정이며, 명시 수용은 아래 entry journal의 별도 기록으로 연결한다. 파일의 존재나 enabled 자체는 보안 권한, native 접근 가능성, 전역 위임 승인, 자동 공개 승인이 아니다. 조율자는 최초 연결 때 필요한 선택과 실제 권한을 확인하고 기록하며 요청마다 같은 선택을 재확인하지 않는다. 기존 요청의 정책·AC·파일 목록은 begin에서 고정한다. 새 admission은 no-follow descriptor로 읽은 enabled 정책 snapshot의 원문 SHA256·version·inode/mtime/ctime/size를 확보하고 상태 잠금 안에서 실제 파일을 다시 열어 대조한다. true→false나 삭제는 opt_in_required, 내용/상한/파일 정체성 변경과 symlink 교체는 오류로 거부하며 상태를 생성하지 않는다. 이미 시작한 요청은 저장된 승인 snapshot과 상한을 유지하며 begin 재호출도 새 정책을 채택하지 않는다. 정책 파일 편집은 실행 중 worker를 중단하는 명령이 아니므로 취소는 cancel과 공식 native stop으로 처리한다.
+version은 정수 1, enabled는 boolean, max_dispatches는 정수 2..9, max_fix_rounds는 정수 0..3이다. boolean을 정수 대신 사용할 수 없다. 기존 단일 Entry의 동시 수는 1이며 정책 v1에는 변경 필드가 없다. 새 Batch의 동시 수는 아래 별도 수용 계약으로 선택한다. 지원 가능한 최댓값이 실제 허용량은 아니며 더 좁은 사용자 선택을 우선한다. 정책 파일은 실행 상한 설정이며, 명시 수용은 아래 entry journal의 별도 기록으로 연결한다. 파일의 존재나 enabled 자체는 보안 권한, native 접근 가능성, 전역 위임 승인, 자동 공개 승인이 아니다. 조율자는 최초 연결 때 필요한 선택과 실제 권한을 확인하고 기록하며 요청마다 같은 선택을 재확인하지 않는다. 기존 요청의 정책·AC·파일 목록은 begin에서 고정한다. 새 admission은 no-follow descriptor로 읽은 enabled 정책 snapshot의 원문 SHA256·version·inode/mtime/ctime/size를 확보하고 상태 잠금 안에서 실제 파일을 다시 열어 대조한다. true→false나 삭제는 opt_in_required, 내용/상한/파일 정체성 변경과 symlink 교체는 오류로 거부하며 상태를 생성하지 않는다. 이미 시작한 요청은 저장된 승인 snapshot과 상한을 유지하며 begin 재호출도 새 정책을 채택하지 않는다. 정책 파일 편집은 실행 중 worker를 중단하는 명령이 아니므로 취소는 cancel과 공식 native stop으로 처리한다.
 
 현재 AI는 `conversation`, `small_change`, `development` 중 의미를 직접 공급한다. 키워드 분류기나 분류 모델을 호출하지 않는다. `direct=true`는 직접 처리/위임 금지 사용자 선택을 뜻하며 가장 우선한다. conversation, small_change, direct 경로는 정책·역할 본문을 읽거나 상태 디렉터리를 생성하지 않고 direct를 반환한다. development에 정책이 없거나 enabled=false이면 opt_in_required, native 도구가 없으면 unavailable이다. 이 둘 모두 상태를 만들지 않는다.
 
 ## Python API와 CLI
+
+### 의존성에 따른 선택적 batch v1
+
+`scripts/development_parallel.py`의 `Batch`는 명시적으로 선택한 1–4개 작업 단위를 기존 Entry/Controller에 연결한다. 새 launcher·daemon·모델 호출이 없으며 자동 입력 분류도 하지 않는다. 한 프로젝트·기존 작업 폴더·하나의 논리 request ID·같은 조율자의 공유 guard directory를 사용한다. 기존 v2/v3 controller, plan v1/v2/v3, 정책 v1, Entry journal v1과 영수증을 변경·이동하지 않는다. 이미 실행 중이거나 ledger에 등록된 요청을 batch로 사후 편입하지 않는다. 기존 단일 Entry의 `active_concurrency=1`은 그 경로의 순차 계약이며 새 batch의 공통 기본값이 아니다.
+
+`propose` 입력은 `{plan,native,max_active_workers,reason,config?}`다. `plan`은 `{version:1,acceptance,units}`이며 모든 원래 AC를 적는다. 각 unit은 정확히 `{id,acceptance_ids,files,reads,writes,resources,depends_on,plan}`이다. `files`는 현재 snapshot으로 검토할 명시 파일 목록, reads/writes는 프로젝트 상대 경로(디렉터리 prefix 포함), resources는 같은 프로젝트의 공유 배타 자원 이름, depends_on은 선행 unit ID다. unit의 plan은 기존 명시 역할 계획 또는 null(개발자 → 검증자)이다. 모든 unit과 원래 AC는 필수이고, 각 unit의 독립 검토까지 끝나야 후속 unit이 준비된다. 계획 안의 기능·시각·사람 선택 gate는 기존 Controller가 그대로 검사한다.
+
+native는 정확히 `{client,status,capacity,source_ref,observer}`다. 공식 도구에서 확인한 Orca 지원·용량 근거를 기록하고 capacity를 양의 정수로 전달한다. unknown은 capacity/source_ref/observer가 null이며 `native_check_required`다. available이어도 capacity가 없으면 확인 대기이고, 확인된 unavailable 또는 미지원 Codex/Paseo adapter는 unavailable이다. 용량을 설치·모델명에서 추측하지 않는다. 관측은 조율자의 assertion이며 런타임 인증이나 자동 용량 탐지가 아니다.
+
+프로그램은 선행 조건을 만족하는 가능한 준비 집합과 경로·자원 충돌을 검사한다. 관측한 native capacity, 요청의 명시 상한, 유효 harness의 더 좁은 상한, 의존성 그래프의 호환 가능한 폭 중 최솟값을 유한 `max_active_workers`로 제안한다. 첫 준비 집합이 하나여도 선행 작업 뒤 독립 작업 둘이 준비되면 상한은 2일 수 있다. 선택 이유와 decision_maker를 동결하며, 실제 `ready_count`·`occupied_count`와 최대 예산을 구분한다. 필수 구현·검토 전체가 누적 정책 한도에 들지 않으면 admission을 거부한다. 수정 후에도 남은 필수 검토 예산을 포함해 예약을 검사한다.
+
+`enter`에는 위 입력과 기존 `{choice,policy_acceptance}`, `{ref,selection_sha256}` 형태의 `concurrency_acceptance`, 절대 `guard_directory`를 전달한다. `selection_sha256`은 propose의 반환값이다. 수용 참조는 실제 사용자 선택 또는 승인 범위 안에서 조율자가 한 선택을 가리켜야 한다. `delegation_decision_maker=user`이면 유효한 사용자 선택이 필요하며 프로그램이 참조만으로 권한을 인증하지 않는다. 동일 요청의 수용 인자를 생략하면 저장값을 재사용한다. 계획·범위·정책·관측·선택이 바뀌면 거부하며 진행 중 한도를 재설정하지 않는다. 정책 파일의 정확한 hash/limits와 admission 중 재읽기 검사도 유지한다.
+
+```python
+from development_parallel import Batch
+b = Batch('/path/to/product', 'request_example', 'coordinator_example',
+          '/private/development/request_example/batch.json', 'provider/coordinator_session')
+# args에 실제 작업 단위·공식 용량 관측·명시 상한·선택 이유를 준비한다.
+proposal = b.propose(**args)
+accepted_concurrency = {'ref': 'authorized-selection-reference',
+                        'selection_sha256': proposal['selection_sha256']}
+view = b.enter(**args, choice=choice, policy_acceptance=accepted_policy,
+               concurrency_acceptance=accepted_concurrency, guard_directory='/private/shared-guard')
+grant = b.reserve(unit_id=view['ready'][0])
+# submit_once일 때만 grant['guard']의 정확한 값으로 기존 dispatch_guard start를 한 번 실행한다.
+# 이후 실제 관측을 b.attach(unit_id=..., stage_id=..., execution=...)에 전달한다.
+# b.complete(unit_id=..., receipt=...) 및 기존 guard refresh로 정확한 종료를 확인한다.
+report = b.report()  # 모든 원래 unit의 현재 snapshot 독립 검토와 종료가 필요하다.
+```
+
+CLI는 `python3 scripts/development_parallel.py <command> --project <project> --request-id <same-request> --coordinator <coordinator> --coordinator-actor <provider/session> --state <private-batch.json> --input <private-arguments.json>`이다. command는 propose/enter/next/reserve/attach/complete/select_design/cancel/report이며 input은 해당 API의 keyword arguments다. complete의 선택적 capture_manifest는 기존 checked capture 검사를 거친다. report는 batch.report.json에 0600으로 저장하며 unit_reports와 전체 workflow_complete를 구분한다.
+
+공유 guard directory의 별도 `development-batches.json`은 요청 ID를 원래 batch 상태 경로·선택 hash에 묶는다. 기존 dispatches.json 형식은 바꾸지 않는다. 아직 guard에 제출하지 않은 intent가 있어도 다른 상태 경로로 같은 요청을 재생성할 수 없고, 부분 admission 뒤에는 원래 경로로 재개한다. reserve는 고유 operation/actor를 먼저 내구 저장하고 `submit_once`와 guard 인자를 반환한다. guard의 `--request-id`, `--operation-id`, `--directory`, `--project`, `--worktree current`, 두 상한, 반복 `--writes`·`--depends-on`, usage actor/role을 그대로 사용하고 실제 spec과 usage task title을 붙인다. 모든 unit의 follow-up·수정·검토는 같은 논리 요청의 누적 quota를 소비한다. 시작 명령은 차례로 제출하되 앞선 worker의 작업 완료까지 기다릴 필요는 없다. 재시작·응답 유실은 동일 operation을 조정하며 reserve replay는 submit_once를 재발급하지 않는다. 단위별 Controller를 wrapper 밖에서 직접 예약하거나 다른 ledger/request를 만드는 것은 지원된 batch 경로가 아니다.
+
+기존 guard의 배타 쓰기 잠금에 **읽기와 쓰기 경로 모두** 및 `.development-resources/<hash>` 자원 잠금 이름을 전달한다. 실제 잠금 파일이나 worktree를 만들지 않는다. 이 보수적 v1은 읽기/읽기 겹침도 순차 처리한다. disjoint 작업은 병렬이며 write/read, prefix, 공유 자원은 제외된다. 선언 범위는 임의 worker 쓰기를 OS에서 차단하는 sandbox가 아니다. wrapper의 아직 제출하지 않은 intent와 guard의 launching/unknown/bound(대기·closing 포함)는 슬롯을 유지한다. 완료 영수증만으로 해제하지 않고 공식 refresh의 released를 확인한다. 기존 guard의 거절·회수 절차를 사용하며 자동 재시도·poller는 없다.
+
+종합 report는 누락·실패·취소·미해결 지적·오래된 snapshot, 요청 전체의 작성자/검토자 provider 세션 충돌, 미해제·불명확 operation을 완료로 처리하지 않는다. 역할 스킬 읽기·같은 AI 관점·단위 완료는 독립 검토나 전체 완료를 대신하지 않는다. 합성 테스트는 이 프로그램 경계의 증거이며 새 실제 native 병렬 체인의 실증이 아니다. 실제 용량·시작·종료·사용량 증거는 별도로 수집한다.
+
+복구된 자식 Entry/Controller가 서로 일치해도 원래 Batch 계약과 다시 대조한다. AC 키와 내용, 파일 목록, 역할 계획, 정책·출처, choice/native 수용 기록, binding·경로가 달라지면 새 예약·후속 준비·최종 완료를 거부한다. `contract_errors`는 불일치를 표시하며 기존 기록을 자동 보정하지 않는다. 구조적으로 읽을 수 있는 intent/native는 계속 표시하고 취소·동일 실행 관측을 유지한다. 구조 자체가 불명확하면 `unverified_custody`와 해당 요청의 알려진 `request_operations`를 남기고 새 실행은 허용하지 않는다.
+
+종속 예약은 직접·간접 선행 단위의 기존 Entry 완료 보고와 그 입력을 확보한 뒤, 관련 Entry 잠금 전체 → 선행 Controller 잠금 → 대상 Controller → 공유 ledger 순서로 재검증한다. 여러 Entry와 선행 Controller는 각각 경로순으로 잠그고, 비차단 충돌은 `lifecycle_already_running`으로 거부한다. 내구 intent 저장 직전에 승인·상태·영수증의 동일성, 현재 검토 snapshot과 기존 UI gate, 성공적으로 released된 실행 ID를 확인한다. 같은 증거에서 guard의 `depends_on`을 구성하므로 필수 최종 intent가 없으면 빈 목록으로 생략하지 않는다. 잠금 안에서 Entry report를 재호출하지 않아 재진입 flock을 피하며, 실패하면 부분 잠금을 해제하고 새 권한을 주지 않는다. 이 경계는 잠금을 따르는 공개 Entry/Controller 복구·취소와 예약 사이의 경쟁을 제어한다. 임의 파일 삭제·직접 쓰기를 OS에서 막거나 반환된 명령의 이후 실행 시점까지 snapshot을 고정하지는 않는다. 이후 guard는 전달된 실행 ID의 release를 재검사하고, attach/report는 현재 증거를 보수적으로 검사한다. 상태·영수증 버전이나 과거 바이트를 바꾸지 않으며 replay는 기존 예약을 보존하고 새 submit_once를 주지 않는다.
+
+`occupied_count`는 조율자 전체 원장의 배정 제약이고 `request_occupied_count`는 현재 요청의 완료 제약이다. 다른 요청의 활성 작업은 전역 슬롯·범위 충돌·가장 좁은 활성 상한을 통해 새 배정을 제한하지만, 현재 요청의 모든 필수 검토와 자체 실행 종료가 확인됐다면 완료를 취소하지 않는다. 현재 요청의 미제출 intent, 불명확·미해제 실행, 어떤 unit에도 연결되지 않은 같은 요청 operation은 계속 완료를 막는다.
+
+2026-11-27 검증: 최종 전체 Python 1,083개와 별도 독립 검사 71개를 통과했다. 복구된 자식 계약 변경, 다른 요청의 점유로 인한 완료 취소, 선행 복구와 후속 예약 사이의 경쟁을 수정·재검토했다. 실제로 확인한 실행은 수정자 → 독립 검증자의 순차 경로와 정확한 종료·컨트롤러 재처리다. 새 Batch 병렬 native 체인과 가용 용량 실측은 미검증이며, 이번 배정의 Stop 미수신·사용량 미측정도 별도로 남겼다. 과거 미완료 이력을 후속 성공으로 소급 변경하지 않는다.
 
 ### 지속 승인과 요청별 한도
 
@@ -279,7 +326,7 @@ stdout 결과는 `status=pass|fail|invalid`, `scope=metadata_consistency_only`�
 
 완료 제출에 사전 검사를 연결할 때는 `controller.checked_complete(receipt, capture_manifest="/private/tmp/capture-manifest.json")` 또는 기존 `development_workflow.py complete` 명령의 binding·state·input 인자에 `--capture-manifest /private/tmp/capture-manifest.json`을 추가한다. 이 옵션은 complete에만 허용된다. manifest를 한 번 읽고 검증하는 같은 helper 호출 안에서 모든 capture의 image_path와 receipt.result.visual_evidence 중 kind=image, subject=implementation, provenance=implementation_capture인 source_ref를 정규 경로로 정확히 대응한다. 현재 참조가 1개 이상 필요하며 누락·추가·중복 참조, 중복 image/native 경로·영수증 ID와 잘못된 타입을 거부한다. 디자인 기준 이미지와 real_ui 관측은 구현 PNG를 대신하지 않는다.
 
-현재 checked CLI는 **독립 검토 후 수정 대기**다. 깊게 중첩된 manifest에서 traceback이 나오고, 없는 manifest의 파일명이 오류에 노출되는 두 문제가 확인됐다. 두 경우 컨트롤러 상태는 보존됐지만 완료된 오류 처리로 취급하지 않는다. 명시 검사 도구 자체의 고정 JSON 오류 처리와 구분하며, 수정·독립 재검토 전에는 민감한 경로를 포함한 실패 출력을 외부에 공유하지 않는다.
+checked CLI의 두 입력 오류는 수정·독립 재검토를 마쳤다. 깊게 중첩된 manifest와 없는 manifest는 고정 JSON 오류 `capture_invalid_or_unavailable_input`과 exit 2를 반환하며 traceback·입력 경로를 노출하지 않는다. 예상 예외를 캡처 검사 호출 경계에서만 처리하고, 기존 완료 gate의 오류나 예상 밖 구현 오류를 숨기지 않는다. 관련 182회 실행(서로 다른 143개 메서드·상속 중복 39회), 독립 44개 시나리오·CLI 60회로 상태·Entry·영수증 보존을 확인했다. 실제 두 배정의 종료·Stop 수입과 재처리도 별도로 확인했으며 새 UI 전체 실행·미감 검증을 뜻하지 않는다.
 
 사전 검사·대응 실패는 정상 complete나 controller 상태 변경 전에 거부한다. 성공 뒤에는 기존 complete의 역할·stage·snapshot·provenance·독립성·전체 품질 검사를 그대로 적용한다. 메타데이터 일치만으로 품질 gate를 통과시키지 않으며 인증 필드를 저장하지 않는다. checked replay도 매번 원본 native PNG의 현재 가용성을 포함해 재검사하므로 이전 성공 뒤 파일이 사라지면 실패할 수 있다. 이는 해당 호출 시점의 검사이며 파일시스템을 원자적으로 잠그지 않는다. 검사 뒤 파일·manifest가 변경될 수 있고 진위 인증도 제공하지 않는다. 기본 API/CLI complete, legacy/no-UI 기록에는 기존 동작을 유지하며 새 품질 인증을 소급 부여하지 않는다. 이 선택 경로는 전역 강제나 앱 입력 자동 hook이 아니다.
 

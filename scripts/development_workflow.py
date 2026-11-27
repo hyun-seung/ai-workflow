@@ -37,7 +37,7 @@ def policy(value):
     exact(value, 'version enabled max_dispatches max_fix_rounds')
     if (type(value['version']) is not int or value['version'] != POLICY_VERSION or
             type(value['enabled']) is not bool or type(value['max_dispatches']) is not int or
-            not 2 <= value['max_dispatches'] <= 8 or type(value['max_fix_rounds']) is not int or
+            not 2 <= value['max_dispatches'] <= 9 or type(value['max_fix_rounds']) is not int or
             not 0 <= value['max_fix_rounds'] <= 3):
         raise ValueError('invalid_policy')
     return value
@@ -362,9 +362,14 @@ class LegacyController:
                     plan.get('project') != str(self.project) or plan.get('model') is not None or
                     plan.get('effort') is not None or usage.get('actor_id') != n['usage_actor_id'] or
                     usage.get('role') != ({'developer': 'backend', 'reviewer': 'verifier', 'frontend': 'frontend', 'backend': 'backend', 'pre_design': 'designer', 'visual_review': 'designer'}[role]) or
-                    not usage.get('task_title') or limits.get('max_active_workers') != 1 or
+                    not usage.get('task_title') or limits.get('max_active_workers') != self._guard_concurrency() or
                     limits.get('max_dispatches_per_request') != self._read()['policy']['max_dispatches']):
                 raise ValueError('orca_registered_guard_usage_binding_required')
+
+    def _guard_concurrency(self):
+        # Historical standalone controllers retain their exact serial contract.
+        # The opt-in batch wrapper supplies a frozen, explicitly accepted limit.
+        return 1
 
     def attach(self, stage_id, execution):
         execution = copy.deepcopy(native(execution))
@@ -531,7 +536,11 @@ class Controller(PlanMixin, LegacyController):
                 if row.get('kind') == 'image' and row.get('subject') == 'implementation'
                 and row.get('provenance') == 'implementation_capture']
         # Coverage is bound within the helper's single bounded manifest read/verify pass.
-        result = check_manifest(capture_manifest, expected_image_refs=refs)
+        try:
+            result = check_manifest(capture_manifest, expected_image_refs=refs)
+        except (OSError, ValueError, TypeError, RecursionError, OverflowError):
+            # Match the standalone checker's boundary without exposing capture input details.
+            raise ValueError('capture_invalid_or_unavailable_input') from None
         if result['status'] != 'pass':
             raise ValueError('capture_preflight_failed')
         return self.complete(receipt)
