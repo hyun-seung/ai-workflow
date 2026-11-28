@@ -14,6 +14,7 @@ from native_record import identifier, read_session, inspect_session
 from trace_observation import read_input, reject_nonfinite
 from trace_store import Store
 from trace_usage import import_usage
+from completion_diagnostics import Observation, checked_private_path
 
 MAX_INPUT = 1024 * 1024
 
@@ -38,6 +39,8 @@ def validate_collection(value):
 
 
 def load_config(filename):
+    if any(p.is_symlink() for p in (Path(filename).absolute(), *Path(filename).absolute().parents)):
+        raise ValueError('hook_config_must_not_use_symlinks')
     path, raw, config = read_input(filename)
     bounded_json(config)
     if (not isinstance(config, dict) or set(config) != {'version', 'project', 'ledger', 'directory', 'trace_db', 'coordinator'} or
@@ -48,14 +51,14 @@ def load_config(filename):
     if not project.is_absolute() or not project.is_dir() or project.resolve() != project:
         raise ValueError('hook_project_must_be_existing_absolute_directory')
     identifier(config['coordinator'])
-    private_file(path, project)
+    checked_private_path(path, project)
     for key in ('ledger', 'directory', 'trace_db'):
         if not isinstance(config[key], str) or not Path(config[key]).is_absolute():
             raise ValueError('hook_paths_must_be_absolute')
     for key in ('ledger', 'trace_db'):
-        target = private_file(config[key], project)
+        target = checked_private_path(config[key], project)
         if not target.is_file(): raise ValueError('hook_input_must_already_exist')
-    private_file(Path(config['directory'])/'probe.json', project)
+    checked_private_path(Path(config['directory'])/'probe.json', project)
     store = Store(config['trace_db'], readonly=True); store.close()
     return config
 
@@ -142,7 +145,19 @@ def verify_saved_measurement(config, event, operation, saved, current=None):
 
 
 def collect(config, payload, attempts=5, delay=0.5):
+    # Direct callers/recovery retain the existing API and create no observations.
+    return _collect(config, payload, attempts, delay)
+
+
+def observe(observation, method, *args, **kwargs):
+    if observation is not None:
+        try: getattr(observation, method)(*args, **kwargs)
+        except Exception: pass  # Optional diagnostics must not change collection.
+
+
+def _collect(config, payload, attempts=5, delay=0.5, observation=None):
     event = event_input(payload)
+    observe(observation, 'bind_event', event)
     if Path(event['cwd']).resolve() != Path(config['project']):
         return dict(status='ignored', reason='different_project')
     project = Path(config['project'])
@@ -150,7 +165,9 @@ def collect(config, payload, attempts=5, delay=0.5):
     # bounded grace period covers a Stop racing the managed launch receipt.
     for attempt in range(attempts):
         try:
+            observe(observation, 'phase', 'source')
             source = read_session(project, event['transcript_path'], event['session_id'])
+            observe(observation, 'phase', 'registration')
             if select_operation(config, source): break
         except ValueError as error:
             if str(error) != 'session_changed_during_read': raise
@@ -158,6 +175,7 @@ def collect(config, payload, attempts=5, delay=0.5):
     else:
         return dict(status='ignored', reason='no_registered_dispatch')
     key = digest(dict(session=event['session_id'], turn=event['turn_id']))
+    observe(observation, 'phase', 'collection')
     receipt_path = private_file(Path(config['directory'])/(key+'.receipt.json'), project)
     binding = dict(event=event, config=config)
     # Five bounded reads accommodate an async Stop handler arriving before the
@@ -253,6 +271,7 @@ def main(argv=None):
     parser.add_argument('--config', required=True)
     parser.add_argument('--print-hook', action='store_true', help='Print candidate definition only; never install or trust it')
     args = parser.parse_args(argv)
+    observation = None
     try:
         if args.print_hook:
             load_config(args.config)
@@ -260,17 +279,24 @@ def main(argv=None):
             print(json.dumps(dict(description='Collect registered Orca/Codex usage after Stop',
                                   hooks={'Stop':[dict(hooks=[dict(type='command',command=command,**{'async':True},timeout=30)])]}), indent=2))
             return 0
+        # No destination is selected until all existing config validation passes.
+        config = load_config(args.config)
+        try: observation = Observation(config)
+        except Exception: pass
+        observe(observation, 'phase', 'payload')
         raw = sys.stdin.buffer.read(MAX_INPUT + 1)
         if len(raw) > MAX_INPUT: raise ValueError('hook_input_oversized')
         from trace_observation import unique, invalid_number, finite_float
         payload = json.loads(raw, object_pairs_hook=unique, parse_constant=invalid_number, parse_float=finite_float)
-        result = collect(load_config(args.config), payload)
+        result = _collect(config, payload, observation=observation)
+        observe(observation, 'finish', result=result)
         # Stop hook stdout is JSON, never a continuation or permission decision.
         if result['status'] == 'pending':
             print(json.dumps({'systemMessage': 'Usage collection pending: source turn is unregistered or not closed.'}))
         else: print('{}')
         return 0
     except (OSError, ValueError, KeyError, TypeError, RecursionError, sqlite3.Error) as error:
+        observe(observation, 'finish', error=error)
         if args.print_hook:
             print('Hook definition failed: '+type(error).__name__,file=sys.stderr);return 2
         print(json.dumps({'systemMessage': 'Usage collection failed: ' + type(error).__name__}))

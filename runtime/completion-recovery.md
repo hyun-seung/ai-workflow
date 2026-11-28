@@ -38,6 +38,14 @@ python3 scripts/completion_recovery.py --config /private/path/completion-hook.js
 
 `new_evidence_required=true`이면 관측만 반복해서 성공으로 바꾸지 않는다. 상태가 같아도 외부 원본이 바뀌었는지는 이 읽기 전용 진단만으로 알 수 없으므로, 실제 재처리는 기존 수집기의 출처·닫힌 턴·증가분 검사를 거쳐야 한다. `retry_saved_receipt_available`은 명령을 사용할 수 있다는 뜻이며 성공 보장이나 실행 허가가 아니다. 별도 명시 원본 수입은 missing Stop을 받은 것으로 바꾸지 않는다. 원인이 미확정이면 `root_cause=undetermined`를 유지하며 자동 재배정·가짜 Stop·원본 폴더 탐색을 하지 않는다.
 
+영수증 전의 호출·오류 단계는 별도의 [호출 관찰 점검](completion-hook.md#영수증-이전의-호출-관찰)으로 확인할 수 있다:
+
+```sh
+python3 scripts/completion_diagnostics.py --config /private/path/completion-hook.json inspect
+```
+
+이 명령은 config 검증 후 제한된 비공개 진단 기록만 읽으며 원본 조회·영수증/DB 변경·재처리를 하지 않는다. 업데이트 뒤 정상 hook CLI의 로컬 관찰에만 적용되고, `collected`도 영수증·사용량 검증을 대신하지 않는다. `incomplete`는 실행 중/중단/진단 저장 실패를 구분하지 못하고 관찰 부재는 미호출을 증명하지 않는다. 기존 missing·미귀속 기록을 소급 생성·재귀속하거나 원인을 확정하지 않으며 이 복구 도구의 상태·exit code·replay 계약은 그대로다.
+
 `expected_operations`는 opt-in 배정 수이고 `received_receipts`는 실제 받은 Stop 수다. 한 배정에 여러 영수증이 있으면 모두 확인하며 하나라도 미완료이면 숨기지 않는다. 등록되지 않은 이벤트, 모호한 연결, 형식이 잘못된 영수증은 별도 오류로 남긴다. 요청 필터는 알려진 다른 요청의 영수증을 제외하지만 출처를 확인할 수 없는 영수증을 임의로 무시하지 않는다.
 
 **collected는 받은 영수증의 확인이며 그 배정의 모든 턴이 수집됐다는 보증이 아니다.** Stop 자체가 전달되지 않은 추가 턴은 이 목록만으로 발견할 수 없다. `full_usage_complete`는 항상 false다. 조율자·다른 공급자·원격·자동 승인 검토의 토큰을 추가 추정하지 않는다. native 작업 성공·정확한 프로세스 종료·제품 수용도 이 도구의 판정 대상이 아니다.

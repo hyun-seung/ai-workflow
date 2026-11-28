@@ -1,6 +1,8 @@
 import copy
+import io
 import json
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -206,6 +208,26 @@ class CompletionHookTests(unittest.TestCase):
         for payload in [self.payload,dict(self.payload,session_id='wrong')]:
             r=subprocess.run(cmd,input=json.dumps(payload),capture_output=True,text=True,timeout=10)
             self.assertEqual(r.returncode,0);self.assertNotIn('decision',json.loads(r.stdout));self.assertNotIn('continue',json.loads(r.stdout))
+
+    def test_exact_definition_and_config_validation_have_no_output_directory_side_effect(self):
+        cmd=[sys.executable,str(Path(hook.__file__)),'--config',str(self.config_path),'--print-hook']
+        result=subprocess.run(cmd,capture_output=True,text=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr)
+        command=shlex.join([sys.executable,str(Path(hook.__file__).resolve()),'--config',str(self.config_path.resolve())])
+        self.assertEqual(json.loads(result.stdout),dict(description='Collect registered Orca/Codex usage after Stop',
+            hooks={'Stop':[dict(hooks=[dict(type='command',command=command,**{'async':True},timeout=30)])]}))
+        self.assertFalse(Path(self.config['directory']).exists())
+        hook.load_config(self.config_path)
+        self.assertFalse(Path(self.config['directory']).exists())
+
+    def test_optional_observer_start_failure_preserves_normal_cli_main_result(self):
+        output=io.StringIO()
+        with io.TextIOWrapper(io.BytesIO(json.dumps(self.payload).encode())) as stdin:
+            with patch.object(hook,'Observation',side_effect=RuntimeError('private diagnostic error')):
+                with patch.object(sys,'stdin',stdin),patch.object(sys,'stdout',output):
+                    result=hook.main(['--config',str(self.config_path)])
+        self.assertEqual(result,0);self.assertEqual(output.getvalue(),'{}\n')
+        self.assertEqual(len([e for e in self.data()['events'] if e['kind']=='usage']),1)
 
     def test_usage_metadata_is_reserved_in_guard_plan_and_requires_all_fields(self):
         spec=self.root/'task.txt';spec.write_text('synthetic')
